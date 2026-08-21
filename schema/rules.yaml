@@ -1,0 +1,43 @@
+# 정규화 · 변환 규칙표
+#
+# 소유: 서경빈 선임 (표기 매핑) / 이종수 책임 (도메인 규칙)
+# 코드에 규칙을 넣지 말고 이 파일에 추가한다.
+
+meta:
+  version: "0.1.0"
+  note: "MVP — 단위 변환과 범주형 허용값은 범위 외(To-be)"
+
+# ── 도메인 규칙 ────────────────────────────────────────────────
+# 문서 표기가 표준값과 다른 의미를 갖는 경우. 역전 매핑 주의.
+domain_rules:
+  actuator_fail_action:
+    description: "데이터시트는 공기 작용 방향(ATO/ATC)으로 기재하고, 표준값은 공기 상실 시 거동(Fail)이다. 서로 반대다."
+    map:
+      - from: ["AIR TO OPEN", "AIR-TO-OPEN", "ATO", "A/O"]
+        to: "FAIL CLOSE"
+        trace: "ATO → 공기 상실 시 스프링 폐쇄 → Fail Close"
+      - from: ["AIR TO CLOSE", "AIR-TO-CLOSE", "ATC", "A/C"]
+        to: "FAIL OPEN"
+        trace: "ATC → 공기 상실 시 스프링 개방 → Fail Open"
+      - from: ["FAIL LAST", "FAIL IN PLACE", "FAIL LOCK"]
+        to: "FAIL LAST"
+        trace: "직접 기재"
+    cross_check:
+      - "ACTUATOR TYPE 이 Pneumatic 계열인지 확인"
+
+# ── 표기 매핑 ──────────────────────────────────────────────────
+# 같은 값의 다른 표기. 라벨링 중 raw_label 로 수집되는 것을 여기에 누적한다.
+value_aliases: {}
+  # 예:
+  # valve_body_material:
+  #   - from: ["CS", "C.S.", "CARBON STEEL"]
+  #     to: "CARBON STEEL"
+
+# ── To-be (MVP 범위 외) ───────────────────────────────────────
+unit_conversion:
+  enabled: false
+  note: "MVP 는 원문 표기 보존. 향후 분류별 단위를 고정하고 변환까지 구현"
+
+enum_allowed_values:
+  enabled: false
+  note: "범주형 허용값 리스트. MVP 범위 외"

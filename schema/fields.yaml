@@ -1,0 +1,395 @@
+# 컨트롤밸브 기준정보 필드 정의서
+#
+# 이 파일은 readme/output_sample.xlsx 에서 자동 생성됨.
+#   재생성: python tools/gen_schema.py
+# 직접 편집하지 말고 엑셀을 수정한 뒤 재생성할 것.
+#
+# safety : safety(안전) / identity(식별) / normal(일반)
+#          safety·identity 는 확신도와 무관하게 사람 확인이 필요한 필드
+# source : document(문서 추출) / derived(규칙 파생) / system(시스템)
+#          MVP 에서는 전부 document — 스마트 계장 파생 필드는 범위 외
+# mvp    : MVP 수직 슬라이스 대상 여부
+
+meta:
+  equipment: "Control Valve"
+  field_count: 30
+  mvp_count: 8
+  required_count: 15
+  source_workbook: "readme/output_sample.xlsx"
+
+fields:
+  - key: type_name
+    name: "TYPE NAME"
+    group: "GENERAL"
+    db_code: "GEN_003"
+    desc: "타입 이름"
+    example: "FLOW CONTROL VALVE"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: engineering_tag_no
+    name: "ENGINEERING TAG NO."
+    group: "GENERAL"
+    db_code: "GEN_015"
+    desc: "태그 번호 (ENGINEERING)"
+    example: "10FV001"
+    required: true
+    safety: identity
+    source: document
+    mvp: true
+    threshold: 1.00
+    aliases:
+      - "TAG"
+
+  - key: equipment_full_description
+    name: "EQUIPMENT FULL DESCRIPTION"
+    group: "GENERAL"
+    db_code: "GEN_016"
+    desc: "설비 Full Name"
+    example: "RECYCLE TO DHC FEED FILTERS"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "APPLICATION"
+
+  - key: manufacturer
+    name: "MANUFACTURER"
+    group: "GENERAL"
+    db_code: "GEN_035"
+    desc: "제조사"
+    example: "FISHER"
+    required: true
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: model_no
+    name: "MODEL NO."
+    group: "GENERAL"
+    db_code: "GEN_036"
+    desc: "모델 번호"
+    required: true
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: fluid_name
+    name: "FLUID NAME"
+    group: "공정 조건"
+    db_code: "INS_025"
+    desc: "유체 이름"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "FLOWING MEDIA"
+
+  - key: fluid_state
+    name: "FLUID STATE"
+    group: "공정 조건"
+    db_code: "INS_026"
+    desc: "유체 상태"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: normal_flow_rate
+    name: "NORMAL FLOW RATE"
+    group: "공정 조건"
+    db_code: "INS_028"
+    desc: "정상 유량"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "FLOW RATE"
+
+  - key: maximum_pressure
+    name: "MAXIMUM PRESSURE"
+    group: "공정 조건"
+    db_code: "INS_030"
+    desc: "최대 압력"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "INLET PRESSURE MAX"
+      - "INLET PRESSURE MAXIMUM"
+
+  - key: normal_pressure
+    name: "NORMAL PRESSURE"
+    group: "공정 조건"
+    db_code: "INS_031"
+    desc: "정상 압력"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "INLET PRESSURE NORMAL"
+
+  - key: maximum_temperature
+    name: "MAXIMUM TEMPERATURE"
+    group: "공정 조건"
+    db_code: "INS_033"
+    desc: "최대 온도"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "INLET TEMPERATURE MAX"
+      - "INLET TEMPERATURE MAXIMUM"
+
+  - key: minimum_temperature
+    name: "MINIMUM TEMPERATURE"
+    group: "공정 조건"
+    db_code: "INS_035"
+    desc: "최소 온도"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: specific_gravity
+    name: "SPECIFIC GRAVITY"
+    group: "공정 조건"
+    db_code: "INS_036"
+    desc: "비중"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: viscosity
+    name: "VISCOSITY"
+    group: "공정 조건"
+    db_code: "INS_037"
+    desc: "점도"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: rated_cv_max
+    name: "RATED CV MAX"
+    group: "밸브 성능"
+    db_code: "NEW"
+    desc: "최대 정격 유량계수"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: rated_cv_normal
+    name: "RATED CV NORMAL"
+    group: "밸브 성능"
+    db_code: "NEW"
+    desc: "정격 유량계수"
+    required: false
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_body_rating
+    name: "VALVE BODY RATING"
+    group: "밸브 바디"
+    db_code: "INS_103"
+    desc: "바디 등급"
+    required: true
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_body_size
+    name: "VALVE BODY SIZE"
+    group: "밸브 바디"
+    db_code: "INS_104"
+    desc: "바디 사이즈"
+    required: true
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_body_material
+    name: "VALVE BODY MATERIAL"
+    group: "밸브 바디"
+    db_code: "INS_105"
+    desc: "몸체 재질"
+    required: true
+    safety: normal
+    source: document
+    mvp: true
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_leakage_class
+    name: "VALVE LEAKAGE CLASS"
+    group: "밸브 바디"
+    db_code: "INS_115"
+    desc: "누설 등급"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: characteristic
+    name: "CHARACTERISTIC (TRIM FORM)"
+    group: "밸브 트림"
+    db_code: "INS_117"
+    desc: "특성(트림 형태)"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "CHARACTERISTIC"
+
+  - key: valve_plug_material
+    name: "VALVE PLUG MATERIAL"
+    group: "밸브 트림"
+    db_code: "INS_106"
+    desc: "플러그 재질"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_cage_material
+    name: "VALVE CAGE MATERIAL"
+    group: "밸브 트림"
+    db_code: "INS_107"
+    desc: "케이지 재질"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_seat_material
+    name: "VALVE SEAT MATERIAL"
+    group: "밸브 트림"
+    db_code: "INS_108"
+    desc: "시트 재질"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_stem_material
+    name: "VALVE STEM MATERIAL"
+    group: "밸브 트림"
+    db_code: "INS_109"
+    desc: "스템 재질"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: actuator_type
+    name: "ACTUATOR TYPE"
+    group: "구동부"
+    db_code: "INS_120"
+    desc: "액추에이터 타입"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: actuator_fail_action
+    name: "ACTUATOR FAIL ACTION"
+    group: "구동부"
+    db_code: "INS_137"
+    desc: "액추에이터 실패 조치"
+    required: true
+    safety: safety
+    source: document
+    mvp: true
+    threshold: 1.00
+    aliases:
+      - "FAIL POSITION"
+      - "FAIL ACTION"
+
+  - key: positioner_manufacturer
+    name: "POSITIONER MANUFACTURER"
+    group: "포지셔너"
+    db_code: "INS_147"
+    desc: "포지셔너 제조사"
+    required: false
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: positioner_model_no
+    name: "POSITIONER MODEL NO."
+    group: "포지셔너"
+    db_code: "INS_148"
+    desc: "포지셔너 모델 번호"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: positioner_type
+    name: "POSITIONER TYPE"
+    group: "포지셔너"
+    db_code: "INS_149"
+    desc: "포지셔너 타입"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases: []          # 라벨링 중 raw_label 로 수집 예정

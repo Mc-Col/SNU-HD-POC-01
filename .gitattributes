@@ -1,0 +1,16 @@
+# 줄바꿈 통일 — 3명이 Windows 에서 작업할 때 의미 없는 diff 방지
+* text=auto eol=lf
+
+# Windows 배치 파일은 반드시 CRLF
+*.bat text eol=crlf
+
+# 바이너리 — 절대 변환하지 않음
+*.xlsx binary
+*.xls  binary
+*.xlsm binary
+*.docx binary
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.tif  binary
+*.pptx binary
