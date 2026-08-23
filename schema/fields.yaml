@@ -12,8 +12,8 @@
 
 meta:
   equipment: "Control Valve"
-  field_count: 30
-  mvp_count: 8
+  field_count: 28
+  mvp_count: 9
   required_count: 15
   source_workbook: "readme/output_sample.xlsx"
 
@@ -22,11 +22,11 @@ fields:
     name: "TYPE NAME"
     group: "GENERAL"
     db_code: "GEN_003"
-    desc: "타입 이름"
+    desc: "밸브 종류. 문서에 항목이 없고 Tag 접두에서 도출 (FV→Flow Control Valve)"
     example: "FLOW CONTROL VALVE"
     required: true
     safety: normal
-    source: document
+    source: derived
     mvp: false
     threshold: 0.90
     aliases: []          # 라벨링 중 raw_label 로 수집 예정
@@ -41,7 +41,7 @@ fields:
     safety: identity
     source: document
     mvp: true
-    threshold: 1.00
+    threshold: 0.95
     aliases:
       - "TAG"
 
@@ -63,7 +63,7 @@ fields:
     name: "MANUFACTURER"
     group: "GENERAL"
     db_code: "GEN_035"
-    desc: "제조사"
+    desc: "제조사. 항목 라벨이 아니라 양식의 로고·머리글·꼬리말에 있음"
     example: "FISHER"
     required: true
     safety: normal
@@ -76,7 +76,7 @@ fields:
     name: "MODEL NO."
     group: "GENERAL"
     db_code: "GEN_036"
-    desc: "모델 번호"
+    desc: "모델 번호. 문서 표기 그대로 (예: 667-EZ, 1121-880). 구경 표기는 제외"
     required: true
     safety: normal
     source: document
@@ -101,10 +101,10 @@ fields:
     name: "FLUID STATE"
     group: "공정 조건"
     db_code: "INS_026"
-    desc: "유체 상태"
+    desc: "유체 상태. 문서에 항목이 없고 FLUID NAME 에서 유추"
     required: false
     safety: normal
-    source: document
+    source: derived
     mvp: false
     threshold: 0.90
     aliases: []          # 라벨링 중 raw_label 로 수집 예정
@@ -122,20 +122,6 @@ fields:
     aliases:
       - "FLOW RATE"
 
-  - key: maximum_pressure
-    name: "MAXIMUM PRESSURE"
-    group: "공정 조건"
-    db_code: "INS_030"
-    desc: "최대 압력"
-    required: false
-    safety: normal
-    source: document
-    mvp: false
-    threshold: 0.90
-    aliases:
-      - "INLET PRESSURE MAX"
-      - "INLET PRESSURE MAXIMUM"
-
   - key: normal_pressure
     name: "NORMAL PRESSURE"
     group: "공정 조건"
@@ -149,31 +135,19 @@ fields:
     aliases:
       - "INLET PRESSURE NORMAL"
 
-  - key: maximum_temperature
-    name: "MAXIMUM TEMPERATURE"
+  - key: normal_temperature
+    name: "NORMAL TEMPERATURE"
     group: "공정 조건"
-    db_code: "INS_033"
-    desc: "최대 온도"
+    db_code: "NEW"
+    desc: "정상 온도. 공정 조건은 모두 Normal 열을 쓴다"
     required: false
     safety: normal
     source: document
     mvp: false
     threshold: 0.90
     aliases:
-      - "INLET TEMPERATURE MAX"
-      - "INLET TEMPERATURE MAXIMUM"
-
-  - key: minimum_temperature
-    name: "MINIMUM TEMPERATURE"
-    group: "공정 조건"
-    db_code: "INS_035"
-    desc: "최소 온도"
-    required: false
-    safety: normal
-    source: document
-    mvp: false
-    threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+      - "INLET TEMPERATURE, NORMAL"
+      - "INLET TEMPERATURE"
 
   - key: specific_gravity
     name: "SPECIFIC GRAVITY"
@@ -199,29 +173,33 @@ fields:
     threshold: 0.90
     aliases: []          # 라벨링 중 raw_label 로 수집 예정
 
-  - key: rated_cv_max
-    name: "RATED CV MAX"
+  - key: rated_cv
+    name: "RATED CV"
     group: "밸브 성능"
     db_code: "NEW"
-    desc: "최대 정격 유량계수"
+    desc: "정격 유량계수 (밸브 카탈로그 값). 요구 Cv 와 다름"
     required: true
     safety: normal
     source: document
-    mvp: false
+    mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "VALVE COEFFICIENT"
 
-  - key: rated_cv_normal
-    name: "RATED CV NORMAL"
+  - key: required_cv
+    name: "REQUIRED CV"
     group: "밸브 성능"
     db_code: "NEW"
-    desc: "정격 유량계수"
+    desc: "정상 운전 조건에서 요구되는 Cv. 정격 Cv 와 다르며, 공정조건으로 계산 가능"
     required: false
     safety: normal
     source: document
     mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "REQ'D FLOW COEFF., CV, NORMAL"
+      - "REQ'D FLOW COEFF"
+      - "REQUIRED FLOW COEFFICIENT"
 
   - key: valve_body_rating
     name: "VALVE BODY RATING"
@@ -234,6 +212,22 @@ fields:
     mvp: true
     threshold: 0.90
     aliases: []          # 라벨링 중 raw_label 로 수집 예정
+
+  - key: valve_body_type
+    name: "VALVE BODY TYPE"
+    group: "밸브 바디"
+    db_code: "NEW"
+    desc: "몸체 형상 (Globe / Angle / Ball 등). 문서에서는 Style 칸의 체크박스"
+    required: true
+    safety: normal
+    source: document
+    mvp: false
+    threshold: 0.90
+    aliases:
+      - "STYLE"
+      - "VALVE STYLE"
+      - "BODY TYPE"
+      - "BODY STYLE"
 
   - key: valve_body_size
     name: "VALVE BODY SIZE"
@@ -353,7 +347,7 @@ fields:
     safety: safety
     source: document
     mvp: true
-    threshold: 1.00
+    threshold: 0.95
     aliases:
       - "FAIL POSITION"
       - "FAIL ACTION"
@@ -362,7 +356,7 @@ fields:
     name: "POSITIONER MANUFACTURER"
     group: "포지셔너"
     db_code: "INS_147"
-    desc: "포지셔너 제조사"
+    desc: "포지셔너 제조사. 양식 로고·꼬리말에 있을 수 있음"
     required: false
     safety: normal
     source: document
@@ -375,18 +369,6 @@ fields:
     group: "포지셔너"
     db_code: "INS_148"
     desc: "포지셔너 모델 번호"
-    required: true
-    safety: normal
-    source: document
-    mvp: false
-    threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
-
-  - key: positioner_type
-    name: "POSITIONER TYPE"
-    group: "포지셔너"
-    db_code: "INS_149"
-    desc: "포지셔너 타입"
     required: true
     safety: normal
     source: document

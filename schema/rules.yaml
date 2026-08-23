@@ -22,8 +22,11 @@ domain_rules:
       - from: ["FAIL LAST", "FAIL IN PLACE", "FAIL LOCK"]
         to: "FAIL LAST"
         trace: "직접 기재"
-    cross_check:
-      - "ACTUATOR TYPE 이 Pneumatic 계열인지 확인"
+    cross_check: []
+    # 2026-08-23 결정 — ACTUATOR TYPE 은 추출 대상이 아니다(구동부는 FAIL POSITION 만).
+    # 따라서 자동 교차검증이 불가하고, 사람 확인이 유일한 안전장치다.
+    # 지침은 schema/guidance.yaml : fields.actuator_fail_action 에 자연어로 있다.
+    cross_check_note: "ACTUATOR TYPE 추출 대상 외 → 자동 교차검증 불가"
 
 # ── 표기 매핑 ──────────────────────────────────────────────────
 # 같은 값의 다른 표기. 라벨링 중 raw_label 로 수집되는 것을 여기에 누적한다.

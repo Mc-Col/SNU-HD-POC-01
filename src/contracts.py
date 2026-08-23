@@ -20,6 +20,34 @@ from typing import Any
 #  열거형
 # ══════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════
+#  bbox 규약 — 화면·파서·평가가 모두 이 규약을 따른다
+#
+#      (x0, y0, x1, y1)   정규화 좌표 0.0 ~ 1.0
+#      원점은 페이지 좌상단, x 는 오른쪽, y 는 아래쪽이 증가
+#      페이지 번호는 별도 필드(page, 1부터)
+#
+#  정규화로 두는 이유 — 해상도·DPI 가 바뀌어도 값이 유효하고, 화면이 %
+#  로 바로 쓸 수 있다. 픽셀로 두면 렌더 배율마다 어긋난다.
+# ══════════════════════════════════════════════════════════════════
+
+BBox = tuple[float, float, float, float]
+
+
+class PageClass(str, Enum):
+    """페이지 단위 이진 판정 결과.
+
+    로직은 SPEC 여부만 쓴다. 나머지 값은 화면에 "왜 제외됐나" 를 보여주기
+    위한 표시용이며, 같은 VLM 호출에서 공짜로 얻는다.
+    """
+    SPEC = "spec"              # 밸브 사양표 — 처리 대상
+    DRAWING = "drawing"        # 도면
+    BOM = "bom"                # 부품 리스트
+    COVER = "cover"            # 표지·송부
+    CALC = "calc"              # 계산서
+    OTHER = "other"            # 그 외
+
+
 class DocumentClass(str, Enum):
     """① Triage 의 판정 결과."""
     DATASHEET = "datasheet"                    # 정상 처리 대상
@@ -56,6 +84,30 @@ class FailureKind(str, Enum):
 # ══════════════════════════════════════════════════════════════════
 
 @dataclass
+class PageInfo:
+    """페이지 하나의 판정 결과. 화면이 "왜 이 페이지를 제외했나" 를 보여줄 근거.
+
+    MVP 원칙 — 파일 하나에 자산 하나. 사양표가 여러 장이면 파일명 태그가
+    단독으로 나오는 페이지 하나만 고르고 나머지는 보지 않는다(토큰 절약).
+    발견 사실은 로그에만 남긴다.
+    """
+    page: int                          # 1부터
+    page_class: PageClass = PageClass.OTHER
+    kind_hint: str = ""                # 표시용 자유 문구 ("부품 리스트" 등)
+    confidence: float = 0.0
+    tags: list[str] = field(default_factory=list)   # 이 페이지에 보이는 태그
+    has_text_layer: bool = False       # 텍스트 레이어 유무 (페이지 단위)
+    text_len: int = 0
+    render_path: str | None = None     # 렌더된 PNG 경로 — 화면이 표시에 사용
+    selected: bool = False             # 처리 대상으로 고른 페이지인가
+    reason: str = ""                   # 선택·제외 사유
+
+    @property
+    def is_spec(self) -> bool:
+        return self.page_class is PageClass.SPEC
+
+
+@dataclass
 class Target:
     """처리 대상 위치. MVP 는 1파일 = 1자산 전제이므로 보통 한 개."""
     page_from: int = 1
@@ -71,6 +123,16 @@ class TriageResult:
     document_class: DocumentClass
     targets: list[Target] = field(default_factory=list)
     confidence: float = 0.0
+    # ── 파일명에서 얻은 것 (전체의 95.5% 가 여기서 무료로 나온다) ──
+    file_tag: str | None = None        # 파일명의 태그 — 주 자산의 식별자
+    file_doc_kind: str = ""            # 파일명의 문서 종류 (DATA SHEET 등)
+    file_rev: str = ""                 # REV0 / REV1 …
+    # ── 페이지 판정 ──
+    pages: list[PageInfo] = field(default_factory=list)
+    extra_assets: list[str] = field(default_factory=list)
+    #   다중 사양표에서 발견했으나 이번에 처리하지 않은 태그.
+    #   화면에는 띄우지 않고 로그로만 남긴다 (2026-08-23 결정).
+    #   "1,089건 중 N건이 다중 자산" 이라는 본개발 근거가 여기서 나온다.
     reason: str = ""                    # 판정 근거. out_of_scope 일 때 필수
     stats: dict[str, Any] = field(default_factory=dict)  # 페이지수·표수·시트수 등
 
@@ -79,6 +141,25 @@ class TriageResult:
         return self.document_class in (
             DocumentClass.DATASHEET, DocumentClass.DATASHEET_EMBEDDED
         )
+
+    @property
+    def selected_page(self) -> PageInfo | None:
+        """처리 대상으로 고른 페이지. 없으면 None(= 사양표를 못 찾음)."""
+        return next((p for p in self.pages if p.selected), None)
+
+    @property
+    def spec_pages(self) -> list[PageInfo]:
+        return [p for p in self.pages if p.is_spec]
+
+    @property
+    def excluded_pages(self) -> list[PageInfo]:
+        """화면이 "이 페이지는 왜 빠졌나" 를 보여줄 목록."""
+        return [p for p in self.pages if not p.selected]
+
+    @property
+    def no_spec_found(self) -> bool:
+        """사양표가 한 장도 없음 → 화면이 전용 안내를 띄워야 하는 경우."""
+        return bool(self.pages) and not self.spec_pages
 
 
 # ══════════════════════════════════════════════════════════════════
