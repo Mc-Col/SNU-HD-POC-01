@@ -10,10 +10,20 @@
     info  = pre.parse_filename(path)        # 태그 · 문서종류 · rev
     pages = pre.probe_pages(path)           # 페이지별 텍스트 레이어 유무
     pngs  = pre.render_pages(path, out_dir) # 페이지 → PNG
-    grid  = pre.make_montage(pngs, out)     # 격자 1장 (VLM 이진 판정용)
+    grid  = pre.make_montage(pngs, out)     # 격자 (VLM 이진 판정용)
 
-실측 근거 (raw_file 1,089건, 2026-08-24):
-    파일명에 태그+문서종류 둘 다  95.5%   ← 파일 단위 판정이 거의 무료
+    # 사양표가 2장 이상일 때 — 최신 한 장을 고른다
+    d     = pre.parse_doc_date(txt)         # 페이지에 적힌 날짜
+    mark  = pre.find_marks(txt)             # RETROFIT / OLD 표기
+    pick, why = pre.pick_latest_spec(page_infos, file_tag)
+
+    # 태그별 형제 문서 — 데이터시트가 낡았을 수 있다는 경고
+    idx  = pre.index_by_tag(all_paths)
+    warn = pre.staleness_warning(path, idx)
+
+실측 근거 (raw_file 1,058건, 2026-08-24):
+    파일명에서 문서종류 판정      97.3%   ← 파일 단위 판정이 거의 무료
+    파일명에서 태그 추출          99.2%
     PDF 페이지 중 텍스트 보유     68.1%
     PDF 파일 중 텍스트/스캔 혼재  57.4%   ← 그래서 페이지 단위로 판정해야 한다
     다중 페이지 파일              85%     (최대 61페이지)
@@ -108,7 +118,7 @@ def find_tags(text: str) -> list[str]:
 
 
 def parse_filename(path: str) -> FileNameInfo:
-    """파일명에서 태그·문서종류·rev 를 뽑는다. 전체의 95.5% 가 여기서 해결된다."""
+    """파일명에서 태그·문서종류·rev 를 뽑는다. 문서종류 97.3% 가 여기서 해결된다."""
     base = os.path.basename(path)
     stem, ext = os.path.splitext(base)
     info = FileNameInfo(path=path, stem=stem, ext=ext.lower())
@@ -149,6 +159,45 @@ class PageText:
     @property
     def text_len(self) -> int:
         return len(self.text.strip())
+
+
+# ── 태그별 형제 문서 — 데이터시트가 이미 낡았을 수 있다는 신호 ──────
+#
+#  10FV011 에서 확인한 것: 2003년 Retrofit 으로 MODEL NO. 와 RATED CV 가
+#  바뀌었다. 그 문서는 다행히 DATA SHEET 파일 안에 함께 철되어 있었다.
+#  그렇지 않은 태그가 있다 — Retrofit Report 만 있고 데이터시트가 없거나,
+#  데이터시트가 Retrofit 이전 상태인 경우다. 파일명만으로 공짜로 잡힌다.
+
+# 최신 상태를 담고 있을 수 있으나 MVP 범위 밖인 문서 종류
+LATER_DOC_KINDS = ("RETROFIT REPORT", "RETROFIT", "REPAIR REPORT", "TEST REPORT")
+
+
+def index_by_tag(paths: Iterable[str]) -> dict[str | None, list[FileNameInfo]]:
+    """파일 목록을 태그별로 묶는다. 파일명만 보므로 비용이 없다."""
+    out: dict[str | None, list[FileNameInfo]] = {}
+    for p in paths:
+        info = parse_filename(p)
+        out.setdefault(info.tag, []).append(info)
+    return out
+
+
+def staleness_warning(path: str, index: dict) -> str:
+    """이 파일의 값이 최신이 아닐 수 있다는 경고 문구. 없으면 빈 문자열.
+
+    Triage 가 이 문구를 `reason` 에 넣고 레코드를 확인필요로 내리는 데 쓴다.
+    경고만 하고 값을 바꾸지 않는다 — 판단은 사람이 한다(철학 4).
+    """
+    info = parse_filename(path)
+    if not info.tag:
+        return ""
+    sibs = [s for s in index.get(info.tag, [])
+            if os.path.normcase(s.path) != os.path.normcase(path)
+            and s.doc_kind in LATER_DOC_KINDS]
+    if not sibs:
+        return ""
+    names = ", ".join(sorted({s.doc_kind for s in sibs}))
+    return (f"{info.tag} 에 {names} 가 별도로 있음 — 이 데이터시트 값이 "
+            f"최신이 아닐 수 있다(사람 확인)")
 
 
 def probe_pages(path: str) -> list[PageText]:
@@ -351,6 +400,176 @@ def _render_excel(path, out_dir, dpi, want) -> list[str]:
             except OSError:
                 pass
     return out
+
+
+# ══════════════════════════════════════════════════════════════
+#  최신성 — 사양표가 2장 이상일 때 어느 쪽이 최신인가
+# ══════════════════════════════════════════════════════════════
+#
+#  왜 필요한가 (2026-08-24, 10FV011 실물 확인)
+#    `10FV011-DATA SHEET_REV1.tif` 는 사양표가 2장이다.
+#      p1  2003/03/25  Valstone  "CONTROL VALVE RETROFIT"  태그 011/012/013/014
+#      p4  1986/09/06  Fisher    수기 "OLD"                태그 011 단독
+#    p4 를 고르면 MODEL NO.(657-ED ↔ 667-ED)와 RATED CV(70.7 ↔ 95) 가 틀린다.
+#    같은 파일의 준공검사보고서(CVT-030526-1)가 p1 값을 확증한다.
+#    → 최신 페이지를 고른다. 태그 단독성은 선택 기준이 아니다.
+
+# 폐기 표기 — 사람이 이미 손으로 표시해둔 것을 존중한다
+SUPERSEDED_MARKS = [
+    (r"\bOLD\b", "OLD"),
+    (r"\bSUPERSED", "SUPERSEDED"),
+    (r"\bVOID\b", "VOID"),
+    (r"\bCANCELL?ED\b", "CANCELLED"),
+    (r"구\s*버전|폐기", "폐기"),
+]
+
+# 개정 성격 표기 — 날짜가 없거나 같을 때의 보조 근거
+REVISION_MARKS = [
+    (r"RETROFIT", "RETROFIT"),
+    (r"REVISED|REVISION", "REVISED"),
+    (r"AS[\s-]*BUILT", "AS-BUILT"),
+]
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+     "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"], start=1)}
+
+
+@dataclass
+class DocDate:
+    raw: str = ""
+    year: int | None = None
+    month: int | None = None
+    day: int | None = None
+    ambiguous: bool = False     # 월·일 순서를 가릴 수 없음 (9/6/1986)
+
+    @property
+    def key(self) -> tuple:
+        """정렬용. 연도만 있어도 비교 가능하도록 없는 자리는 0."""
+        return (self.year or 0, self.month or 0, self.day or 0)
+
+    def __bool__(self) -> bool:
+        return self.year is not None
+
+
+def parse_doc_date(text: str) -> DocDate:
+    """문서에 적힌 날짜를 읽는다. **4자리 연도가 없으면 날짜로 보지 않는다.**
+
+    두 자리 연도를 허용하면 견적번호 `85-1874` · `REV1` · 팩스 헤더 `03-04`
+    가 전부 날짜로 잡힌다. 실제로 10FV011 p4 에는 `85-1874`(견적번호)와
+    `9/6/1986`(날짜)이 같은 헤더에 나란히 있다. 연도 4자리를 요구하면
+    후자만 잡힌다 — 놓치는 편이 잘못 잡는 편보다 낫다(철학 4).
+
+    월·일 순서(9/6 = 9월 6일인가 6월 9일인가)는 양식마다 달라 가릴 수 없다.
+    `ambiguous=True` 로 표시하고, 비교는 연도부터 한다.
+    """
+    if not text:
+        return DocDate()
+    up = unicodedata.normalize("NFKC", str(text)).upper()
+
+    # 2003/03/25 · 2003-03-25 · 2003.03.25 (연도 먼저 — 순서 확실)
+    m = re.search(r"(19|20)(\d{2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})", up)
+    if m:
+        y = int(m.group(1) + m.group(2))
+        return DocDate(m.group(0).strip(), y, int(m.group(3)), int(m.group(4)))
+
+    # SEP. 11, 2015 · 11 SEP 2015 (월 이름 — 순서 확실)
+    m = re.search(r"([A-Z]{3})[A-Z]*\.?\s+(\d{1,2})\s*,?\s*((?:19|20)\d{2})", up)
+    if m and m.group(1) in _MONTHS:
+        return DocDate(m.group(0).strip(), int(m.group(3)),
+                       _MONTHS[m.group(1)], int(m.group(2)))
+    m = re.search(r"(\d{1,2})\s+([A-Z]{3})[A-Z]*\.?\s*,?\s*((?:19|20)\d{2})", up)
+    if m and m.group(2) in _MONTHS:
+        return DocDate(m.group(0).strip(), int(m.group(3)),
+                       _MONTHS[m.group(2)], int(m.group(1)))
+
+    # 9/6/1986 — 앞 두 자리 순서를 가릴 수 없다
+    m = re.search(r"(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*((?:19|20)\d{2})", up)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        amb = a <= 12 and b <= 12 and a != b
+        mo, dy = (a, b) if b > 12 else (b, a) if a > 12 else (a, b)
+        return DocDate(m.group(0).strip(), int(m.group(3)), mo, dy, amb)
+
+    # 연도만 (2003년, ' 2003 ')
+    m = re.search(r"\b((?:19|20)\d{2})\b", up)
+    if m:
+        return DocDate(m.group(0), int(m.group(1)))
+    return DocDate()
+
+
+def find_marks(text: str) -> tuple[str, bool]:
+    """개정 성격 표기와 폐기 여부를 읽는다. → (revision_marker, superseded)"""
+    if not text:
+        return "", False
+    up = unicodedata.normalize("NFKC", str(text)).upper()
+    for pat, name in SUPERSEDED_MARKS:
+        if re.search(pat, up):
+            return name, True
+    for pat, name in REVISION_MARKS:
+        if re.search(pat, up):
+            return name, False
+    return "", False
+
+
+def pick_latest_spec(pages, file_tag: str | None = None):
+    """사양표 후보 중 최신 한 장을 고른다. → (선택된 PageInfo | None, 사유)
+
+    Triage 가 쓰는 기본 정책이다. 결정론적이고 fixture 로 검증 가능하다.
+    고르지 못하면 **아무거나 고르지 않고 None 을 돌려준다** — 사람이 고른다.
+
+    순서
+      1) 폐기 표기("OLD" 등)가 있는 후보를 먼저 버린다 (사람이 이미 표시함)
+      2) 남은 것 중 연도가 가장 늦은 것
+      3) 연도가 같으면 월·일. 단 순서가 모호한 날짜끼리는 비교하지 않는다
+      4) 날짜로 못 가리면 RETROFIT / AS-BUILT / REVISED 표기가 있는 쪽
+      5) 그래도 못 가리면 None — 사람이 고른다
+
+    file_tag 은 **선택에 쓰지 않는다.** 고른 뒤 그 페이지에 이 태그가
+    보이는지 검증하는 데만 쓴다(사유 문구에 반영).
+    """
+    cands = [p for p in pages if getattr(p, "is_spec", False)]
+    if not cands:
+        return None, "사양표 페이지 없음"
+    if len(cands) == 1:
+        return cands[0], f"사양표 1장 (p{cands[0].page})"
+
+    live = [p for p in cands if not p.superseded]
+    dropped = [p for p in cands if p.superseded]
+    note = ""
+    if dropped:
+        note = " / 폐기표기 제외: " + ", ".join(
+            f"p{p.page}({p.revision_marker})" for p in dropped)
+    if not live:
+        return None, f"후보 전부 폐기 표기 — 사람이 확인{note}"
+    if len(live) == 1:
+        return live[0], f"폐기 표기 없는 유일한 사양표 (p{live[0].page}){note}"
+
+    dated = [p for p in live if p.date_key and p.date_key[0]]
+    if dated:
+        top = max(p.date_key[0] for p in dated)
+        newest = [p for p in dated if p.date_key[0] == top]
+        if len(newest) == 1:
+            p = newest[0]
+            others = ", ".join(f"p{q.page}({q.doc_date or '날짜없음'})"
+                               for q in live if q is not p)
+            return p, f"최신 사양표 p{p.page} ({p.doc_date}) — 대비 {others}{note}"
+        # 같은 연도 → 월·일. 모호한 날짜가 섞이면 비교하지 않는다
+        if not any(p.date_ambiguous for p in newest):
+            best = max(newest, key=lambda p: p.date_key)
+            ties = [p for p in newest if p.date_key == best.date_key]
+            if len(ties) == 1:
+                return best, f"최신 사양표 p{best.page} ({best.doc_date}){note}"
+        live = newest
+
+    for want in ("AS-BUILT", "RETROFIT", "REVISED"):
+        hit = [p for p in live if p.revision_marker == want]
+        if len(hit) == 1:
+            return hit[0], (f"날짜로 가리지 못해 개정 표기로 선택 — "
+                            f"p{hit[0].page} ({want}){note}")
+
+    pages_txt = ", ".join(f"p{p.page}({p.doc_date or '날짜없음'})" for p in live)
+    return None, f"최신 판정 불가 — 사람이 선택: {pages_txt}{note}"
 
 
 # ══════════════════════════════════════════════════════════════

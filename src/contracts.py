@@ -87,9 +87,17 @@ class FailureKind(str, Enum):
 class PageInfo:
     """페이지 하나의 판정 결과. 화면이 "왜 이 페이지를 제외했나" 를 보여줄 근거.
 
-    MVP 원칙 — 파일 하나에 자산 하나. 사양표가 여러 장이면 파일명 태그가
-    단독으로 나오는 페이지 하나만 고르고 나머지는 보지 않는다(토큰 절약).
+    MVP 원칙 — 파일 하나에 자산 하나. 사양표가 여러 장이면 **가장 최신인
+    페이지** 하나만 고르고 나머지는 보지 않는다(토큰 절약).
     발견 사실은 로그에만 남긴다.
+
+    ⚠️ 2026-08-24 규칙 변경 — 이전 규칙은 "파일명 태그가 단독으로 나오는
+    페이지"였고, 그것은 틀렸다. `10FV011-DATA SHEET_REV1.tif` 는 사양표가
+    2장인데 p1 이 4개 태그를 함께 담은 2003년 Retrofit 사양서, p4 가
+    `10-FV-011` 단독의 1986년 Fisher 사양서(수기로 "OLD" 표기)다.
+    단독성으로 고르면 폐기된 1986년 값을 고른다 — MODEL NO.(657-ED vs
+    667-ED)와 RATED CV(70.7 vs 95) 두 MVP 필드가 틀린다.
+    태그 단독성은 **선택 기준이 아니라 검증 기준**으로 강등되었다.
     """
     page: int                          # 1부터
     page_class: PageClass = PageClass.OTHER
@@ -101,6 +109,18 @@ class PageInfo:
     render_path: str | None = None     # 렌더된 PNG 경로 — 화면이 표시에 사용
     selected: bool = False             # 처리 대상으로 고른 페이지인가
     reason: str = ""                   # 선택·제외 사유
+
+    # ── 최신성 판정용 (사양표가 2장 이상일 때만 채운다) ──────────────
+    doc_date: str = ""                 # 페이지에 적힌 날짜 원문 그대로
+    date_key: tuple | None = None      # 비교용 정렬 키. preprocess.parse_doc_date()
+    date_ambiguous: bool = False       # 9/6/1986 처럼 월·일 순서를 가릴 수 없음
+    revision_marker: str = ""          # RETROFIT / REVISED / OLD / SUPERSEDED
+    superseded: bool = False           # 폐기 표기("OLD" 등)가 확인됨
+
+    @property
+    def is_current(self) -> bool:
+        """폐기 표기가 없는 사양표 페이지."""
+        return self.is_spec and not self.superseded
 
     @property
     def is_spec(self) -> bool:
