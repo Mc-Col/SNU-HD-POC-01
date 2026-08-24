@@ -54,7 +54,9 @@ def test_위치_설명은_사전에_넣지_않는다(res):
 
 
 def test_대응_필드가_없는_킷_컬럼을_드러낸다(res):
-    assert res.unresolved_fields == ["RATED CV"]
+    """2026-08-24 — RATED CV 가 스키마에 생겨 대응되지 않는 이름이 없다.
+    비어 있음을 단정해 스키마 변경으로 대응이 깨지면 먼저 알려주게 한다."""
+    assert res.unresolved_fields == []
 
 
 def test_스키마를_고치지_않는다(res):

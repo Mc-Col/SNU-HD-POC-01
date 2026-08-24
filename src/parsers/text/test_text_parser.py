@@ -125,10 +125,26 @@ def test_구분자형_복합_라벨도_쪼갠다(parsed):
     assert r.raw_label == "Shutoff Class"
 
 
-def test_스키마에_없는_조각은_버리지_않고_미매핑으로_남긴다(parsed):
-    """valve_body_type 은 아직 스키마에 없다 (이종수 책임 추가 예정)."""
-    pending = [u for u in parsed.unmapped if u.neighbor_value == "GLOBE"]
-    assert pending and "valve_body_type" in pending[0].text
+def test_스키마에_없는_라벨은_버리지_않고_미매핑으로_남긴다(parsed):
+    """`Spring Range` 는 28필드에 없다. 값이 있어도 버리지 않고 드러내야 한다 —
+    그래야 유사표현·신규필드 후보가 실물에서 수집된다.
+
+    2026-08-24 — 이 테스트는 원래 `valve_body_type` 을 대상으로 삼았는데
+    그 필드가 신설되어 이제 정상 매핑된다(아래 테스트로 옮겼다).
+    """
+    pending = [u for u in parsed.unmapped if u.text == "Spring Range"]
+    assert pending and pending[0].neighbor_value == "0.4 - 2.0 bar"
+
+
+def test_복합_라벨_조각이_스키마에_있으면_매핑된다(parsed):
+    """`Body Model(Type)` = `657-ED(GLOBE)` 의 뒤 조각이 valve_body_type 이다.
+
+    이 필드는 2026-08-24 신설되었다. 그 전에는 미매핑으로 남았다 —
+    미매핑 수집이 신규 필드 발견으로 이어진 실제 사례다.
+    """
+    r = parsed.by_key()["valve_body_type"]
+    assert r.raw_value == "GLOBE"
+    assert "복합 라벨" in r.note
 
 
 # ── 실물 배치 (fixtures/text/excel_layouts.xlsx) ───────────────

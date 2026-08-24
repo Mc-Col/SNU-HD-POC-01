@@ -38,21 +38,16 @@
       "note": ""
     },
     {
-      "field_key": "positioner_type",
-      "raw_value": "PNEUMATIC",
-      "raw_label": "Positioner Type",
-      "source_locator": "SPEC!E42",
+      "field_key": "valve_body_type",
+      "raw_value": "GLOBE",
+      "raw_label": "Body Type",
+      "source_locator": "SPEC!E10",
       "page": 1,
-      "confidence": 1.0,
+      "confidence": 0.95,
       "note": ""
     }
   ],
   "unmapped": [
-    {
-      "text": "BODY",
-      "source_locator": "SPEC!A10",
-      "neighbor_value": "Body Type"
-    },
     {
       "text": "MATERIAL",
       "source_locator": "SPEC!A22",
@@ -64,9 +59,14 @@
       "neighbor_value": "44-LV-999"
     },
     {
-      "text": "GLOBE",
-      "source_locator": "SPEC!E10",
+      "text": "Rating",
+      "source_locator": "SPEC!B11",
       "neighbor_value": "ANSI CLASS 300"
+    },
+    {
+      "text": "Positioner Type",
+      "source_locator": "SPEC!B42",
+      "neighbor_value": "PNEUMATIC"
     },
     {
       "text": "Trim Form",
@@ -82,11 +82,6 @@
       "text": "Leakage Spec.",
       "source_locator": "TEST!B9",
       "neighbor_value": "CLASS 2"
-    },
-    {
-      "text": "Body Model(Type) → valve_body_type",
-      "source_locator": "TEST!I7",
-      "neighbor_value": "GLOBE"
     },
     {
       "text": "Maker",

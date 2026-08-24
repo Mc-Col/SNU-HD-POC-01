@@ -83,6 +83,15 @@
       "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
     },
     {
+      "field_key": "valve_body_type",
+      "raw_value": "Globe",
+      "raw_label": "Body Form",
+      "source_locator": "p1:L10:c2",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
+    },
+    {
       "field_key": "valve_leakage_class",
       "raw_value": "ANSI IV",
       "raw_label": "Shutoff Class",
@@ -102,11 +111,6 @@
     }
   ],
   "unmapped": [
-    {
-      "text": "Body Form",
-      "source_locator": "p1:L10:c2",
-      "neighbor_value": "Globe"
-    },
     {
       "text": "Spring Range",
       "source_locator": "p1:L5:c3",
