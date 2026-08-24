@@ -93,6 +93,21 @@ def _strip_units(s: str) -> str:
     return "".join(out)
 
 
+def _strip_all_letters(s: str) -> str:
+    """글자로 시작하는 토큰을 전부 지운다. 숫자 필드로 지정된 값에만 쓴다.
+
+    단위 표기가 깨진 파일이 실제로 있다 — `m?h` 처럼 글자가 뭉개져 있거나
+    어휘에 없는 표기가 나온다(2026-08-24 확인). 필드가 숫자라고 알려졌으면
+    글자는 전부 단위 잡음이므로 어휘를 따지지 않고 지운다.
+    """
+    out = []
+    for t in _TOKEN_RE.findall(s):
+        if t[0].isalpha() or t[0] in "°℃℉":
+            continue
+        out.append(t)
+    return "".join(out)
+
+
 def looks_numeric(s) -> bool:
     """`숫자 + 단위` 형태인가. 단위를 걷어내면 숫자·구두점만 남는가."""
     t = _strip_units(roman_to_arabic(_clean(s)))
@@ -140,13 +155,17 @@ def roman_to_arabic(s: str) -> str:
     return _ROMAN_RE.sub(sub, s.upper())
 
 
-def numbers(s) -> list[float]:
+def numbers(s, force: bool = False) -> list[float]:
     """문자열에서 값 숫자를 순서대로 뽑는다. 단위 안의 숫자는 세지 않는다.
+
+    force=True 면 글자 토큰을 어휘와 무관하게 전부 지운다 — 숫자 필드로
+    지정된 값에 쓴다(깨진 단위 표기 대응).
 
     숫자 사이의 하이픈은 구분자로 본다 — `1-1/2"`(1과 1/2 인치)의 `-` 를
     음수로 읽으면 `1 1/2 in` 과 달라진다. 음수는 앞이 공백·시작일 때만.
     """
-    t = _strip_units(roman_to_arabic(_clean(s)))
+    t = roman_to_arabic(_clean(s))
+    t = _strip_all_letters(t) if force else _strip_units(t)
     t = re.sub(r"(?<=\d)\s*-\s*(?=\d)", " ", t)
     return [float(x) for x in _NUM_RE.findall(t)]
 
@@ -157,23 +176,38 @@ def norm_text(s) -> str:
     return re.sub(r"[^A-Z0-9가-힣]+", "", t)
 
 
-def same(gold, got) -> bool:
-    """골든셋 정답과 추출값이 같은가."""
+def same(gold, got, numeric: bool | None = None) -> bool:
+    """골든셋 정답과 추출값이 같은가.
+
+    numeric
+        True   숫자 필드다. 단위 표기를 통째로 무시하고 숫자만 대조한다.
+               `schema/rules.yaml` 에 `numeric: true` 로 지정된 필드에 쓴다.
+               단위가 깨져 있어도(`30 m?h`) 흔들리지 않는다.
+        False  텍스트 필드다. 숫자로 뭉개지 않는다.
+        None   자동. 양쪽이 모두 "숫자 + 알려진 단위" 형태일 때만 숫자로 본다.
+               필드 정보 없이 부를 때의 안전한 기본값이다.
+    """
     if is_na(gold) or is_na(got):
         return is_na(gold) and is_na(got)
     if is_unreadable(gold) or is_unreadable(got):
         return is_unreadable(gold) and is_unreadable(got)
 
-    # 양쪽 모두 "숫자 + 단위" 일 때만 숫자로 대조한다.
-    # 한쪽이라도 글자가 남으면 텍스트로 — 재질 등급을 숫자로 뭉개지 않기 위해.
+    if numeric is True:
+        a, b = numbers(gold, force=True), numbers(got, force=True)
+        return bool(a) and a == b
+    if numeric is False:
+        return norm_text(gold) == norm_text(got)
+
+    # 자동 — 양쪽 모두 "숫자 + 단위" 일 때만 숫자로 대조한다.
+    # 한쪽이라도 글자가 남으면 텍스트로. 재질 등급을 숫자로 뭉개지 않기 위해.
     if looks_numeric(gold) and looks_numeric(got):
         return numbers(gold) == numbers(got)
     return norm_text(gold) == norm_text(got)
 
 
-def why(gold, got) -> str:
+def why(gold, got, numeric: bool | None = None) -> str:
     """같지 않을 때 사유. 같으면 빈 문자열. 로그·화면에 쓴다."""
-    if same(gold, got):
+    if same(gold, got, numeric):
         return ""
     if is_na(gold) and not is_na(got):
         return f"정답은 근거 없음(N/A)인데 값을 만들었다: {_clean(got)!r}"
@@ -181,6 +215,9 @@ def why(gold, got) -> str:
         return f"정답 {_clean(gold)!r} 을 찾지 못하고 N/A 로 두었다"
     if is_unreadable(gold):
         return "정답이 판독불가 — 사람도 못 읽은 값이다"
-    if looks_numeric(gold) and looks_numeric(got):
+    if numeric is True:
+        return (f"숫자가 다르다: 정답 {numbers(gold, force=True)} "
+                f"vs 추출 {numbers(got, force=True)}")
+    if numeric is None and looks_numeric(gold) and looks_numeric(got):
         return f"숫자가 다르다: 정답 {numbers(gold)} vs 추출 {numbers(got)}"
     return f"값이 다르다: 정답 {_clean(gold)!r} vs 추출 {_clean(got)!r}"
