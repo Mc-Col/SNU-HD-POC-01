@@ -1,0 +1,1042 @@
+<title>D2S 파이프라인 설계도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F7F8F6; --surface:#FFFFFF; --sheet:#FBFBF9;
+  --ink:#16202B; --ink-2:#3D4954; --ink-3:#6B7681;
+  --rule:#D9DDD8; --rule-2:#E9ECE8;
+  --accent:#1F4E6B; --accent-soft:#E7EDF1; --accent-ink:#FFFFFF;
+  --auto:#2E7D5B; --auto-soft:#E4EFE9;
+  --review:#A9701C; --review-soft:#F6EEDF;
+  --na:#8B4A52; --na-soft:#F3E7E8;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans KR","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#121A22; --surface:#18222C; --sheet:#E9EBE7;
+  --ink:#E3E8EA; --ink-2:#B4BFC7; --ink-3:#8A97A1;
+  --rule:#2C3944; --rule-2:#222D37;
+  --accent:#6BA6C9; --accent-soft:#1D2E3B; --accent-ink:#0E1620;
+  --auto:#5FB98D; --auto-soft:#172C23;
+  --review:#D8A24E; --review-soft:#2E2517;
+  --na:#C4838B; --na-soft:#2B1D1F;
+}}
+:root[data-theme="dark"]{
+  --ground:#121A22; --surface:#18222C; --sheet:#E9EBE7;
+  --ink:#E3E8EA; --ink-2:#B4BFC7; --ink-3:#8A97A1;
+  --rule:#2C3944; --rule-2:#222D37;
+  --accent:#6BA6C9; --accent-soft:#1D2E3B; --accent-ink:#0E1620;
+  --auto:#5FB98D; --auto-soft:#172C23;
+  --review:#D8A24E; --review-soft:#2E2517;
+  --na:#C4838B; --na-soft:#2B1D1F;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1100px;margin:0 auto;padding:0 26px 100px}
+
+header{border-bottom:1px solid var(--rule);margin-bottom:14px;padding:52px 0 26px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+h1{font-size:clamp(29px,4.4vw,42px);line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+.lede{font-size:17px;color:var(--ink-2);margin:0 0 24px;max-width:62ch;font-weight:300}
+.meta{display:flex;flex-wrap:wrap;gap:6px 26px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.meta b{color:var(--ink-2);font-weight:500}
+
+section{margin:0 0 62px;scroll-margin-top:20px}
+h2{font-size:13px;font-family:var(--mono);font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+.h2sub{font-size:24px;font-weight:600;letter-spacing:-.015em;margin:0 0 8px;line-height:1.25}
+.note{color:var(--ink-2);font-size:14.5px;max-width:64ch;margin:0 0 24px}
+h3{font-size:17px;font-weight:600;margin:34px 0 10px;letter-spacing:-.01em}
+p{margin:0 0 14px}
+code{font-family:var(--mono);font-size:.875em;background:var(--accent-soft);padding:.12em .38em;border-radius:3px}
+
+/* 오리엔테이션 */
+.orient{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin:26px 0 0}
+.oc{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:16px 18px;border-top:3px solid var(--accent)}
+.oc .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:7px}
+.oc .v{font-size:15px;font-weight:600;line-height:1.4;display:block;margin-bottom:4px}
+.oc .s{font-size:13px;color:var(--ink-2);line-height:1.55}
+
+/* 계층 배지 */
+.lay{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10.5px;
+  font-weight:600;letter-spacing:.05em;padding:2px 7px;border-radius:3px;white-space:nowrap;vertical-align:middle}
+.lay.ai{background:var(--accent);color:var(--accent-ink)}
+.lay.det{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.lay.hum{background:var(--review-soft);color:var(--review);border:1px solid var(--review)}
+
+/* 제작 시트 (다이어그램) */
+.sheet{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;
+  padding:24px 18px;overflow-x:auto;margin:0 0 10px}
+.sheet pre.mermaid{margin:0;background:none;display:flex;justify-content:center;min-width:min-content}
+figcaption{font-size:13px;color:var(--ink-3);margin-top:0;padding:0 2px}
+
+/* 담당 카드 */
+.owns{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.ow{background:var(--surface);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.ow .hd{padding:15px 18px 13px;border-bottom:1px solid var(--rule-2);background:var(--accent-soft)}
+.ow .nm{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.ow .ro{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-top:2px}
+.ow .bd{padding:14px 18px 16px}
+.ow ul{margin:0;padding:0;list-style:none}
+.ow li{display:grid;grid-template-columns:34px 1fr;gap:10px;padding:7px 0;border-bottom:1px dotted var(--rule-2);font-size:13.5px}
+.ow li:last-child{border-bottom:none}
+.ow li .st{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);padding-top:2px}
+.ow li .ds{color:var(--ink)}
+.ow li .pt{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);display:block}
+.ow .pri{margin-top:13px;padding:11px 13px;background:var(--review-soft);border-left:3px solid var(--review);border-radius:3px;font-size:13px}
+.ow .pri b{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--review);margin-bottom:3px}
+
+/* 단계 */
+.stages{display:grid;gap:14px}
+.stage{background:var(--surface);border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.stage>.head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;
+  border-bottom:1px solid var(--rule-2);background:var(--accent-soft)}
+.stage .num{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+.stage .nm{font-weight:600;font-size:15.5px;letter-spacing:-.01em}
+.stage .own{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-2);
+  border:1px solid var(--rule);border-radius:99px;padding:2px 10px;background:var(--surface)}
+.stage .body{padding:4px 18px 16px}
+.row{display:grid;grid-template-columns:80px 1fr;gap:4px 14px;padding:10px 0;border-bottom:1px dotted var(--rule-2)}
+.row:last-child{border-bottom:none}
+.row .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);padding-top:3px}
+.row ul{margin:0;padding-left:15px}
+.row li{margin:0 0 3px}
+.row .val{font-size:13.8px}
+.fn{font-family:var(--mono);font-size:12.5px}
+.fn b{color:var(--accent);font-weight:500}
+.hk{color:var(--review);font-family:var(--mono);font-size:12.5px}
+@media (max-width:620px){.row{grid-template-columns:1fr;gap:2px}.row .lbl{padding-top:0}}
+
+/* 상태 칩 */
+.chip{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:500;padding:1px 7px;border-radius:3px;white-space:nowrap}
+.chip.auto{background:var(--auto-soft);color:var(--auto);border:1px solid var(--auto)}
+.chip.rev{background:var(--review-soft);color:var(--review);border:1px solid var(--review)}
+.chip.na{background:var(--na-soft);color:var(--na);border:1px solid var(--na)}
+.chip.off{background:transparent;color:var(--ink-3);border:1px dashed var(--rule)}
+
+/* 표 */
+.tw{overflow-x:auto;margin:0 0 8px;border:1px solid var(--rule);border-radius:5px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:580px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;background:var(--ground);border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:none}
+td code{background:none;padding:0;color:var(--accent);font-weight:500}
+
+/* 콜아웃 */
+.call{border:1px solid var(--rule);border-left:3px solid var(--review);background:var(--review-soft);
+  border-radius:4px;padding:15px 18px;margin:0 0 18px;font-size:14px}
+.call .t{font-weight:600;display:block;margin-bottom:5px}
+.call.hard{border-left-color:var(--na);background:var(--na-soft)}
+.call.ok{border-left-color:var(--auto);background:var(--auto-soft)}
+.call p:last-child{margin-bottom:0}
+
+/* ── 화면 목업 ── */
+.screens{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-bottom:22px}
+.sc{background:var(--surface);border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.sc .cap{padding:9px 14px;border-bottom:1px solid var(--rule-2);background:var(--accent-soft);
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent);font-weight:600}
+.sc .art{padding:16px;min-height:130px;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.drop{border:2px dashed var(--rule);border-radius:5px;padding:20px 14px;text-align:center;color:var(--ink-3);font-size:13px}
+.drop b{display:block;color:var(--ink);font-size:14px;margin-bottom:4px;font-weight:500}
+.bar{height:6px;background:var(--rule-2);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.btn{display:inline-block;font-size:12.5px;padding:6px 14px;border-radius:4px;border:1px solid var(--accent);
+  color:var(--accent);background:transparent;font-weight:500}
+.btn.pri{background:var(--accent);color:var(--accent-ink)}
+.btn.dis{border-color:var(--rule);color:var(--ink-3);border-style:dashed}
+.fname{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.tiny{font-size:12px;color:var(--ink-3);line-height:1.5}
+
+/* HITL 목업 */
+.hitl{border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface);margin-bottom:10px}
+.hitl .top{padding:11px 16px;border-bottom:1px solid var(--rule-2);background:var(--accent-soft);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hitl .top .ttl{font-weight:600;font-size:14.5px}
+.hitl .top .fn2{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-left:auto}
+.hitl .grid{display:grid;grid-template-columns:minmax(240px,0.85fr) minmax(320px,1.15fr);gap:0}
+@media (max-width:760px){.hitl .grid{grid-template-columns:1fr}}
+.hitl .doc{padding:16px;border-right:1px solid var(--rule-2);background:var(--ground)}
+@media (max-width:760px){.hitl .doc{border-right:none;border-bottom:1px solid var(--rule-2)}}
+.page{position:relative;background:#FCFCFA;border:1px solid var(--rule);border-radius:2px;
+  aspect-ratio:3/4;overflow:hidden}
+.page .ln{position:absolute;left:8%;right:8%;height:1px;background:#DDD}
+.page .blk{position:absolute;background:#E8E8E4;border-radius:1px}
+.page .bb{position:absolute;border-radius:2px;font-family:var(--mono);font-size:8px;
+  display:flex;align-items:flex-start;justify-content:flex-end}
+.page .bb span{transform:translateY(-125%);padding:1px 3px;border-radius:2px;color:#fff;white-space:nowrap;font-size:7.5px}
+.bb.g{border:1.6px solid #2E7D5B;background:rgba(46,125,91,.10)}
+.bb.g span{background:#2E7D5B}
+.bb.y{border:1.6px dashed #A9701C;background:rgba(169,112,28,.16)}
+.bb.y span{background:#A9701C}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;font-size:11.5px;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.legend .lg i{border:1.5px solid #2E7D5B;background:rgba(46,125,91,.12)}
+.legend .ly i{border:1.5px dashed #A9701C;background:rgba(169,112,28,.18)}
+
+.hitl .panel{padding:0}
+.ftab{width:100%;border-collapse:collapse;font-size:12.5px;min-width:0}
+.ftab th{font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:8px 10px;background:var(--ground);color:var(--ink-3)}
+.ftab td{padding:8px 10px;border-bottom:1px solid var(--rule-2);vertical-align:middle}
+.ftab tr:last-child td{border-bottom:none}
+.ftab .k{font-weight:500;font-size:12px}
+.ftab .v{font-family:var(--mono);font-size:12px}
+.ftab tr.hl{background:var(--review-soft)}
+.req{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.mini{font-size:11px;padding:2px 8px;border-radius:3px;border:1px solid var(--accent);color:var(--accent);
+  font-family:var(--mono);white-space:nowrap}
+.mini.f{background:var(--accent);color:var(--accent-ink)}
+.hitl .foot{padding:12px 16px;border-top:1px solid var(--rule-2);display:flex;gap:10px;
+  align-items:center;flex-wrap:wrap;background:var(--ground)}
+.hitl .foot .sp{margin-left:auto;font-size:11.5px;color:var(--ink-3)}
+
+/* 강의 매핑 */
+.mapg{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.mp{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  border-radius:4px;padding:13px 15px}
+.mp .lc{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent);display:block;margin-bottom:4px;font-weight:600}
+.mp .ap{font-size:13.5px;color:var(--ink)}
+
+footer{border-top:1px solid var(--rule);padding-top:20px;font-size:13px;color:var(--ink-3)}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Asset Master Agent · 1단계 PoC · rev.3</p>
+  <h1>D2S 파이프라인 설계도</h1>
+  <p class="lede">비정형 설비 문서에서 컨트롤밸브 기준정보 <strong>28필드</strong>를 추출·검증하는 파이프라인. 데이터 흐름, 실물에서 나온 규칙, 담당 배분, 화면, 그리고 프레임워크가 강제하는 제약.</p>
+  <div class="meta">
+    <span><b>인원</b> 3인 병렬</span>
+    <span><b>기간</b> 8/21 ~ 8/27</span>
+    <span><b>발표</b> 8/27 (목)</span>
+    <span><b>갱신</b> 2026-08-24</span>
+    <span><b>코퍼스</b> 1,059건 · 대상 1,021</span>
+  </div>
+</header>
+
+<section>
+  <div class="orient">
+    <div class="oc"><span class="k">무엇을</span><span class="v">문서 → 기준정보</span><span class="s">스캔이미지·PDF·엑셀에서 컨트롤밸브 <b>28필드</b>를 뽑아 마스터 스키마 엑셀로</span></div>
+    <div class="oc"><span class="k">어떻게</span><span class="v">VLM + 규칙</span><span class="s">AI 모듈 2개, 결정론적 모듈 5개. AI를 부품으로 쓰는 결정론적 파이프라인</span></div>
+    <div class="oc"><span class="k">누가 확정</span><span class="v">사람</span><span class="s">AI는 제안만. 자동확정 / 리뷰필요 / N-A 3상태로 나눠 사람이 승인</span></div>
+    <div class="oc"><span class="k">MVP</span><span class="v">9필드</span><span class="s">수직 슬라이스 한 줄기를 먼저 관통. 그다음 포맷·필드 수평 확장</span></div>
+    <div class="oc" style="border-top-color:var(--na)"><span class="k">실측이 바꾼 것</span><span class="v">스캔 30% → 71.9%</span><span class="s">착수 전 추정과 실측이 3배 달랐다. VLM 이 곁가지가 아니라 <b>주 경로</b>다</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Team</h2>
+  <p class="h2sub">누가 무엇을 만드나</p>
+  <p class="note">모듈 경계로 나눴다. 각자 자기 폴더만 수정하면 파일이 겹치지 않아 병합 충돌이 생기지 않는다.
+    <span class="lay ai">AI</span> 는 LLM·VLM 호출, <span class="lay det">규칙</span> 은 결정론적 알고리즘, <span class="lay hum">사람</span> 은 사람이 판단하는 지점.</p>
+
+  <div class="owns">
+    <div class="ow">
+      <div class="hd"><div class="nm">강민호 책임</div><div class="ro">개발 · 도메인 — 비정형 입력 계층</div></div>
+      <div class="bd">
+        <ul>
+          <li><span class="st">①</span><span class="ds">Triage <span class="lay det">규칙</span><span class="pt">src/triage/</span></span></li>
+          <li><span class="st">②</span><span class="ds">Router <span class="lay det">규칙</span><span class="pt">src/router/</span></span></li>
+          <li><span class="st">③-b</span><span class="ds">VLM Parser <span class="lay ai">AI</span><span class="pt">src/parsers/vlm/</span></span></li>
+        </ul>
+        <div class="pri"><b>1순위</b><strong>Triage 조립</strong> — 페이지 렌더로 <code>render_path</code> 를 채우는 것. 화면이 <b>tif 71.9%</b> 를 표시조차 못 하는 상태다. 도구는 <code>src/preprocess.py</code> 에 이미 있다 — 다시 만들지 않고 조립한다.<br><span class="tiny">rev.2 의 1순위였던 PDF 텍스트 탐침은 실측 결과 대상 PDF 가 16.6% 뿐이고, 탐침 도구는 이미 구현되어 있다.</span></div>
+      </div>
+    </div>
+
+    <div class="ow">
+      <div class="hd"><div class="nm">서경빈 선임</div><div class="ro">데이터 표준 — 정형·표준 계층</div></div>
+      <div class="bd">
+        <ul>
+          <li><span class="st">◆</span><span class="ds">필드 정의 · 규칙표 <span class="lay det">규칙</span><span class="pt">schema/fields.yaml · rules.yaml</span></span></li>
+          <li><span class="st">③-a</span><span class="ds">Text Parser <span class="lay det">규칙</span><span class="pt">src/parsers/text/</span></span></li>
+          <li><span class="st">⑤-a</span><span class="ds">형식·필수 검증 <span class="lay det">규칙</span><span class="pt">src/validate/format/</span></span></li>
+        </ul>
+        <div class="pri"><b>1순위</b><code>fields.yaml</code> 의 <strong>유사표현 보강</strong>. 현재 11/28 필드이고 MVP 9필드 중 5개가 0개다. Text Parser 정확도가 여기서 결정된다.<br><span class="tiny">실물 변종 예 — <code>Rated Cv</code>(Metso) · <code>Valve Coefficient</code>(Fisher) · <code>Body Rated Cv</code>(Valstone)</span></div>
+      </div>
+    </div>
+
+    <div class="ow">
+      <div class="hd"><div class="nm">이종수 책임</div><div class="ro">기획 · 도메인 — 통합·판정·화면</div></div>
+      <div class="bd">
+        <ul>
+          <li><span class="st">◆</span><span class="ds">하네스 · 루프 제어 <span class="lay det">규칙</span><span class="pt">src/pipeline.py · hooks.py</span></span></li>
+          <li><span class="st">④</span><span class="ds">Normalize <span class="lay det">규칙</span><span class="pt">src/normalize/</span></span></li>
+          <li><span class="st">⑤-b</span><span class="ds">도메인 검증 <span class="lay det">규칙</span><span class="pt">src/validate/domain/</span></span></li>
+          <li><span class="st">⑤-c</span><span class="ds">평가 Agent <span class="lay ai">AI</span><span class="pt">src/validate/domain/</span></span></li>
+          <li><span class="st">⑥</span><span class="ds">State 판정 <span class="lay det">규칙</span><span class="pt">src/state/</span></span></li>
+          <li><span class="st">⑦</span><span class="ds">HITL · 데모 웹 <span class="lay hum">사람</span><span class="pt">src/ui/</span></span></li>
+        </ul>
+        <div class="pri"><b>1순위</b><code>eval/harness.py</code>. 골든셋을 숫자로 바꾸는 유일한 장치이고 그 숫자가 발표다. <code>--no-vlm</code> 으로 API 없이도 돌아야 한다.<br><span class="tiny">하네스·훅·계약·전처리·화면은 완료. 남은 것은 평가와 판정 모듈.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="call ok" style="margin-top:18px">
+    <span class="t">AI 모듈은 2개뿐이다</span>
+    <p>VLM Parser 와 평가 Agent. 나머지 5개는 결정론적 알고리즘이다. 이 비율이 설계의 성격을 말한다 —
+      <strong>"AI 파이프라인"이 아니라 "AI를 부품으로 쓰는 결정론적 파이프라인"</strong>이다.
+      결정론적 모듈은 무료이고 재현 가능하며 도메인 전문가가 검토할 수 있다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Data Flow</h2>
+  <p class="h2sub">전체 흐름</p>
+  <p class="note">진한 파란 박스가 AI 호출 지점이다. 분기는 모두 <em>내용 기반</em>이며 확장자로 판단하는 곳은 없다.</p>
+  <figure class="sheet">
+    <pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#16202B','primaryBorderColor':'#1F4E6B','lineColor':'#5C6873','fontFamily':'IBM Plex Sans KR, sans-serif','fontSize':'13px'}}}%%
+flowchart TB
+  F(["원본 파일<br/>xlsx · xlsm · xls · pdf · tif"]) --> T
+
+  T{"① TRIAGE<br/>파일명 판정 → 페이지 렌더 → 격자<br/><small>강민호</small>"}
+  T -->|"도면 · 계기목록 · 1.2%"| X["배제 + 사유 로깅"]
+  T -->|"대상 96.4%"| PS{"사양표 페이지 선택<br/>최신성<br/><small>강민호</small>"}
+  PS -.->|"못 가리면"| HS
+  PS --> R
+
+  R{"② ROUTER<br/>페이지 단위 텍스트 레이어<br/><small>강민호</small>"}
+  R -->|"텍스트 페이지"| TP["③-a Text Parser<br/>헤더 → 표준 컬럼 매핑<br/><small>서경빈</small>"]
+  R -->|"스캔 페이지 · tif 71.9%"| VP["③-b VLM Parser<br/>gpt-5.6-luna<br/>값 + bbox + 확신도<br/><small>강민호</small>"]
+
+  TP --> N
+  VP --> N
+
+  N["④ NORMALIZE<br/>도메인 규칙 (ATO/ATC 역전)<br/><small>이종수</small>"]
+  N --> V1["⑤-a 형식·필수 검증<br/><small>서경빈</small>"]
+  V1 --> V2["⑤-b 도메인 제약 검증<br/><small>이종수</small>"]
+  V2 --> V3{"⑤-c 평가 Agent<br/>bbox 크롭 역방향 검증<br/><small>이종수</small>"}
+  V3 --> ST{"⑥ STATE<br/>3상태 판정 + 비고<br/><small>이종수</small>"}
+
+  V2 -.->|"추출 실패한 필드만<br/>Loop A · gpt-5.6-terra"| VP
+
+  ST -->|자동확정| HS
+  ST -->|리뷰필요| HS
+  ST -->|N/A| HS
+
+  HS["⑦ HITL 스테이징<br/>원본 이미지 + bbox 하이라이트<br/><small>이종수</small>"] --> AP["검토 완료<br/>필수 필드 전부 해소 시 활성화"]
+  AP --> OUT(["마스터 스키마 엑셀"])
+
+  ST -.-> LOG[("runs/*.jsonl")]
+  HS -.-> LOG
+
+  classDef ai fill:#1F4E6B,color:#FFFFFF,stroke:#16303F,stroke-width:1px
+  classDef term fill:#EAF0F4,color:#16202B,stroke:#1F4E6B
+  classDef out fill:#F3E7E8,color:#16202B,stroke:#8B4A52
+  classDef decide fill:#F6EEDF,color:#16202B,stroke:#A9701C
+  class VP,V3 ai
+  class F,OUT term
+  class X out
+  class PS decide
+    </pre>
+  </figure>
+  <figcaption>파일 한 개가 배제·텍스트·스캔 세 경로로 갈라져 필드 단위 상태 판정을 거친다. 진한 박스 2개가 AI 호출 지점이고 나머지는 결정론적이다. 노란 박스는 <strong>못 가리면 사람에게 넘기는</strong> 판정 지점이다.</figcaption>
+</section>
+
+<section>
+  <h2>Ground Truth</h2>
+  <p class="h2sub">실물이 바꾼 규칙 네 개</p>
+  <p class="note">아래는 모두 <strong>문서를 열어보고</strong> 정해진 것이다. 추정으로 세운 규칙은 두 번째 파일에서 깨졌다.</p>
+
+  <h3>① 페이지 선택 — 태그가 아니라 최신성</h3>
+  <p class="note">한 파일에 사양표가 여러 장이면 <strong>가장 최신인 한 장</strong>만 본다.
+    처음에는 "파일명 태그가 단독으로 나오는 페이지"를 골랐고, 그것은 틀렸다.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>10FV011-DATA SHEET_REV1.tif</th><th>p1</th><th>p4</th></tr></thead>
+      <tbody>
+        <tr><td>발행</td><td>2003 Valstone <b>Retrofit</b></td><td>1986 Nippon Fisher</td></tr>
+        <tr><td>태그</td><td>011 / 012 / 013 / 014</td><td>011 <b>단독</b></td></tr>
+        <tr><td>표기</td><td>WORK SCOPE — 신규교환</td><td>수기 <b>"OLD"</b></td></tr>
+        <tr><td><code>MODEL NO.</code></td><td><b>667-ED</b></td><td>657-ED</td></tr>
+        <tr><td><code>RATED CV</code></td><td><b>95</b></td><td>70.7</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call hard">
+    <span class="t">태그 단독성으로 고르면 MVP 두 필드가 틀린다</span>
+    <p>같은 파일의 준공검사보고서(CVT-030526-1)가 p1 의 값을 독립 확증했다. 태그 대조는 <strong>선택 기준이 아니라
+      선택 후 검증</strong>으로 강등했다. 그리고 <strong>결정론적인 오답은 매번 같은 답을 내므로 더 발견하기 어렵다</strong> —
+      흔들리는 값은 의심을 사지만 일관된 값은 검증을 통과한다.</p>
+  </div>
+
+  <p class="note">그런데 사양표가 두 장이라고 다 같은 문제가 아니다. 판별자는 <strong>태그 교집합</strong>이다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>상황</th><th>태그 교집합</th><th>판정</th></tr></thead>
+      <tbody>
+        <tr><td>10FV011 — p1[011,012,013,014] · p4[011]</td><td>있음</td>
+          <td><b>같은 설비의 다른 시점</b> → 최신을 고른다</td></tr>
+        <tr><td>070100 견적서 — p4[B10TV040] · p5[B10TV1016]</td><td>없음</td>
+          <td><b>서로 다른 설비 2대</b> → 파일명 태그로. 없으면 "자산 N건 발견"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>② 태그 — Area 는 문자+숫자, 없으면 A 가 생략된 것</h3>
+  <p class="note"><code>Area - 설비종류 - 일련번호</code>. 1공장이 최초 공장이라 지을 때 구분이 필요 없었고,
+    2공장부터 B 를 붙였다. 즉 <code>10-FV-012</code> 의 정식 표기는 <code>A10-FV-012</code> 다.</p>
+  <div class="call hard">
+    <span class="t">버린 한 글자가 서로 다른 설비를 합친다</span>
+    <p>정규화에서 앞 문자를 버리면 <code>10-FV-012</code>(A10 구역)와 <code>B10-FV-012</code>(B10 구역)가
+      같은 값이 된다. 현재 코퍼스 충돌은 <b>0건</b>이라 테스트도 통계도 정상으로 보였다.
+      증상은 30만 태그에서만 나타나고, 그때는 두 설비의 이력이 이미 섞여 있다 —
+      <strong>기준정보 오염을 막는 시스템이 오염시키는 코드를 품고 있었다.</strong></p>
+  </div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>용도</th><th>값</th><th>쓰는 곳</th></tr></thead>
+      <tbody>
+        <tr><td>정규화 키</td><td><code>A10FV011</code></td><td>파일명↔문서 대조, 페이지 검증</td></tr>
+        <tr><td>내보내는 값</td><td><code>10FV011</code></td><td>화면·엑셀 — <b>문서에 없는 A 를 만들지 않는다</b></td></tr>
+        <tr><td>표시</td><td><code>implicit_plant=True</code></td><td>규칙으로 채웠다는 기록</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>③ 범위 — 정비보고서는 대상이다</h3>
+  <p class="note">한때 112건을 제외했다. 근거는 정엔지니어링 발행 체크시트의 사양 칸이 대부분 비어 있다는 실측이었다
+    (22칸 중 2~12칸). 그 판단을 철회했다.</p>
+  <div class="call">
+    <span class="t">비어 있는 것은 수율 문제이고 범위 문제가 아니다</span>
+    <p>스캔해서 비면 시스템이 <code>N/A</code> + 사유로 정직하게 답하는 것이 옳은 동작이고, 그 동작 자체가
+      이 과제의 산출물이다. 제외하면 아예 보지 않게 되고 데이터시트가 없는 34개 태그는 영구 도달 불가가 된다.
+      실물 반례도 있다 — Valstone 발행 <code>10PV018-REPAIR REPORT</code> 는 시트 3 에
+      <code>CONTROL VALVE SPECIFICATIONS</code> 가 텍스트로 온전히 있다.</p>
+    <p><strong>단 억지로 채우지 않는다.</strong> 읽히는 것만 적고 나머지는 <code>N/A</code> + 사유다.
+      "이 문서로는 채울 수 없다" 가 측정 대상이다.</p>
+  </div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>판정</th><th>건수</th><th>비율</th></tr></thead>
+      <tbody>
+        <tr><td>대상</td><td><b>1,021</b></td><td>96.4%</td></tr>
+        <tr><td>제외 — 도면 · 계기목록</td><td>13</td><td>1.2%</td></tr>
+        <tr><td>판단 불가 → 내용 판정으로</td><td>25</td><td>2.4%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">대상 1,021건의 포맷 — <code>tif</code> <b>71.9%</b> · <code>pdf</code> 16.6% ·
+    <code>xlsx</code>·<code>xlsm</code> 11.6%. 그중 정비·개조 보고서 112건(11.0%)이고
+    <b>111건이 텍스트 레이어를 갖고 있다</b>.</p>
+
+  <h3>④ VLM 과 텍스트 레이어의 역할</h3>
+  <div class="call ok">
+    <span class="t">VLM 이 어느 텍스트가 어느 필드인지 정하고, 텍스트 레이어가 그 글자를 보증한다</span>
+    <p>텍스트 레이어가 온전한 PDF 에서도 뽑아보면 <code>OPEN</code>/<code>CLOSE</code> 가 한 덩어리로,
+      색상값이 라벨과 멀찍이 떨어져 나온다. <strong>글자는 100% 있는데 어느 값이 어느 필드인지 알 수 없다.</strong>
+      표 구조가 무너진 텍스트는 값의 목록일 뿐이다.</p>
+    <p>비용 절감은 <strong>페이지 수를 줄이는 데서</strong> 얻고, 판독 단계를 생략해서 얻지 않는다.
+      8페이지를 격자 한 장으로 판정해 VLM 호출을 8회 → 2~4회로 줄인다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Cost</h2>
+  <p class="h2sub">비용 사다리에 모델 축을 더한다</p>
+  <p class="note">원래 사다리는 <code>규칙 검증(무료) → 평가 Agent(유료) → HITL(가장 비싸다)</code> 였다.
+    여기에 모델 단계를 하나 더 붙인다.</p>
+  <div class="orient" style="margin-top:0">
+    <div class="oc"><span class="k">1차 · 전량</span><span class="v">gpt-5.6-luna</span>
+      <span class="s">모든 필드를 싼 모델로 먼저 읽는다</span></div>
+    <div class="oc" style="border-top-color:var(--review)"><span class="k">재시도 · 실패분만</span>
+      <span class="v">gpt-5.6-terra</span>
+      <span class="s">Loop A 가 <b>필드 단위</b>로 돌므로 상위 모델은 실패한 필드만 본다. 28필드 중 3개 실패면 3개분</span></div>
+  </div>
+  <div class="call">
+    <span class="t">Rule 과 Note 는 모델에 가지 않는다</span>
+    <p>"매 루프마다 규칙을 읽으면 컨텍스트 비용이 크지 않나" — 구조를 확인한 결과 그렇지 않다.
+      <code>guidance.yaml</code> 은 <b>사람이 보는 화면</b>만 읽고, <code>domain_rules</code>·
+      <code>value_aliases</code>·<code>unit_tokens</code>·<code>composite_labels</code> 는
+      <b>파이썬</b>에서 추출 이후에 적용된다.</p>
+    <p>모델에 가는 것은 <strong>필드 정의(name·desc·aliases)</strong> 뿐이고 문서당 1회다.
+      그래서 "1차는 규칙 없이"는 오히려 비싸진다 — aliases 가 없으면
+      <code>Valve Coefficient</code> → <code>rated_cv</code> 매핑이 안 되어 벤더 변종 대부분이 상위 모델로
+      올라간다. 반복되는 정적 프롬프트는 빼는 것이 아니라 <strong>prompt caching</strong> 으로 해결한다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Measure</h2>
+  <p class="h2sub">무엇을 맞다고 볼 것인가</p>
+  <p class="note">평가 규칙은 모든 측정의 분모다. 여기가 틀리면 이후 숫자가 전부 틀린다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>원칙</th><th>같다고 본다</th><th>다르다고 본다</th></tr></thead>
+      <tbody>
+        <tr><td>단위 표기</td><td><code>142.6 m3/Hr</code> = <code>142.6 M3/H</code> = <code>142.6 m?h</code></td>
+          <td><code>142.6</code> ≠ <code>142.5</code></td></tr>
+        <tr><td>로마자</td><td><code>CLASS 4</code> = <code>CLASS IV</code></td>
+          <td><code>CLASS 4</code> ≠ <code>CLASS 2</code></td></tr>
+        <tr><td>재질 등급</td><td>—</td><td><code>A351 CF8M</code> ≠ <code>A351 CF3M</code> <b>숫자로 뭉개지 않는다</b></td></tr>
+        <tr><td>N/A</td><td><code>NA</code> = 빈칸</td><td><code>NA</code> ≠ <code>0</code> · <code>NA</code> ≠ 판독불가</td></tr>
+        <tr><td>표기 변종</td><td>—</td><td><code>EQ%</code> ≠ <code>Equal Percent</code> — <b>별칭 사전의 몫</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call">
+    <span class="t">레귤레이터는 따로 집계한다 — 빼지는 않는다</span>
+    <p>자기구동 감압변은 액추에이터가 없어 필드가 <strong>구조적으로 존재하지 않는다</strong>.
+      실측(Fisher 627) — 28필드 중 12개가 N/A 이고 MVP 9필드 중 2개(<code>RATED CV</code>,
+      <b>안전 필드</b> <code>FAIL ACTION</code>)가 N/A 다.</p>
+    <p>범위에서 빼지 않는 이유는 판별자가 태그가 아니기 때문이다 — PCV 중 레귤레이터는 53% 이고 나머지 절반은
+      실제 컨트롤밸브다. 그리고 레귤레이터는 이 과제의 핵심 주장(<em>모르면 만들지 않는다</em>)을 증명할
+      <strong>최고의 표본</strong>이다. 빼면 증명할 근거를 버린다.
+      대신 결과 표를 <code>control_valve</code> / <code>regulator</code> 로 나누고 안전 필드 정확도는
+      컨트롤밸브만으로 낸다.</p>
+  </div>
+  <div class="call hard">
+    <span class="t">100% 정확도는 증명할 수 없다</span>
+    <p>100건에서 오류 0건이면 95% 신뢰상한이 약 3% 다(rule of three). 발표에서 이 점을 먼저 말한다 —
+      측정의 한계를 숨기면 숫자 전체가 의심받는다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Screens</h2>
+  <p class="h2sub">화면 흐름</p>
+  <p class="note">Streamlit 기반. 6단계이며 실질은 <strong>업로드 → 처리 → 검증 → 완료</strong> 네 국면이다.</p>
+
+  <div class="screens">
+    <div class="sc">
+      <div class="cap">1 · 메인</div>
+      <div class="art">
+        <div class="drop"><b>파일을 여기로 끌어놓으세요</b>또는 파일 선택</div>
+        <div class="tiny">지원 포맷 — Excel · PDF(텍스트) · PDF(이미지) · TIF<br>지원 설비 — Control Valve</div>
+      </div>
+    </div>
+    <div class="sc">
+      <div class="cap">2–3 · 업로드 · 확인</div>
+      <div class="art">
+        <span class="fname">19-FV-001.pdf (787 kB)</span>
+        <div class="bar"><i style="width:100%"></i></div>
+        <div style="display:flex;gap:8px"><span class="btn pri">변환 시작 &gt;&gt;</span><span class="btn">&lt;&lt; 돌아가기</span></div>
+      </div>
+    </div>
+    <div class="sc">
+      <div class="cap">4 · 추출</div>
+      <div class="art">
+        <span class="fname">데이터 추출 중…</span>
+        <div class="bar"><i style="width:62%"></i></div>
+        <div class="tiny">① 분류 → ② 경로 선택 → ③ 추출 → ④ 정규화 → ⑤ 검증 → ⑥ 판정</div>
+      </div>
+    </div>
+    <div class="sc">
+      <div class="cap">6 · 완료</div>
+      <div class="art">
+        <div class="tiny" style="color:var(--auto);font-weight:600">추출이 완료되었습니다</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="btn pri">추출결과 (.xlsx) 다운로드</span>
+          <span class="btn dis">설비통합플랫폼 전송 · 범위 외</span>
+        </div>
+        <div class="tiny">새로운 작업 시작</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>5 · HITL 검증 — 이 화면이 핵심이다</h3>
+
+  <div class="hitl">
+    <div class="top"><span class="ttl">HITL 검증</span><span class="chip auto">정상추출 6</span><span class="chip rev">확인 2</span><span class="chip na">N/A 1</span><span class="fn2">19-FV-001.pdf</span></div>
+    <div class="grid">
+      <div class="doc">
+        <div class="page">
+          <div class="blk" style="left:8%;top:4%;width:52%;height:3.4%"></div>
+          <div class="blk" style="left:66%;top:4%;width:26%;height:3.4%"></div>
+          <div class="ln" style="top:9.5%"></div>
+          <div class="ln" style="top:31%"></div>
+          <div class="ln" style="top:55%"></div>
+          <div class="ln" style="top:78%"></div>
+          <div class="blk" style="left:8%;top:36%;width:22%;height:2.2%"></div>
+          <div class="blk" style="left:8%;top:41%;width:18%;height:2.2%"></div>
+          <div class="blk" style="left:8%;top:60%;width:24%;height:2.2%"></div>
+          <div class="blk" style="left:8%;top:65%;width:20%;height:2.2%"></div>
+          <div class="blk" style="left:8%;top:83%;width:26%;height:2.2%"></div>
+
+          <div class="bb g" style="left:34%;top:12%;width:30%;height:5%"><span>Tag</span></div>
+          <div class="bb g" style="left:36%;top:22%;width:26%;height:4.4%"><span>Body Size</span></div>
+          <div class="bb y" style="left:34%;top:44%;width:34%;height:5%"><span>Trim material</span></div>
+          <div class="bb g" style="left:38%;top:59%;width:24%;height:4.4%"><span>Fail Action</span></div>
+          <div class="bb y" style="left:36%;top:70%;width:30%;height:5%"><span>Rated Cv</span></div>
+        </div>
+        <div class="legend">
+          <span class="lg"><i></i>정상추출 — 여기서 읽었고 확신함</span>
+          <span class="ly"><i></i>확인필요 — 여기 같은데 확신 없음</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <table class="ftab">
+          <thead><tr><th>항목</th><th>추출 값</th><th>필수</th><th>상태</th><th>직접 입력</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Tag</td><td class="v">10-FV-001</td><td class="req">필수</td><td><span class="chip auto">정상추출</span></td><td></td></tr>
+            <tr><td class="k">Manufacturer</td><td class="v">FISHER</td><td class="req">필수</td><td><span class="chip auto">정상추출</span></td><td></td></tr>
+            <tr><td class="k">Body Size</td><td class="v">2" 667-EZ</td><td class="req">필수</td><td><span class="chip auto">정상추출</span></td><td></td></tr>
+            <tr class="hl"><td class="k">Trim material</td><td class="v">316SST</td><td class="req">필수</td><td><span class="mini f">확인</span></td><td><span class="mini">입력</span></td></tr>
+            <tr><td class="k">Fail Action</td><td class="v">FAIL CLOSE<br><span class="tiny">원문 Air-to-Open (ATO)</span></td><td class="req">필수</td><td><span class="mini">확인</span></td><td></td></tr>
+            <tr class="hl"><td class="k">Rated Cv</td><td class="v">N/A</td><td class="req">필수</td><td><span class="mini f">확인</span></td><td><span class="mini">Cv 계산</span></td></tr>
+            <tr><td class="k">Positioner Maker</td><td class="v">N/A</td><td class="req">—</td><td><span class="chip na">N/A</span></td><td><span class="mini">입력</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="foot">
+      <span class="btn">↻ 재추출</span>
+      <span class="btn dis">검토 완료 &gt;&gt;</span>
+      <span class="sp">필수 필드 2개가 미해소 — 해소되면 활성화</span>
+    </div>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>화면 요소</th><th>데이터 원천</th><th>없으면</th></tr></thead>
+      <tbody>
+        <tr><td><strong>원본 이미지 + bbox 박스</strong></td><td><code>bbox</code></td><td>검증이 성립하지 않는다. 비전 모델을 보여줄 무대도 없어진다</td></tr>
+        <tr><td>초록 실선 / 노란 점선 구분</td><td><code>state</code></td><td>AI 가 어디를 확신하지 못하는지 사람이 알 수 없다</td></tr>
+        <tr><td>정상추출 일괄 패스</td><td><code>state=AUTO</code></td><td>모든 필드를 하나씩 봐야 해 공수 절감이 사라진다</td></tr>
+        <tr><td>원문 병기 (Air-to-Open)</td><td><code>raw_value</code></td><td>Fail Action 역전 변환을 검증할 수 없다</td></tr>
+        <tr><td><strong>검토 완료 활성화 조건</strong></td><td><code>DocumentResult.approvable</code></td><td>미해소 필드가 있는 채로 승인된다 (공백 승인 금지 원칙 위반)</td></tr>
+        <tr><td>[Cv 계산] 버튼</td><td>공정조건 9필드</td><td>N/A 를 값으로 바꿀 수단이 없다</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call">
+    <span class="t">화면정의서와 다른 점 하나</span>
+    <p>Fail Action 은 <span class="chip auto">정상추출</span> 이어도 <strong>확인 버튼이 나온다</strong>(진하지 않은 회색).
+      안전 필드이고 ATO/ATC 역전으로 그럴듯하게 틀리기 쉬워, 확신도와 무관하게 눈으로 한 번 보게 한다. 클릭 한 번 차이다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Loop</h2>
+  <p class="h2sub">루프가 세 겹이다</p>
+  <p class="note">"하네스와 루프"는 단일 반복문이 아니라 주기가 다른 루프 세 개다. 각 루프가 고치는 대상이 다르다.</p>
+  <div class="orient" style="margin-top:0;margin-bottom:24px">
+    <div class="oc"><span class="k">Loop A · 초</span><span class="v">필드 재시도</span><span class="s">한 필드의 추출이 실패했을 때 그 필드만 다시 읽는다. 최대 2회. <strong>값</strong>을 고친다</span></div>
+    <div class="oc"><span class="k">Loop B · 분</span><span class="v">문서 배치</span><span class="s">문서를 순차 처리하며 필드 단위 로그를 남긴다. 처리량·지연·실패율을 만든다</span></div>
+    <div class="oc"><span class="k">Loop C · 일</span><span class="v">규칙 개선</span><span class="s">로그와 사람의 수정 이력을 분석해 규칙표와 프롬프트를 고친다. <strong>시스템</strong>을 고친다</span></div>
+  </div>
+
+  <h3>Loop A — 재시도와 판정 분기</h3>
+  <p class="note">설계의 핵심. 재시도는 <strong>추출 실패에만</strong> 적용되고 제약 위반에는 적용되지 않는다.</p>
+  <figure class="sheet">
+    <pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#16202B','primaryBorderColor':'#1F4E6B','lineColor':'#5C6873','fontFamily':'IBM Plex Sans KR, sans-serif','fontSize':'13px'}}}%%
+flowchart TB
+  IN(["추출 결과 (필드 1개)"]) --> Q0{"값 상태"}
+
+  Q0 -->|"문서에 근거 없음"| NA["<b>N/A</b><br/>+ 판정 근거 비고"]
+  Q0 -->|"판독 실패 · 공백 · OCR 깨짐"| RT{"재시도 n &lt; 2 ?"}
+  Q0 -->|"값 있음"| F1{"형식 · 필수"}
+
+  RT -->|가능| RE["bbox 크롭 재추출<br/><i>문자 그대로 보고하라</i>"]
+  RE --> CMP["1 · 2차 값 비교 로깅"]
+  CMP --> Q0
+  RT -->|소진| R1["<b>리뷰필요</b>"]
+
+  F1 -->|위반| R2["<b>리뷰필요</b> + 비고"]
+  F1 -->|통과| F2{"도메인 제약<br/>Fail Action ↔ Actuator"}
+
+  F2 -->|위반| CON["<b>리뷰필요 + 경고</b><br/>비고에 위반 사유<br/>재시도하지 않음"]
+  F2 -->|통과| F3{"확신도 ≥ 필드 임계?"}
+
+  F3 -->|충족| SAFE{"안전 · 식별 필드?"}
+  F3 -->|미달| AG{"평가 Agent<br/>bbox 크롭 역방향 검증"}
+
+  AG -->|확인됨| SAFE
+  AG -->|불일치| R3["<b>리뷰필요</b>"]
+
+  SAFE -->|"예 · Tag · Fail Action"| FORCE["<b>자동확정</b><br/>+ 사람 확인 표시"]
+  SAFE -->|아니오| AU["<b>자동확정</b>"]
+
+  classDef ai fill:#1F4E6B,color:#FFFFFF,stroke:#16303F
+  classDef bad fill:#F3E7E8,color:#16202B,stroke:#8B4A52
+  classDef good fill:#E4EFE9,color:#16202B,stroke:#2E7D5B
+  classDef warn fill:#F6EEDF,color:#16202B,stroke:#A9701C
+  class AG,RE ai
+  class CON bad
+  class AU,FORCE good
+  class R1,R2,R3,NA warn
+    </pre>
+  </figure>
+  <figcaption>단일 입구에서 다섯 갈래로 나뉜다. 자동확정을 통과해도 안전·식별 필드는 사람 확인 표시를 우회하지 못한다.</figcaption>
+
+  <div class="call hard">
+    <span class="t">제약 위반에 재시도를 걸면 환각을 제조한다</span>
+    <p>"값이 제약을 위반했다, 다시 확인하라"는 프롬프트는 실질적으로 <em>다른 답을 내놓으라</em>는 지시다.
+      문서에 진짜로 그 값이 있으면 모델은 제약을 만족하는 값을 만들어 순응하고, 검증을 통과해 자동확정된다.
+      기준정보 시스템에서 최악의 실패 모드다. <strong>제약 위반은 사람에게 넘긴다.</strong></p>
+  </div>
+
+  <h3>Loop C — 이것이 스크립트를 하네스로 만든다</h3>
+  <figure class="sheet">
+    <pre class="mermaid">
+%%{init:{'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#16202B','primaryBorderColor':'#1F4E6B','lineColor':'#5C6873','fontFamily':'IBM Plex Sans KR, sans-serif','fontSize':'13px'}}}%%
+flowchart LR
+  RUN["파이프라인 실행<br/>Loop B"] --> LOG[("runs/&lt;id&gt;/<br/>records.jsonl")]
+  HIT["HITL 수정 이력"] --> LOG
+  LOG --> EV["eval/harness<br/>골든셋 대조"]
+  EV --> KPI["summary.json<br/>오적재율 · 자동확정률<br/>포맷 · 연식별 분해"]
+  KPI --> AN{"사람 분석"}
+  AN -->|"표기 누락"| RL["schema/rules.yaml"]
+  AN -->|"판독 실패 패턴"| PR["VLM 프롬프트"]
+  AN -->|"임계값 조정"| TH["schema/fields.yaml"]
+  AN -->|"판단 근거"| MM["docs/insight_memory.md"]
+  RL --> RUN
+  PR --> RUN
+  TH --> RUN
+    </pre>
+  </figure>
+  <figcaption>기계 로그는 <code>runs/</code> 에, 사람의 판단만 <code>insight_memory.md</code> 에 남는다. 두 사인을 섞으면 둘 다 쓸 수 없게 된다.</figcaption>
+  <div class="call">
+    <span class="t">평가 하네스 스위치 두 개</span>
+    <p><code>--no-vlm</code> — VLM 을 제외한 규칙 단독 구성으로 실행한다. VLM 결합이 실제로 필요했는지를 분리 측정하는 유일한 방법이며, 없으면 방법론 선정이 사후 정당화로 남는다.</p>
+    <p><code>--holdout</code> — 홀드아웃은 1회 개봉 후 잠긴다. 결과를 보고 튜닝하면 측정이 무효가 된다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Contracts</h2>
+  <p class="h2sub">계약 세 개가 병렬 작업의 전부다</p>
+  <p class="note">모듈 사이를 넘는 데이터는 이 세 형태만 존재한다. <code>src/contracts.py</code> 에 구현되어 있고 이종수 책임만 수정한다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>계약</th><th>생산 → 소비</th><th>핵심 필드</th></tr></thead>
+      <tbody>
+        <tr><td><code>TriageResult</code></td><td>① → ②</td>
+          <td><code>document_class</code> · <code>targets[]</code> · <code>confidence</code> · <code>reason</code> · <code>stats</code></td></tr>
+        <tr><td><code>RawExtraction</code></td><td>③ → ④</td>
+          <td><code>field_key</code> · <code>raw_value</code> · <strong><code>raw_label</code></strong> · <code>bbox</code> · <code>confidence</code> · <code>parser</code> · <code>source_locator</code></td></tr>
+        <tr><td><code>FieldRecord</code></td><td>⑥ → ⑦ · 로그 · 평가</td>
+          <td><code>value</code> · <code>state</code> · <code>note</code> · <code>transform_trace</code> · <code>bbox</code> · <code>safety</code> · <code>retry_count</code> · <code>human_action</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call ok">
+    <span class="t">계약이 규칙을 강제한다 — 문서가 아니라 코드로</span>
+    <p><code>FieldRecord.validate()</code> 가 두 가지를 차단한다. <strong>자동확정 외 상태에 비고가 없으면 예외</strong>를 던지고,
+      <strong>안전·식별 필드가 자동확정되면 "사람 확인 필요" 표시를 자동 부여</strong>한다.
+      문서로만 적어두면 지켜지지 않으므로 계약 레벨에 넣었다.</p>
+  </div>
+  <div class="call">
+    <span class="t"><code>raw_label</code> 이 사전을 자동으로 키운다</span>
+    <p>문서에 실제로 적혀 있던 항목명을 그대로 담는 필드다 — <code>"FAIL POSITION"</code>, <code>"INLET PRESSURE MAX"</code>.
+      28필드의 표기 변종을 사람이 상상해서 채우는 것은 불가능하고 실물에서 수집되어야 한다.
+      파이프라인이 돌면서 유사표현 사전이 자란다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Stages</h2>
+  <p class="h2sub">단계별 내부 동작과 호출 기능</p>
+  <p class="note"><span class="hk">Hook</span> 은 프레임워크가 강제하는 호출이다. 모듈 개발자가 잊어도 하네스가 보장한다.</p>
+
+  <div class="stages">
+    <article class="stage">
+      <div class="head"><span class="num">01</span><span class="nm">TRIAGE</span><span class="lay det">규칙</span><span class="own">강민호 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>파일명 패턴 검사 — 태그번호 정규식, <code>schedule</code>·<code>summary</code>·<code>list</code> 키워드</li>
+          <li>구조 통계 — 페이지 수, 텍스트 길이, 표·행 개수, 시트 수</li>
+          <li>첫 페이지·첫 시트 경량 판독으로 3-class 판정</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>probe_structure(path)</b> · <b>match_filename_pattern()</b> · <b>classify_document(sample)</b></div></div>
+        <div class="row"><span class="lbl">출력</span><span class="val"><code>TriageResult</code> — 1파일 = 1자산 전제</span></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_stage_enter · on_stage_exit · on_error</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">02</span><span class="nm">ROUTER</span><span class="lay det">규칙</span><span class="own">강민호 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>엑셀 계열 → 리더 분기 (<code>xlsx</code>·<code>xlsm</code> openpyxl / <code>xls</code> xlrd)</li>
+          <li><strong>PDF 는 텍스트 레이어를 탐침</strong> — 텍스트 비율이 임계 이상이면 Text, 아니면 VLM</li>
+          <li><code>tif</code> → 다중 페이지 분해 후 VLM</li>
+          <li>미지원 포맷 → <code>unsupported</code> 기록하고 중단 (예외 없이)</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>detect_format(path)</b> · <b>probe_text_layer(pdf)</b> · <b>split_pages(tif)</b> · <b>select_parser()</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_route_decided · on_error</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">03-a</span><span class="nm">TEXT PARSER</span><span class="lay det">규칙</span><span class="own">서경빈 선임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>셀·텍스트 블록 스캔 후 라벨 후보 추출</li>
+          <li><strong>헤더 텍스트 → 표준 컬럼명 매핑</strong> (좌표 아님 — 양식 디테일 변경에 강건)</li>
+          <li>라벨 우측·하단 셀에서 값 추출 → <code>source_locator</code> 에 <code>Sheet1!C7</code> 형태로</li>
+          <li><code>raw_label</code> 에 문서 항목명을 그대로 담는다</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>read_sheet(path)</b> · <b>schema.load_aliases()</b> · <b>map_label_to_field(text)</b> · <b>read_adjacent_value(cell)</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_field_extracted · on_unmapped_label · on_error</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">03-b</span><span class="nm">VLM PARSER</span><span class="lay ai">AI</span><span class="own">강민호 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>전처리 — 기울기 보정, 해상도 정규화</li>
+          <li>필드 정의서를 프롬프트에 주입하여 값·<strong>bbox</strong>·확신도 요구</li>
+          <li>문서에 없으면 <code>raw_value=None</code> 으로 정직하게 반환</li>
+          <li>재시도 시 <strong>bbox 크롭만</strong> 재판독</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>preprocess(image)</b> · <b>vlm_extract(image, fields)</b> · <b>crop(bbox)</b> · <b>vlm_reread(crop, field)</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_field_extracted · on_retry · on_error</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">04</span><span class="nm">NORMALIZE</span><span class="lay det">규칙</span><span class="own">이종수 책임 · 규칙표 서경빈 선임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>도메인 규칙 — <strong><code>ATO → Fail Close</code></strong>, <code>ATC → Fail Open</code> (역전 매핑)</li>
+          <li>변환 과정을 <code>transform_trace</code> 에 단계별 기록</li>
+          <li>규칙은 <code>schema/rules.yaml</code> 에서 읽는다 (코드에 넣지 않음)</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">범위 외</span><div class="val"><span class="chip off">단위 변환 → To-be</span> <span class="chip off">범주형 허용값 → To-be</span><br><span class="tiny">MVP 는 원문 표기를 그대로 보존한다</span></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>rules.load()</b> · <b>apply_domain_rule(field, raw)</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_transform · on_rule_miss</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">05</span><span class="nm">VALIDATE — 세 계단</span><span class="lay det">규칙</span><span class="lay ai">AI</span><span class="own">서경빈 선임 · 이종수 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li><strong>5-a 형식·필수</strong> <span class="lay det">규칙</span> 타입·형식, 필수 충족 <span class="tiny">(거의 무료)</span> — 서경빈</li>
+          <li><strong>5-b 도메인 제약</strong> <span class="lay det">규칙</span> <code>FAIL ACTION ↔ ACTUATOR TYPE</code> 정합성, 유효 ANSI 클래스 <span class="tiny">(무료·결정론적)</span> — 이종수</li>
+          <li><strong>5-c 평가 Agent</strong> <span class="lay ai">AI</span> 확신도 미달 건만. 입력을 bbox 크롭으로 제한하고 방향을 반대로: <em>"이 값이 이 위치에 실제로 있는지 검증하라"</em> <span class="tiny">(유료)</span> — 이종수</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">범위 외</span><div class="val"><span class="chip off">Cv 물리 교차검증 → UI 버튼 기능으로 이전</span><br><span class="tiny">루프에 넣으면 잘못된 제약이 정상 값을 리뷰필요로 밀어낸다</span></div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>check_format()</b> · <b>check_required()</b> · <b>check_domain()</b> · <b>verify_agent(crop, claim)</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_violation · on_agent_verdict</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">06</span><span class="nm">STATE</span><span class="lay det">규칙</span><span class="own">이종수 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val">
+          <code>fields.yaml</code> 의 <code>threshold</code>·<code>safety</code> 로 상태를 정하고 비고를 생성한다. 임계값은 코드가 아니라 정의서에서 온다.
+          <div style="margin-top:9px;display:flex;gap:7px;flex-wrap:wrap">
+            <span class="chip auto">자동확정</span><span class="chip rev">리뷰필요</span><span class="chip na">N/A</span>
+          </div>
+        </div></div>
+        <div class="row"><span class="lbl">호출</span><div class="val fn"><b>schema.threshold(field)</b> · <b>schema.safety_class(field)</b> · <b>decide_state()</b> · <b>compose_note()</b> · <b>record.validate()</b></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_state_resolved · on_escalate</div></div>
+      </div>
+    </article>
+
+    <article class="stage">
+      <div class="head"><span class="num">07</span><span class="nm">HITL · 데모 웹</span><span class="lay hum">사람</span><span class="own">이종수 책임</span></div>
+      <div class="body">
+        <div class="row"><span class="lbl">처리</span><div class="val"><ul>
+          <li>좌측 원본 이미지 + <strong>bbox 박스</strong>(초록 실선 / 노란 점선), 우측 항목 표</li>
+          <li><span class="chip auto">정상추출</span> 일괄 패스 / <span class="chip rev">확인</span> <span class="chip na">N/A</span> 개별 확인</li>
+          <li>Fail Action 은 정상추출이어도 확인 버튼 노출 (안전 필드)</li>
+          <li>필수 필드 전부 해소 시 <strong>검토 완료 활성화</strong></li>
+          <li>[Cv 계산] 버튼 — 공정조건 9필드로 계산 제안</li>
+          <li>엑셀 export</li>
+        </ul></div></div>
+        <div class="row"><span class="lbl">범위 외</span><div class="val"><span class="chip off">비고 칼럼 표시</span> <span class="chip off">변환경로 상세 패널</span> <span class="chip off">소요시간 자동 로깅</span><br><span class="tiny">데이터는 계약에 보존되므로 나중에 붙일 수 있다. 검증 세션 시간은 스톱워치로 수동 측정</span></div></div>
+        <div class="row"><span class="lbl">Hook</span><div class="val hk">on_human_action · on_approval</div></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section>
+  <h2>Hooks</h2>
+  <p class="h2sub">프레임워크가 강제하는 호출</p>
+  <p class="note">각 Hook 에 KPI 나 안전 속성이 하나씩 걸려 있다. 개발자가 자기 모듈에만 집중할 수 있는 이유이자, 잊으면 측정이 불가능해지는 지점.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Hook</th><th>시점</th><th>강제 이유</th></tr></thead>
+      <tbody>
+        <tr><td><code>on_config_load</code></td><td>실행 시작</td><td>스키마·규칙표 버전과 해시 기록 → <strong>재현성</strong></td></tr>
+        <tr><td><code>on_stage_enter / exit</code></td><td>단계 진입·종료</td><td>단계별 소요시간 → 운영성과 KPI</td></tr>
+        <tr><td><code>on_route_decided</code></td><td>파서 선택 후</td><td>경로별 정확도 분해. 스캔 경로가 유의하게 나쁜지 판단</td></tr>
+        <tr><td><code>on_field_extracted</code></td><td>원시값 추출 직후</td><td><code>raw_label</code>·bbox·확신도 기록. <strong>유사표현 사전의 원천</strong></td></tr>
+        <tr><td><code>on_unmapped_label</code></td><td>매핑 실패 시</td><td>사전에 없는 표기 수집 → Loop C 의 입력</td></tr>
+        <tr><td><code>on_transform</code></td><td>규칙 변환 시</td><td><code>transform_trace</code> 생성. 원문 병기의 원천</td></tr>
+        <tr><td><code>on_retry</code></td><td>재시도 시</td><td>1·2차 값 비교 → <strong>근거 없는 값 변경 = 환각 탐지</strong></td></tr>
+        <tr><td><code>on_violation</code></td><td>검증 실패 시</td><td>위반 유형 기록. 규칙이 과민한지 실제 오류인지 사후 분류</td></tr>
+        <tr><td><code>on_state_resolved</code></td><td>상태 확정 시</td><td>자동확정률 집계. <strong>비고 없으면 예외를 던진다</strong></td></tr>
+        <tr><td><code>on_escalate</code></td><td>HITL 이관 시</td><td>사유 필수. 없으면 검토자가 판단할 근거가 없다</td></tr>
+        <tr><td><code>on_human_action</code></td><td>승인·수정 시</td><td>사람의 판단 기록. 후속 Bandit 학습 데이터</td></tr>
+        <tr><td><code>on_error</code></td><td>예외 발생 시</td><td>실패를 삼키지 않는다. 처리 실패율도 측정 대상</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Scope</h2>
+  <p class="h2sub">MVP 범위 — 경로는 유지, 변종을 줄인다</p>
+  <p class="note">PoC 가 검증하려는 것은 "이 방식이 되는가"이고, 그건 각 경로를 최소 한 번은 통과해야 답이 나온다. 경로를 빼면 그 경로에 대한 답이 없다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th>포함</th><th>제외 · 근거</th></tr></thead>
+      <tbody>
+        <tr><td><strong>포맷</strong></td>
+          <td><b>실측</b> — <code>tif</code> 71.9% · <code>pdf</code> 16.6% · <code>xlsx</code>·<code>xlsm</code> 11.6%
+          <br><span class="tiny">착수 전 추정(엑셀 40% · 스캔 30%)과 크게 달랐다</span></td>
+          <td><code>doc</code>·<code>docx</code> — 1,059건 중 2~3건<br><code>dwg</code> — CAD 처리 경로가 별개, 소수</td></tr>
+        <tr><td><strong>문서</strong></td>
+          <td>데이터시트 + <b>정비·개조 보고서</b> (1파일 = 1자산)</td>
+          <td>도면 · 계기목록 13건 — 설비 사양표가 아예 없음<br>
+          <span class="tiny">여러 자산이 든 파일은 "자산 N건 발견" 만 띄우고 하나만 검출</span></td></tr>
+        <tr><td><strong>필드</strong></td><td>28필드 정의 / <strong>MVP 9필드</strong> 수직 슬라이스</td>
+          <td>Communication Protocol · Diagnostic Tier — 표준 컬럼에 자리가 없음(A-2 ④의 실증). 후속에서 <code>NEW</code> 컬럼으로 추가 검토</td></tr>
+        <tr><td><strong>처리</strong></td><td>도메인 규칙 변환 · 형식 검증 · 상태 판정</td>
+          <td>단위 변환 → To-be<br>범주형 허용값 → To-be<br>Cv 물리 검증 → UI 버튼으로 이전</td></tr>
+        <tr><td><strong>연계</strong></td><td>엑셀 export 까지</td><td>마스터DB 자동 반영 · 도면관리시스템 · SAP</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>MVP 9필드 — 각각 다른 코드 경로를 대표한다</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>필드</th><th>대표하는 처리</th></tr></thead>
+      <tbody>
+        <tr><td><code>ENGINEERING TAG NO.</code></td><td>식별 — 오적재 시 타 자산 덮어씀 <span class="chip rev">식별</span></td></tr>
+        <tr><td><code>ACTUATOR FAIL ACTION</code></td><td>도메인 규칙 역전 (ATO/ATC) <span class="chip rev">안전</span></td></tr>
+        <tr><td><code>MANUFACTURER</code> · <code>MODEL NO.</code></td><td>라벨 인접값 추출</td></tr>
+        <tr><td><code>VALVE BODY SIZE</code> · <code>RATING</code></td><td>표기 다양성 (변환 없이 원문 보존)</td></tr>
+        <tr><td><code>VALVE BODY MATERIAL</code></td><td>자유 텍스트 표기 편차</td></tr>
+        <tr><td><code>RATED CV</code></td><td>정격 — 벤더마다 <code>Rated Cv</code>·<code>Valve Coefficient</code>·<code>Body Rated Cv</code> 로 다르게 적는다</td></tr>
+        <tr><td><code>REQUIRED CV</code></td><td>공정이 요구하는 Cv. <code>Calculated Cv</code>·<code>Req'd Flow Coeff.</code> 변종</td></tr>
+        <tr><td><code>VALVE BODY TYPE</code></td><td><strong>신설</strong> — Globe/Angle/Ball. 레귤레이터에서는 <span class="chip na">N/A</span> 경로를 실제로 검증</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Rules</h2>
+  <p class="h2sub">충돌을 만들지 않는 규칙</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>규칙</th><th>없으면</th></tr></thead>
+      <tbody>
+        <tr><td><strong>자기 모듈 폴더만 수정한다</strong></td><td>파일이 겹치지 않으면 병합 충돌이 없다. 브랜치·PR 이 불필요해진다</td></tr>
+        <tr><td>계약과 <code>schema/</code> 는 소유자만 수정한다</td><td>공유 파일이 유일한 충돌 지점이다. 변경은 소유자에게 요청</td></tr>
+        <tr><td>규칙은 코드가 아니라 <code>schema/*.yaml</code> 에</td><td>도메인 전문가가 검토 불가. PoC 가 중단되어도 남는 산출물이다</td></tr>
+        <tr><td>모든 모듈은 fixture 로 자기 검증</td><td>남의 모듈을 기다린다. 코딩 에이전트가 스스로 반복할 수 없다</td></tr>
+        <tr><td>근거 없는 값을 만들지 않는다</td><td>모르면 <span class="chip na">N/A</span> + 비고. 추정값이 마스터DB 에 들어가면 문제의 원인을 재생산한다</td></tr>
+        <tr><td>실패를 삼키지 않는다</td><td>처리 실패율이 측정되지 않고, 조용히 누락된 필드를 아무도 모른다</td></tr>
+        <tr><td><code>raw_file/</code> · <code>.env</code> 를 Git 에 올리지 않는다</td><td>회사 문서 435MB 가 히스토리에 영구히 남는다</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call">
+    <span class="t">코딩 에이전트에게 특히 필요한 규칙</span>
+    <p>각자 Claude Code 로 개발하면 에이전트가 남의 모듈이나 공유 파일까지 "친절하게" 고치려 든다.
+      위 1·2번을 각 모듈의 <code>CLAUDE.md</code> 에 명시해두었다 — 이것이 실질적인 통합 보험이다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Curriculum</h2>
+  <p class="h2sub">강의 내용과의 대응</p>
+  <div class="mapg">
+    <div class="mp"><span class="lc">하네스 엔지니어링</span><span class="ap">Loop B (문서 배치) + Hook 13개</span></div>
+    <div class="mp"><span class="lc">루프 엔지니어링</span><span class="ap">Loop A (필드 재시도) + Loop C (규칙 개선)</span></div>
+    <div class="mp"><span class="lc">AI 에이전트</span><span class="ap">⑤-c 평가 Agent — bbox 크롭 역방향 검증</span></div>
+    <div class="mp"><span class="lc">멀티에이전트</span><span class="ap">3인 × 모듈별 코딩 에이전트 병렬 개발</span></div>
+    <div class="mp"><span class="lc">Vision AI · 2D 이해</span><span class="ap">VLM 추출 + <strong>bbox 시각화</strong> (HITL 화면)</span></div>
+    <div class="mp"><span class="lc">강화학습</span><span class="ap">HITL 임계값 최적화를 Contextual Bandit 으로 정식화 — 구현은 보류, 조건 미충족을 명시</span></div>
+    <div class="mp"><span class="lc">AI in Manufacturing</span><span class="ap">플랜트 설비자산관리 적용</span></div>
+  </div>
+  <div class="call" style="margin-top:18px">
+    <span class="t">강화학습은 구현하지 않고 정식화만 보여준다</span>
+    <p>상태 = (필드, 확신도, 벤더, 양식, 연식) / 행동 = {자동확정, 에스컬레이션} /
+      보상 = −(오적재비용 × 안전가중) − (검토시간 × 50,000원/h).
+      <strong>보류 이유: 1주·100건 규모에서 누적 피드백 부재.</strong>
+      억지로 넣는 것보다 "왜 여기 안 맞는지를 정확히 아는 것"이 이해도 증명이다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Status</h2>
+  <p class="h2sub">지금 무엇이 돌아가나</p>
+  <p class="note">2026-08-24 기준. 하네스의 기본 구현이 끝까지 도는 경로를 제공하므로 모듈을 하나씩 끼워 넣으며 진행한다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>구성</th><th>상태</th><th>자체 검증</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/contracts.py</code> — 계약 3개 + <code>PageInfo</code></td>
+          <td><span class="chip auto">완료</span></td><td>—</td></tr>
+        <tr><td><code>src/pipeline.py</code> — 하네스 · Loop A/B</td>
+          <td><span class="chip auto">완료</span></td><td><code>--smoke</code> 엔드투엔드</td></tr>
+        <tr><td><code>src/hooks.py</code> — 훅 13개</td>
+          <td><span class="chip auto">완료</span></td><td>—</td></tr>
+        <tr><td><code>src/preprocess.py</code> — 파일명·렌더·탐침·최신성</td>
+          <td><span class="chip auto">완료</span></td><td>태그 51건 · 최신성 30건</td></tr>
+        <tr><td><code>src/models.py</code> — 모델 단계</td>
+          <td><span class="chip auto">완료</span></td><td>14건</td></tr>
+        <tr><td><code>src/ui/</code> — HITL 화면 · bbox · Cv 계산 · 엑셀</td>
+          <td><span class="chip auto">완료</span></td><td>12건</td></tr>
+        <tr><td><code>src/parsers/text</code> · <code>validate/format</code></td>
+          <td><span class="chip auto">최소 구현</span></td><td>서경빈 선임 · pytest</td></tr>
+        <tr><td><code>eval/compare.py</code> · <code>groups.py</code> — 대조·집계 규칙</td>
+          <td><span class="chip auto">완료</span></td><td>42건 · 20건</td></tr>
+        <tr><td><code>src/triage</code> · <code>router</code> · <code>parsers/vlm</code></td>
+          <td><span class="chip rev">미착수</span></td><td>도구는 준비됨 — 조립만</td></tr>
+        <tr><td><code>src/normalize</code> · <code>validate/domain</code> · <code>state</code></td>
+          <td><span class="chip rev">미착수</span></td><td>하네스 기본 구현이 임시 대체</td></tr>
+        <tr><td><code>eval/harness.py</code></td>
+          <td><span class="chip rev">미착수</span></td><td><b>이것이 발표 숫자를 만든다</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call">
+    <span class="t">골든셋 30건 — 11건 완료</span>
+    <p>d001~d011 완료. 표본 다양성은 확보되었다 — 포맷 4종, 연식 2종, 벤더 5개사,
+      사양표 페이지가 1·2·3·5 로 흩어져 있어 <strong>페이지 선택 정확도를 측정할 수 있다</strong>.
+      남은 20건은 조원 각 10건. 보강이 필요한 축은 <code>XV</code>(91건인데 표본 0)와 Fisher 외 벤더다.</p>
+  </div>
+  <div class="call hard">
+    <span class="t">가장 큰 구멍</span>
+    <p><code>src/triage</code> 가 <code>render_path</code> 를 채우지 않아 <strong>화면이 tif 71.9% 를 표시조차
+      못 한다</strong>. 도구(<code>preprocess.render_pages</code>)는 준비되어 있고 조립만 남았다.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Schedule</h2>
+  <p class="h2sub">일정과 산출물</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>날짜</th><th>작업</th><th>산출물</th></tr></thead>
+      <tbody>
+        <tr><td><strong>8/21 금</strong></td><td>스키마 · 계약 확정 / 라벨링 킷 / 라벨링 착수 (3인)</td><td><code>fields.yaml</code> · <code>contracts.py</code> · 골격</td></tr>
+        <tr><td>8/22~24</td><td>라벨링 완료 (골든 30 + Tag·Fail Action 120) / <strong>MVP 수직 슬라이스</strong></td><td>정답 셋 · <strong>현행 오류율 실측치</strong></td></tr>
+        <tr><td>8/24~25</td><td>모듈 병렬 확장 (3인)</td><td>파이프라인 · 데모 웹</td></tr>
+        <tr><td>8/26 수</td><td>통합 → <strong>홀드아웃 70건 1회 평가</strong> → 발표 자료</td><td>KPI 결과 · Go/Stop 판정</td></tr>
+        <tr><td><strong>8/27 목</strong></td><td><strong>발표</strong></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call ok">
+    <span class="t">파이프라인 성공과 무관하게 8/24 에 확보되는 산출물</span>
+    <p>스키마 정의서 · 정규화 규칙표 · 정답 셋 100건 · <strong>현행 마스터DB 오류율 실측치</strong>.
+      어떤 접근법을 택하든 필요한 전제이므로 투자 손실이 발생하지 않고, 최악의 경우에도 발표가 성립한다.</p>
+  </div>
+</section>
+
+<footer>
+  D2S 파이프라인 설계도 · rev.3 · 2026-08-24 · 확정 내용은 <code>docs/ARCHITECTURE.md</code> · 결정 경과는 <code>docs/change_log.md</code>
+</footer>
+
+</div>
