@@ -178,3 +178,48 @@ def test_매핑되는_라벨이_값을_먼저_가져간다(layouts):
     assert "SPEC!E35" in locs                # Fail Position 의 값
     # 같은 셀을 두 라벨이 값으로 쓰지 않는다
     assert len(locs) == len({r.source_locator for r in layouts.records if r.found})
+
+
+def test_xls_는_xlrd_경로로_보낸다(monkeypatch, tmp_path):
+    """계약상 ParserType.EXCEL 은 xls 를 포함한다(src/contracts.py).
+    openpyxl 은 .xls 를 못 읽으므로 확장자로 갈라 xlrd 경로를 타야 한다."""
+    import openpyxl
+
+    from src.parsers.text import excel as excel_mod
+
+    made = openpyxl.Workbook()
+    ws = made.active
+    ws.title = "SPEC"
+    ws["A1"], ws["B1"] = "Manufacturer", "FISHER"
+    ws["A2"], ws["B2"] = "Model No.", "667-ED"
+
+    called = []
+    monkeypatch.setattr(excel_mod, "load_xls", lambda p: (called.append(p), made)[1])
+
+    path = tmp_path / "old.xls"
+    path.write_bytes(b"")                       # 내용은 load_xls 가 만든 것으로 대체된다
+    by = excel_mod.parse_excel(str(path)).by_key()
+
+    assert called == [str(path)]                # openpyxl 로 열지 않았다
+    assert by["manufacturer"].raw_value == "FISHER"
+    assert by["model_no"].raw_value == "667-ED"
+
+
+@pytest.mark.skipif(__import__("importlib").util.find_spec("xlwt") is None,
+                    reason="xlwt 미설치 — 구형 xls 를 만들 수 없다")
+def test_구형_xls_왕복(tmp_path):
+    """실제 .xls 왕복. xlwt 가 있을 때만 돈다.
+    (설치 없이도 raw_file 의 실물 .xls 로 수동 확인함)"""
+    import xlwt
+
+    from src.parsers.text.xls_compat import load_xls
+
+    path = tmp_path / "old.xls"
+    wbx = xlwt.Workbook()
+    sh = wbx.add_sheet("SPEC")
+    sh.write(0, 0, "Manufacturer")
+    sh.write(0, 1, "FISHER")
+    wbx.save(str(path))
+
+    assert load_xls(str(path)).sheetnames == ["SPEC"]
+    assert parse_excel(str(path)).by_key()["manufacturer"].raw_value == "FISHER"
