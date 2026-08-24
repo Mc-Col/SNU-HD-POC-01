@@ -323,12 +323,50 @@ def make_text_extractor():
     return extract
 
 
+def make_vlm_extractor(only_mvp: bool = False):
+    """VLM 으로 추출하고 ④ Normalize 까지 적용한다.
+
+    파서는 문서 원문(`Close`)을 내고 표준값(`FAIL CLOSE`)은 Normalize 몫이다.
+    둘을 함께 돌려주므로 하네스가 `정규화대기` 와 `오답` 을 구분할 수 있다.
+
+    사양표 페이지는 **골든셋의 값을 쓴다.** 학습이 아니라 변수 통제다 —
+    "VLM 이 값을 읽나" 와 "맞는 페이지를 찾나" 를 분리해서 재기 위한 것이고,
+    페이지 선택은 Triage 가 붙은 뒤 따로 측정한다.
+    """
+    from src.contracts import DocumentClass, PageClass, PageInfo, TriageResult
+    from src.parsers.vlm.openai_vlm import VlmParser
+    from src.pipeline import DefaultNormalize
+
+    parser = VlmParser()
+    norm = DefaultNormalize()
+    fields = schema.mvp_fields() if only_mvp else schema.all_fields()
+    fields = [f for f in fields if f.source == "document"]   # 파생 필드는 VLM 몫이 아니다
+
+    def extract(row: KitRow):
+        page = int(row.spec_page or 1)
+        tri = TriageResult(
+            source_path=row.path, document_class=DocumentClass.DATASHEET,
+            pages=[PageInfo(page=page, page_class=PageClass.SPEC, selected=True)])
+        recs = parser.extract(row.path, tri, fields)
+        raws = {r.field_key: r.raw_value for r in recs if r.found}
+        values = {}
+        for r in recs:
+            f = schema.get(r.field_key)
+            v, _trace = norm.run(r, f)
+            values[r.field_key] = v
+        return values, raws, page
+
+    extract.parser = parser        # 비용 요약을 리포트에 쓴다
+    return extract
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="골든셋 평가 하네스")
     ap.add_argument("--kit", default="readme/labeling_kit.xlsx")
     ap.add_argument("--root", default="raw_file")
-    ap.add_argument("--stage", default="text", choices=["text", "pipeline"],
-                    help="text = 텍스트 파서만 / pipeline = 전체 (모듈 구현 후)")
+    ap.add_argument("--stage", default="text", choices=["text", "vlm", "pipeline"],
+                    help="text = 텍스트 파서만 / vlm = VLM + Normalize / "
+                         "pipeline = 전체 (모듈 구현 후)")
     ap.add_argument("--no-vlm", action="store_true", help="VLM 경로를 쓰지 않는다")
     ap.add_argument("--only-mvp", action="store_true", help="MVP 9필드만")
     ap.add_argument("--by", default="fmt", choices=["", "fmt", "vintage", "cls"])
@@ -343,16 +381,33 @@ def main(argv=None) -> int:
     if missing:
         print(f"⚠ 파일을 찾지 못함: {', '.join(missing)}", file=sys.stderr)
 
-    if a.stage == "pipeline" and not a.no_vlm:
-        print("전체 파이프라인 채점은 모듈 구현 후 붙인다. 지금은 --stage text 를 쓸 것.",
-              file=sys.stderr)
+    if a.stage == "pipeline":
+        print("전체 파이프라인 채점은 Triage·Router 구현 후 붙인다. "
+              "지금은 --stage text 또는 --stage vlm 을 쓸 것.", file=sys.stderr)
+        return 2
+    if a.stage == "vlm" and a.no_vlm:
+        print("--stage vlm 과 --no-vlm 은 함께 쓸 수 없다.", file=sys.stderr)
         return 2
 
-    extract = make_text_extractor()
+    if a.stage == "vlm":
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(ROOT, ".env"))
+        extract = make_vlm_extractor(only_mvp=a.only_mvp)
+    else:
+        extract = make_text_extractor()
     holdout = tuple(x.strip() for x in a.holdout.split(",") if x.strip())
     res = score(rows, extract, holdout, only_mvp=a.only_mvp)
     report = render(res, a.by)
-
+    parser = getattr(extract, "parser", None)
+    if parser is not None and parser.calls:
+        cost = parser.cost_summary()
+        rows_md = ["", "## 비용", "",
+                   "| 모델 | 호출 | 입력 토큰 | 출력 토큰 |", "|---|---|---|---|"]
+        for m, c in sorted(cost.items()):
+            rows_md.append(f"| `{m}` | {c['calls']} | {c['in']:,} | {c['out']:,} |")
+        rows_md += ["", "이미지 토큰이 입력의 대부분이다. 비용을 줄이려면 "
+                    "페이지 수를 먼저 줄인다 — 격자 1장으로 판정하는 이유다.", ""]
+        report += "\n".join(rows_md)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         f.write(report)

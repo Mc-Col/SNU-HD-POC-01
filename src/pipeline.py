@@ -159,13 +159,30 @@ class DefaultNormalize:
         rule = schema.domain_rule(f.key)
         if rule:
             probe = schema.norm_label(raw)
+            # ① 값 자체가 ATO/ATC 인 경우 — 역전 매핑
             for m in rule.get("map", []):
                 for cand in m.get("from", []):
                     if schema.norm_label(cand) == probe or probe.startswith(schema.norm_label(cand)):
                         trace.append(m.get("trace", f"규칙 {cand} → {m['to']}"))
                         trace.append(f"결과 {m['to']}")
                         return m["to"], trace
-            trace.append("규칙 미적용 — 표기가 사전에 없음")
+
+            # ② 라벨이 직접 기재인 경우 — 값에는 방향만 적혀 있다
+            #    "Air Fails Valve to : Close" → FAIL CLOSE
+            #    값만 보면 역전 표기와 구분이 불가능하므로 **라벨을 본다**.
+            labels = [schema.norm_label(x) for x in rule.get("direct_labels") or []]
+            got = schema.norm_label(ex.raw_label or "")
+            if got and any(got.startswith(L) or L in got for L in labels if L):
+                for m in rule.get("direct_map") or []:
+                    if probe in {schema.norm_label(c) for c in m.get("from", [])}:
+                        trace.append(f"원문라벨 {ex.raw_label!r} 은 직접 기재")
+                        trace.append(m.get("trace", f"{raw} → {m['to']}"))
+                        trace.append(f"결과 {m['to']}")
+                        return m["to"], trace
+
+            # ③ 라벨도 값도 못 가리면 변환하지 않는다.
+            #    역전 여부를 모르는 채 방향을 정하면 안전 사양을 뒤집는다.
+            trace.append("규칙 미적용 — 표기가 사전에 없고 라벨로도 방향을 알 수 없음")
 
         for m in schema.value_aliases(f.key):
             if schema.norm_label(raw) in {schema.norm_label(c) for c in m.get("from", [])}:

@@ -22,6 +22,36 @@ domain_rules:
       - from: ["FAIL LAST", "FAIL IN PLACE", "FAIL LOCK"]
         to: "FAIL LAST"
         trace: "직접 기재"
+    # ── 직접 기재 표기 (2026-08-24) ────────────────────────────
+    # 위 map 은 값 자체가 ATO/ATC 인 경우다. 그런데 대부분의 양식은
+    # 라벨이 이미 "공기 상실 시" 를 뜻하고 값에는 방향만 적는다.
+    #   "Air Fails Valve to : Close"  → FAIL CLOSE   (라벨이 직접 기재)
+    #   "Air to Actuator   : Open"    → FAIL CLOSE   (라벨이 역전. 값과 반대)
+    # 값만 보면 둘 다 그냥 Close/Open 이라 구분이 불가능하다. **라벨을 봐야 한다.**
+    #
+    # 골든셋 11건의 원문라벨은 전부 직접 기재였다 —
+    #   Air Fails Valve to · Fail Position · Failure Mode · Actuator Fail
+    direct_labels:
+      - "AIR FAILS VALVE TO"
+      - "FAIL POSITION"
+      - "FAIL ACTION"
+      - "FAILURE MODE"
+      - "ACTUATOR FAIL"
+      - "ACTUATOR FAILURE MODE"
+      - "FAIL SAFE POSITION"
+      - "FAIL SAFE"
+    direct_map:
+      - from: ["OPEN", "TO OPEN", "OPENS", "FO", "F.O.", "개방"]
+        to: "FAIL OPEN"
+        trace: "라벨이 직접 기재 — 공기 상실 시 개방"
+      - from: ["CLOSE", "CLOSED", "TO CLOSE", "CLOSES", "FC", "F.C.", "폐쇄"]
+        to: "FAIL CLOSE"
+        trace: "라벨이 직접 기재 — 공기 상실 시 폐쇄"
+      - from: ["LOCK", "LAST", "IN PLACE", "LOCKED", "정지"]
+        to: "FAIL LAST"
+        trace: "라벨이 직접 기재 — 공기 상실 시 현 위치 유지"
+    # 라벨이 이 목록에 없고 값도 ATO/ATC 가 아니면 **변환하지 않는다.**
+    # 역전 여부를 모르는 상태에서 방향을 정하면 안전 사양을 뒤집을 수 있다.
     cross_check: []
     # 2026-08-23 결정 — ACTUATOR TYPE 은 추출 대상이 아니다(구동부는 FAIL POSITION 만).
     # 따라서 자동 교차검증이 불가하고, 사람 확인이 유일한 안전장치다.

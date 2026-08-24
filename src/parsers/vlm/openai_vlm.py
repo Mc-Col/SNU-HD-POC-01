@@ -94,6 +94,14 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
    추측해서 채운 값에 높은 확신도를 주지 않는다.
 6. 체크박스 양식 주의 — ☒ 표시가 어느 칸에 있는지 확인한다. 손으로 그린
    체크도 있다. 어느 칸인지 확실하지 않으면 confidence 를 낮춘다.
+7. **Min / Nor(Normal) / Max 세 열이 나란한 표가 많다. 반드시 Normal 열을
+   읽는다.** 열 제목이 Minimum·Normal·Maximum 이거나 MIN.·NOR.·MAX. 로
+   줄여 있다. 열이 하나뿐이면 그것을 쓴다. 어느 열인지 모르면 confidence 를
+   낮추고 raw_label 에 "(열 불명)" 을 적는다.
+   같은 행에서 값을 셋 다 읽어 가운데를 고르는 것이 아니라, **열 제목을 보고**
+   Normal 에 해당하는 칸을 고른다.
+8. 값이 있는 행을 착각하지 않도록, 반드시 **그 값의 왼쪽 항목명을 함께 읽어
+   raw_label 에 적는다.** 항목명과 값이 어긋나면 그 판독은 틀린 것이다.
 
 출력은 JSON 하나다:
 {"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
@@ -182,6 +190,7 @@ class VlmParser:
         return out
 
     # ── Loop A 재판독 ───────────────────────────────────────
+    # 재판독 프롬프트에도 같은 주의를 준다 — 크롭이 열 제목을 잘라낼 수 있다
     def reread(self, path: str, f, prev: RawExtraction,
                attempt: int = 1) -> RawExtraction | None:
         """bbox 크롭만 다시 본다. bbox 가 없으면 재판독하지 않는다.
@@ -198,7 +207,9 @@ class VlmParser:
         tier = models.for_attempt(attempt)
         al = " · ".join(f.aliases) if f.aliases else ""
         text = (f"이 영역에서 「{f.name}」 에 해당하는 값을 판독하라."
-                + (f" 문서에서 이 항목은 {al} 로 적히기도 한다." if al else ""))
+                + (f" 문서에서 이 항목은 {al} 로 적히기도 한다." if al else "")
+                + " Min/Nor/Max 열이 보이면 Normal 열을 읽어라."
+                  " 열 제목이 잘려 보이지 않으면 confidence 를 낮춰라.")
         d = self._ask(tier.name, REREAD_SYSTEM, text, crop)
         v = d.get("raw_value")
         v = None if v in ("", None, "null") else str(v).strip()
