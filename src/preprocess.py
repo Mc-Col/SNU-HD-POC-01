@@ -520,7 +520,19 @@ def _render_pdf(path, out_dir, dpi, want) -> list[str]:
 
 
 def _render_image(path, out_dir, want) -> list[str]:
-    """다중 페이지 TIF 를 전부 뽑는다. 1비트는 그레이스케일로 올려 판독을 돕는다."""
+    """다중 페이지 TIF 를 전부 뽑는다. 1비트는 그레이스케일로 올려 판독을 돕는다.
+
+    ⚠️ **dpi 인자는 이미지에 적용되지 않는다.** 프레임을 원본 해상도로 뽑는다.
+    스캔이 가진 정보가 상한이고 올려도 보간일 뿐 글자가 선명해지지 않는다.
+
+    실측 (2026-08-24) — 골든셋 tif 를 150/200/300 DPI 로 요청해도 결과가
+    동일하게 1240x1753 이다. 그 해상도에서 어려운 문서(1986년 Fisher 수기
+    사양서)까지 MVP 9필드가 모두 판독되었다. 즉 **tif 의 판독 실패는 해상도
+    문제가 아니다.** 개선 레버는 셋이다:
+        ① 크롭 재판독 (Loop A — bbox 만 다시 보므로 실질 해상도가 올라간다)
+        ② 프롬프트 (필드 정의 + aliases)
+        ③ 모델 승격 (models.for_attempt)
+    """
     from PIL import Image
     out = []
     with Image.open(path) as im:
