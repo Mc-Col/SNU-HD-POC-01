@@ -1,0 +1,97 @@
+{
+  "_설명": "excel_layouts.xlsx 기대 출력. 실물에서 관찰된 배치(라벨 B열·값 E열 / 병합 라벨 B:H·값 I열)를 고정한다.",
+  "records": [
+    {
+      "field_key": "actuator_fail_action",
+      "raw_value": "CLOSE",
+      "raw_label": "Fail Position",
+      "source_locator": "SPEC!E35",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "actuator_type",
+      "raw_value": "DIAPHRAGM",
+      "raw_label": "Actuator Type",
+      "source_locator": "SPEC!E36",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "characteristic",
+      "raw_value": "LINEAR",
+      "raw_label": "Characteristic",
+      "source_locator": "SPEC!E18",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "model_no",
+      "raw_value": "880-2221",
+      "raw_label": "Model No.",
+      "source_locator": "SPEC!E9",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "positioner_type",
+      "raw_value": "PNEUMATIC",
+      "raw_label": "Positioner Type",
+      "source_locator": "SPEC!E42",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    }
+  ],
+  "unmapped": [
+    {
+      "text": "BODY",
+      "source_locator": "SPEC!A10",
+      "neighbor_value": "Body Type"
+    },
+    {
+      "text": "MATERIAL",
+      "source_locator": "SPEC!A22",
+      "neighbor_value": "Body"
+    },
+    {
+      "text": "Tag No.",
+      "source_locator": "SPEC!A6",
+      "neighbor_value": "44-LV-999"
+    },
+    {
+      "text": "GLOBE",
+      "source_locator": "SPEC!E10",
+      "neighbor_value": "ANSI CLASS 300"
+    },
+    {
+      "text": "Trim Form",
+      "source_locator": "TEST!B17",
+      "neighbor_value": "CAGE-BALANCED"
+    },
+    {
+      "text": "TAG NO",
+      "source_locator": "TEST!B5",
+      "neighbor_value": "11-FV-999"
+    },
+    {
+      "text": "Leakage Spec.",
+      "source_locator": "TEST!B9",
+      "neighbor_value": "CLASS 2"
+    },
+    {
+      "text": "Body Model(Type) → valve_body_type",
+      "source_locator": "TEST!I7",
+      "neighbor_value": "GLOBE"
+    },
+    {
+      "text": "Maker",
+      "source_locator": "TEST!S17",
+      "neighbor_value": "FISHER"
+    }
+  ]
+}

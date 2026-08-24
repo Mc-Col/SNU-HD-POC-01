@@ -57,8 +57,13 @@ def parse_excel(
     path: str,
     index: FieldIndex | None = None,
     composite: CompositeIndex | None = None,
+    sheets: list[str | int] | None = None,
 ) -> TextParseResult:
-    """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨."""
+    """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨.
+
+    sheets 는 시트 이름 또는 1-based 순번. None 이면 전체.
+    Triage 가 사양표 시트를 지정하면 그것만 본다 (사진·이력 시트 노이즈 배제).
+    """
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
     wb = openpyxl.load_workbook(path, data_only=True)
@@ -66,6 +71,8 @@ def parse_excel(
     seen: set[str] = set()                      # 먼저 찾은 값이 이긴다
 
     for page, ws in enumerate(wb.worksheets, start=1):
+        if sheets is not None and page not in sheets and ws.title not in sheets:
+            continue
         merged = _merged_index(ws)
         consumed: set[tuple[int, int]] = set()   # 값으로 이미 쓰인 셀은 라벨이 아니다
 
@@ -79,8 +86,16 @@ def parse_excel(
         def locator(r: int, c: int) -> str:
             return f"{ws.title}!{get_column_letter(c)}{r}"
 
-        for row in ws.iter_rows():
-            for cell in row:
+        # 1패스: 표준 컬럼에 붙는 라벨. 2패스: 나머지 라벨 후보(미매핑 수집).
+        # 매핑되는 라벨이 값을 먼저 claim 해야 엉뚱한 텍스트가 값을 채가지 않는다.
+        candidates = [c for row in ws.iter_rows() for c in row]
+        known = [c for c in candidates
+                 if isinstance(c.value, str)
+                 and (ix.lookup(_text(c.value)) is not None
+                      or cix.lookup(_text(c.value)) is not None)]
+        rest = [c for c in candidates if c not in known]
+
+        for cell in known + rest:
                 r, c = cell.row, cell.column
                 if (r, c) in consumed:
                     continue
@@ -98,7 +113,7 @@ def parse_excel(
                     continue
 
                 hit = ix.lookup(label)
-                value, vpos = _find_value(cell_value, ix, merged, r, c, span)
+                value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed)
                 if value:
                     consumed.add(vpos)
 
@@ -153,14 +168,18 @@ def parse_excel(
     return result
 
 
-def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span):
+def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
+                consumed: set[tuple[int, int]] | None = None):
     """라벨 오른쪽 → 아래 순서로 값 셀을 찾는다. 다른 라벨을 만나면 멈춘다."""
+    taken = consumed or set()
     rng = span[1] if span else None
     right_from = rng.max_col if rng else c
     down_from = rng.max_row if rng else r
 
     for dc in range(1, SCAN_RIGHT + 1):
         pos = (r, right_from + dc)
+        if pos in taken:
+            continue
         v = _text(cell_value(*pos))
         if not v:
             continue
@@ -170,6 +189,8 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span):
 
     for dr in range(1, SCAN_DOWN + 1):
         pos = (down_from + dr, c)
+        if pos in taken:
+            continue
         v = _text(cell_value(*pos))
         if not v:
             continue
