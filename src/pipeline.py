@@ -32,7 +32,7 @@ import time
 from dataclasses import replace
 from typing import Any, Protocol, Sequence
 
-from src import schema
+from src import models, schema
 from src.contracts import (
     DocumentClass, DocumentResult, FailureKind, FieldRecord, FieldState,
     ParserType, RawExtraction, Target, TriageResult,
@@ -64,9 +64,14 @@ class ParserModule(Protocol):
     def extract(self, path: str, triage: TriageResult,
                 fields: Sequence[Field]) -> list[RawExtraction]: ...
 
-    def reread(self, path: str, f: Field,
-               prev: RawExtraction) -> RawExtraction | None:
-        """Loop A — bbox 크롭만 재판독. 지원하지 않으면 None 을 반환한다."""
+    def reread(self, path: str, f: Field, prev: RawExtraction,
+               attempt: int = 1) -> RawExtraction | None:
+        """Loop A — bbox 크롭만 재판독. 지원하지 않으면 None 을 반환한다.
+
+        attempt 로 모델 단계를 고른다 — `models.for_attempt(attempt)`.
+        1차는 싼 모델(luna), 재시도는 상위 모델(terra)이고 **못 읽은 필드
+        하나만** 넘어오므로 상위 모델 비용은 그 한 필드분이다.
+        """
 
 
 class NormalizeModule(Protocol):
@@ -134,7 +139,7 @@ class NullParser:
         return [RawExtraction(field_key=f.key, raw_value=None,
                               note="파서 미구현 (기본 구현)") for f in fields]
 
-    def reread(self, path, f, prev) -> RawExtraction | None:
+    def reread(self, path, f, prev, attempt=1) -> RawExtraction | None:
         return None
 
 
@@ -290,7 +295,7 @@ class Pipeline:
             run_id, schema.config_hashes(),
             {"fields": len(self.target_fields()), "only_mvp": self.only_mvp,
              "use_vlm": self.use_vlm, "max_retries": self.max_retries,
-             "docs": len(paths)},
+             "docs": len(paths), "models": models.summary()},
             echo=echo,
         )
         results = []
@@ -388,7 +393,13 @@ class Pipeline:
                 prev = by_key[f.key]
                 fresh = None
                 try:
-                    fresh = parser.reread(path, f, prev)
+                    fresh = parser.reread(path, f, prev, attempt)
+                except TypeError:
+                    # attempt 를 받지 않는 구형 파서 — 계약 확장 이전 구현
+                    try:
+                        fresh = parser.reread(path, f, prev)
+                    except Exception as e:
+                        hooks.on_error(doc_id, f"reread:{f.key}", e)
                 except Exception as e:
                     hooks.on_error(doc_id, f"reread:{f.key}", e)
                 if fresh is None:
