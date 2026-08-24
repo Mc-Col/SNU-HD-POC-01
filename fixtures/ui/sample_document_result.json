@@ -5,33 +5,69 @@
     "required · safety · threshold · field_name 은 여기 없다. schema/fields.yaml 에서 온다.",
     "  → 픽스처가 스키마와 어긋나면 화면이 뜨지 않고 KeyError 로 알려준다. 의도한 동작이다.",
     "fixtures/ui/sample_page.pdf 는 이 파일에서 생성된다: python fixtures/ui/make_sample.py",
-    "  → bbox 와 지면의 값 위치가 구조적으로 일치한다. 좌표를 손으로 맞추지 않는다."
+    "  → bbox 와 지면의 값 위치가 구조적으로 일치한다. 좌표를 손으로 맞추지 않는다.",
+    "2026-08-24 이종수: 스키마 변경 반영 — maximum_pressure→normal_pressure, rated_cv_max→rated_cv, rated_cv_normal→required_cv, valve_body_type 추가."
   ],
   "doc_id": "19-FV-001",
   "source_name": "19-FV-001.pdf",
   "source_bytes": 787000,
-  "page_size": [595, 640],
+  "page_size": [
+    595,
+    640
+  ],
   "parser": "vlm",
   "elapsed_ms": 8420,
-
   "triage": {
     "document_class": "datasheet",
     "confidence": 0.97,
     "reason": "1페이지 단일 자산 데이터시트. 파일명 태그번호 패턴 일치",
-    "stats": {"pages": 1, "text_chars": 34, "text_ratio": 0.02, "tables": 1, "images": 1}
+    "stats": {
+      "pages": 1,
+      "text_chars": 34,
+      "text_ratio": 0.02,
+      "tables": 1,
+      "images": 1
+    }
   },
   "route": {
     "parser": "vlm",
     "reason": "PDF 텍스트 레이어 탐침 결과 text_ratio 0.02 < 임계 0.30 → 스캔 이미지로 판단",
-    "stats": {"text_ratio": 0.02}
+    "stats": {
+      "text_ratio": 0.02
+    }
   },
-
   "furniture": [
-    {"label": "SERVICE",  "text": "RECYCLE TO DHC FEED FILTERS", "bbox": [250, 192, 430, 208]},
-    {"label": "LINE NO.", "text": "10-P-1042-A1A",               "bbox": [250, 214, 430, 230]},
-    {"label": "P&ID",     "text": "D-2-1041 SH.3",               "bbox": [250, 500, 430, 516]}
+    {
+      "label": "SERVICE",
+      "text": "RECYCLE TO DHC FEED FILTERS",
+      "bbox": [
+        250,
+        192,
+        430,
+        208
+      ]
+    },
+    {
+      "label": "LINE NO.",
+      "text": "10-P-1042-A1A",
+      "bbox": [
+        250,
+        214,
+        430,
+        230
+      ]
+    },
+    {
+      "label": "P&ID",
+      "text": "D-2-1041 SH.3",
+      "bbox": [
+        250,
+        500,
+        430,
+        516
+      ]
+    }
   ],
-
   "fields": [
     {
       "key": "type_name",
@@ -40,7 +76,12 @@
       "value": "FLOW CONTROL VALVE",
       "confidence": 0.96,
       "state": "auto",
-      "bbox": [250, 104, 430, 120],
+      "bbox": [
+        250,
+        104,
+        430,
+        120
+      ],
       "source_locator": "p1:tbl1:r1c2"
     },
     {
@@ -50,7 +91,12 @@
       "value": "10-FV-001",
       "confidence": 0.98,
       "state": "auto",
-      "bbox": [250, 126, 430, 142],
+      "bbox": [
+        250,
+        126,
+        430,
+        142
+      ],
       "source_locator": "p1:tbl1:r2c2"
     },
     {
@@ -60,7 +106,12 @@
       "value": "FISHER",
       "confidence": 0.97,
       "state": "auto",
-      "bbox": [250, 148, 430, 164],
+      "bbox": [
+        250,
+        148,
+        430,
+        164
+      ],
       "source_locator": "p1:tbl1:r3c2"
     },
     {
@@ -70,7 +121,12 @@
       "value": "667-EZ",
       "confidence": 0.94,
       "state": "auto",
-      "bbox": [250, 170, 430, 186],
+      "bbox": [
+        250,
+        170,
+        430,
+        186
+      ],
       "source_locator": "p1:tbl1:r4c2"
     },
     {
@@ -92,19 +148,29 @@
       "value": "RECYCLE OIL",
       "confidence": 0.93,
       "state": "auto",
-      "bbox": [250, 258, 430, 274],
+      "bbox": [
+        250,
+        258,
+        430,
+        274
+      ],
       "source_locator": "p1:tbl2:r1c2"
     },
     {
-      "key": "maximum_pressure",
-      "raw_label": "INLET PRESSURE MAX",
-      "raw_value": "12.5 / 8.2 kg/cm2G",
-      "value": "12.5 / 8.2 kg/cm2G",
+      "key": "normal_pressure",
+      "raw_label": "Pressure (Norm.)",
+      "raw_value": "8.2 kg/cm2G",
+      "value": "8.2 kg/cm2G",
       "confidence": 0.91,
       "state": "review",
       "failure": "format",
       "note": "형식·허용값 위반 — 단일 값이어야 하는데 두 값이 병기됨(최대/정상 추정). 재시도하지 않고 확인 요청",
-      "bbox": [250, 280, 430, 296],
+      "bbox": [
+        250,
+        280,
+        430,
+        296
+      ],
       "source_locator": "p1:tbl2:r2c2"
     },
     {
@@ -114,7 +180,12 @@
       "value": "0.84",
       "confidence": 0.95,
       "state": "auto",
-      "bbox": [250, 302, 430, 318],
+      "bbox": [
+        250,
+        302,
+        430,
+        318
+      ],
       "source_locator": "p1:tbl2:r3c2"
     },
     {
@@ -124,22 +195,32 @@
       "value": "120 m3/h",
       "confidence": 0.93,
       "state": "auto",
-      "bbox": [250, 324, 430, 340],
+      "bbox": [
+        250,
+        324,
+        430,
+        340
+      ],
       "source_locator": "p1:tbl2:r4c2"
     },
     {
-      "key": "rated_cv_max",
-      "raw_label": "RATED CV",
+      "key": "rated_cv",
+      "raw_label": "Rated Cv",
       "raw_value": "83.1",
       "value": "83.1",
       "confidence": 0.94,
       "state": "auto",
-      "bbox": [250, 546, 430, 562],
+      "bbox": [
+        250,
+        546,
+        430,
+        562
+      ],
       "source_locator": "p1:tbl5:r1c2"
     },
     {
-      "key": "rated_cv_normal",
-      "raw_label": null,
+      "key": "required_cv",
+      "raw_label": "Required Cv",
       "raw_value": null,
       "value": null,
       "confidence": 0.0,
@@ -156,7 +237,12 @@
       "value": "2\"",
       "confidence": 0.95,
       "state": "auto",
-      "bbox": [250, 390, 430, 406],
+      "bbox": [
+        250,
+        390,
+        430,
+        406
+      ],
       "source_locator": "p1:tbl3:r1c2"
     },
     {
@@ -166,7 +252,12 @@
       "value": "ANSI CLASS 300",
       "confidence": 0.92,
       "state": "auto",
-      "bbox": [250, 412, 430, 428],
+      "bbox": [
+        250,
+        412,
+        430,
+        428
+      ],
       "source_locator": "p1:tbl3:r2c2"
     },
     {
@@ -179,8 +270,31 @@
       "failure": "none",
       "note": "확신도 0.71 < 임계 0.90. 재시도 2회 모두 같은 영역에서 바디·트림 재질이 한 칸에 병기 — 사람이 분리 확인 필요",
       "retry_count": 2,
-      "retry_values": ["WCB / 316SST", "WCB/316 SST"],
-      "bbox": [250, 434, 430, 450],
+      "retry_values": [
+        "WCB / 316SST",
+        "WCB/316 SST"
+      ],
+      "bbox": [
+        250,
+        434,
+        430,
+        450
+      ],
+      "source_locator": "p1:tbl3:r3c2"
+    },
+    {
+      "key": "valve_body_type",
+      "raw_label": "Body Type",
+      "raw_value": "GLOBE",
+      "value": "GLOBE",
+      "confidence": 0.97,
+      "state": "auto",
+      "bbox": [
+        250,
+        434,
+        430,
+        450
+      ],
       "source_locator": "p1:tbl3:r3c2"
     },
     {
@@ -196,7 +310,12 @@
         "ATO → 공기 상실 시 스프링 폐쇄 → FAIL CLOSE",
         "교차검증 생략 — ACTUATOR TYPE 은 추출 대상 아님(구동부는 FAIL POSITION 만). 사람 확인 필수"
       ],
-      "bbox": [250, 478, 430, 494],
+      "bbox": [
+        250,
+        478,
+        430,
+        494
+      ],
       "source_locator": "p1:tbl4:r1c2"
     },
     {

@@ -733,6 +733,76 @@ C031 은 문자만 `area` 로, 숫자를 `unit` 으로 불렀다. 키 계산 결
 
 **검증** 문서가 참조하는 파일 20개 전부 존재 확인. 훅 13개 · 태그 51건 · 최신성 30건 · 스모크 통과
 
+### C034 · 서경빈 선임 작업 병합 + 스키마 표류로 깨진 테스트 12건 복구 ★★★
+- **경과** 푸시가 거부되었다(`! [rejected] main -> main (fetch first)`). 원격에 서경빈 선임의 커밋 `e5b0466` 이 먼저 올라와 있었다
+
+**병합 — 안전했다**
+
+`git diff HEAD origin/main` 이 `app.py`·`src/preprocess.py`·`src/ui/*` 등 수십 개를 `D`(삭제)로 표시해 처음에는 조원이 내 작업을 지운 것처럼 보였다. 실제로는 아니다 — 조원이 옛 원격 상태(`f2d6c3e`)에서 갈라져 나갔고 내 7개 커밋이 아직 푸시되지 않았기 때문이다. `git show --stat` 으로 확인하니 **11개 파일 665줄 순수 추가, 수정 0건**이었다.
+
+`f2d6c3e` 가 내 HEAD 의 조상임을 확인한 뒤 병합했다. 충돌 0건, 양쪽 파일 전부 생존.
+
+> **교훈** `diff HEAD origin/main` 의 `D` 는 "저쪽이 지웠다" 가 아니라 "저쪽에 없다" 다. 놀라기 전에 `git show --stat <커밋>` 으로 **그 커밋이 실제로 무엇을 바꿨는지** 본다.
+
+**받은 것** — `src/parsers/text/{excel,field_index}.py` · `src/validate/format/validator.py` · 각 테스트 · `fixtures/text/*` · `fixtures/format/case_basic.json`
+
+---
+
+**깨진 테스트 12건 — 전부 내 스키마 변경이 원인이다**
+
+병합 후 테스트를 돌리니 12건이 실패했다. 코드 문제가 아니라 **필드 표준이 바뀐 뒤 그것에 의존하는 픽스처·단정을 갱신하지 않은 것**이다. 원인 3종:
+
+| 스키마 변경 | 근거 |
+|---|---|
+| 30필드 → **28필드** | 실물 라벨링을 거치며 정리 |
+| `RATED CV MAX` + `RATED CV NORMAL` → **`RATED CV`** 병합 | 벤더가 MAX/NORMAL 을 구분해 적지 않는다(Metso `Rated Cv: 26`, Fisher `Valve Coefficient: 34.1` 모두 단일값) |
+| `POSITIONER TYPE` · `MAXIMUM PRESSURE` 등 **삭제** | Positioner Type 은 `ELEC. PNEUMATIC` 같은 전자·공압 구분값이지 모델명이 아니다 |
+| `VALVE BODY TYPE` **신설(필수)** | Globe/Angle/Ball. 실물에 독립 행으로 존재 |
+
+**서경빈 선임 모듈 (사용자 승인 후 수정 — 로직 파일은 건드리지 않음)**
+
+| 위치 | 수정 |
+|---|---|
+| `src/parsers/text/test_text_parser.py` | `assert ix.field_count == 30` → **숫자를 박지 않고** `len(schema.all_fields())` 와 비교. 표준이 바뀔 때마다 깨지는 단정이었다. 의도("유사표현은 스키마에서만 읽는다")는 그대로 지키면서 FieldIndex 가 조용히 필드를 빠뜨리는지도 여전히 잡는다 |
+| `fixtures/format/case_basic.json` | `rated_cv_max` → `rated_cv` (rules·values·expected 전부) / `positioner_type` 제거 / `valve_body_type: GLOBE` 추가 |
+
+`spring_range` 는 **손대지 않았다** — 원래 스키마에 없던 필드이고 `unknown_field` 검출을 노린 의도적 케이스다. 지웠다면 테스트의 목적이 사라졌다.
+
+수정 사유를 `case_basic.json` 의 `_설명` 과 커밋 메시지에 남겨 서경빈 선임이 확인할 수 있게 했다.
+
+**내 화면 모듈 — 스키마를 바꾸고 자체 테스트를 돌리지 않았다**
+
+`src/ui/test_flow.py` 9건이 깨져 있었다. **병합 이전부터** 그랬다. C027~C032 에서 스키마를 여러 번 바꾸면서 화면 테스트를 한 번도 돌리지 않은 것이다.
+
+| 위치 | 수정 |
+|---|---|
+| `test_rated_cv_max_required_and_in_mvp` | → `test_rated_cv_is_required_and_in_mvp`. C027 은 `RATED CV MAX` 를 MVP 로 두었으나 나중에 병합되었다. 병합 사실 자체를 단정으로 박았다(`rated_cv_max` 가 스키마에 없음). 뒤집힌 결정을 지우지 않고 docstring 에 경과를 남겼다 |
+| `test_positioner_stays_required_and_is_resolved_by_human` | `positioner_type` 필수 단정 → **삭제되었다는 단정**으로 교체. 사유를 docstring 에 |
+| `fixtures/ui/sample_document_result.json` | `maximum_pressure` → `normal_pressure` / `rated_cv_max` → `rated_cv` / `rated_cv_normal` → `required_cv`(na 유지 — 필수 미해소 케이스가 필요하다) / `valve_body_type: GLOBE` 추가 |
+
+**루트 `pytest` 가 통째로 깨져 있었다 — `pytest.ini` 신설**
+
+이 저장소에는 자체 검증 방식이 둘 섞여 있다.
+
+```
+pytest        src/<모듈>/test_*.py        (서경빈 선임)
+단독 스크립트   fixtures/<모듈>/test_*.py   (이종수 책임)
+```
+
+단독 스크립트는 import 시점에 바로 돌고 `sys.exit()` 로 끝난다 — 비개발자도 파일 하나만 실행하면 결과가 보이게 하려는 의도다. 그런데 이름이 `test_*.py` 라서 pytest 가 수집하려 하고, 수집 중 `SystemExit` 이 나서 **루트에서 `pytest` 를 실행하면 `INTERNALERROR` 로 아무 테스트도 돌지 않았다.**
+
+조원이 가장 자연스럽게 칠 명령이 통째로 죽어 있던 것이다. `pytest.ini` 로 수집 범위를 `src/` 로 제한했다. 두 방식을 통일하지 않은 이유는 각각의 목적이 다르기 때문이고, 이유를 파일 주석에 적었다.
+
+**최종 검증**
+
+| | 결과 |
+|---|---|
+| `python -m pytest` (루트) | **32건 통과** |
+| `fixtures/preprocess/test_tag.py` | 51건 통과 |
+| `fixtures/preprocess/test_recency.py` | 30건 통과 |
+| `python -m src.pipeline --smoke` | 통과 |
+| `python -m src.preprocess` | 통과 |
+
 ## 미해결 항목
 
 | # | 항목 | 확인 대상 | 기한 | 미충족 시 |

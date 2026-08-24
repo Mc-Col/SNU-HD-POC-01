@@ -44,7 +44,11 @@ def test_라벨_정규화는_표기_흔들림을_흡수한다(raw, norm):
 
 def test_유사표현은_스키마에서만_읽는다():
     ix = FieldIndex.load()
-    assert ix.field_count == 30
+    # 필드 수를 숫자로 박지 않는다. 표준은 실물 라벨링을 거치며 바뀐다
+    # (30 → 28: C027 에서 POSITIONER TYPE·MIN/MAX TEMP 삭제, RATED CV MAX 병합).
+    # 스키마가 담은 수와 같은지만 본다 — FieldIndex 가 조용히 빠뜨리지 않는지 확인.
+    from src import schema as _schema
+    assert ix.field_count == len(_schema.all_fields())
     assert ix.lookup("Tag").key == "engineering_tag_no"
     assert ix.lookup("Fail Position").key == "actuator_fail_action"
     assert ix.collisions == []

@@ -1,11 +1,17 @@
 {
-  "_설명": "⑤-a 형식 검증 fixture. format_rules 절이 schema/rules.yaml 에 생기기 전까지 규칙을 여기서 주입한다.",
+  "_설명": "⑤-a 형식 검증 fixture. format_rules 절이 schema/rules.yaml 에 생기기 전까지 규칙을 여기서 주입한다.  |  2026-08-24 이종수: 스키마 변경(C027) 반영 — rated_cv_max→rated_cv 병합, positioner_type 삭제. 서경빈 선임 확인 요청.",
   "rules": {
-    "rated_cv_max": {"numeric": true},
-    "specific_gravity": {"numeric": true},
-    "engineering_tag_no": {"pattern": "[0-9]{2}-?[A-Z]{2,4}-?[0-9]{3}[A-Z]?", "max_length": 20}
+    "rated_cv": {
+      "numeric": true
+    },
+    "specific_gravity": {
+      "numeric": true
+    },
+    "engineering_tag_no": {
+      "pattern": "[0-9]{2}-?[A-Z]{2,4}-?[0-9]{3}[A-Z]?",
+      "max_length": 20
+    }
   },
-
   "위반_케이스": {
     "values": {
       "engineering_tag_no": "11-FV-048",
@@ -14,44 +20,67 @@
       "valve_body_rating": "ANSI CLASS 300",
       "valve_body_size": "4 IN",
       "valve_body_material": "  ",
+      "valve_body_type": "GLOBE",
       "actuator_fail_action": "FAIL CLOSE",
-      "rated_cv_max": "약 53.8",
+      "rated_cv": "약 53.8",
       "specific_gravity": "0.72",
       "characteristic": "EQUAL %",
       "valve_plug_material": "N/A",
       "positioner_model_no": "3582i",
-      "positioner_type": "ELECTRO-PNEUMATIC",
       "type_name": "FLOW CONTROL VALVE",
       "spring_range": "0.4 - 2.0 bar"
     },
     "expected": [
-      {"field_key": "spring_range",        "rule": "unknown_field", "value": "0.4 - 2.0 bar"},
-      {"field_key": "rated_cv_max",        "rule": "numeric",       "value": "약 53.8"},
-      {"field_key": "valve_body_material", "rule": "required",      "value": "  "},
-      {"field_key": "valve_plug_material", "rule": "required",      "value": "N/A"},
-      {"field_key": "valve_seat_material", "rule": "required",      "value": null},
-      {"field_key": "actuator_type",       "rule": "required",      "value": null}
+      {
+        "field_key": "spring_range",
+        "rule": "unknown_field",
+        "value": "0.4 - 2.0 bar"
+      },
+      {
+        "field_key": "rated_cv",
+        "rule": "numeric",
+        "value": "약 53.8"
+      },
+      {
+        "field_key": "valve_body_material",
+        "rule": "required",
+        "value": "  "
+      },
+      {
+        "field_key": "valve_plug_material",
+        "rule": "required",
+        "value": "N/A"
+      },
+      {
+        "field_key": "valve_seat_material",
+        "rule": "required",
+        "value": null
+      },
+      {
+        "field_key": "actuator_type",
+        "rule": "required",
+        "value": null
+      }
     ]
   },
-
   "정상_케이스": {
     "values": {
       "type_name": "FLOW CONTROL VALVE",
       "engineering_tag_no": "11-FV-048",
       "manufacturer": "FISHER",
       "model_no": "667-ED",
-      "rated_cv_max": "53.8",
+      "rated_cv": "53.8",
       "specific_gravity": "0.72",
       "valve_body_rating": "ANSI CLASS 300",
       "valve_body_size": "4 IN",
       "valve_body_material": "WCB",
+      "valve_body_type": "GLOBE",
       "characteristic": "EQUAL %",
       "valve_plug_material": "316SST",
       "valve_seat_material": "316SST",
       "actuator_type": "DIAPHRAGM",
       "actuator_fail_action": "FAIL CLOSE",
-      "positioner_model_no": "3582i",
-      "positioner_type": "ELECTRO-PNEUMATIC"
+      "positioner_model_no": "3582i"
     },
     "expected": []
   }

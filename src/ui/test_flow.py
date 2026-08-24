@@ -142,12 +142,24 @@ def test_bbox_overlay_renders_only_evidenced_fields():
 
 # ── 확정된 결정이 코드가 아니라 정의서에 있는가 (2026-08-23) ───
 
-def test_rated_cv_max_required_and_in_mvp():
-    """Rated CV 는 필수 — 없는 데이터시트는 없다는 도메인 판단."""
-    f = schema.get("rated_cv_max")
+def test_rated_cv_is_required_and_in_mvp():
+    """Rated CV 는 필수 — 없는 데이터시트는 없다는 도메인 판단.
+
+    2026-08-24 정정: C027 은 `RATED CV MAX` 를 MVP 로 두었으나, 실물 라벨링에서
+    벤더가 MAX/NORMAL 을 구분해 적지 않는 경우가 많아 `RATED CV` 하나로 병합했다
+    (Metso `Rated Cv: 26`, Fisher `Valve Coefficient: 34.1` 모두 단일값).
+    """
+    f = schema.get("rated_cv")
     assert f.required and f.mvp
-    # 계산으로 채우는 값은 운전조건 기준이므로 NORMAL 이고, 그쪽은 선택이다
-    assert not schema.get("rated_cv_normal").required
+    # 사람이 문서에서 읽는 값이다. 계산은 화면의 [Cv 계산] 버튼이 별도로 한다
+    assert "rated_cv_max" not in {x.key for x in schema.all_fields()}
+    assert "rated_cv_normal" not in {x.key for x in schema.all_fields()}
+
+
+def test_required_cv_is_the_process_side_value():
+    """Required CV 는 공정이 요구하는 Cv. Rated CV 와 다른 필드다."""
+    assert schema.get("required_cv").mvp
+    assert schema.get("required_cv").key != schema.get("rated_cv").key
 
 
 def test_actuator_type_is_not_an_extraction_target():
@@ -157,9 +169,14 @@ def test_actuator_type_is_not_an_extraction_target():
 
 
 def test_positioner_stays_required_and_is_resolved_by_human():
-    """포지셔너 부재는 규칙으로 필수를 풀지 않고 사람이 N/A 확인한다."""
+    """포지셔너 부재는 규칙으로 필수를 풀지 않고 사람이 N/A 확인한다.
+
+    2026-08-24 정정: `positioner_type` 은 삭제되었다. 데이터시트의
+    `Positioner Type` 은 `ELEC. PNEUMATIC` 처럼 전자·공압 구분값이지 모델명이
+    아니어서 기준정보로 쓸 수 없다(Metso 실물 확인). 모델명만 남긴다.
+    """
     assert schema.get("positioner_model_no").required
-    assert schema.get("positioner_type").required
+    assert "positioner_type" not in {x.key for x in schema.all_fields()}
 
     at = _to_hitl()
     rec = at.session_state["doc"].record("positioner_model_no")
