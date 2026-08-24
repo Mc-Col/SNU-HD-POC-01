@@ -111,6 +111,126 @@ model_to_manufacturer:
       to: "YTC"
       kind: positioner
       note: "Young Tech. 15LV010 에서 YT-200 관측"
+# ── 단위 토큰 ──────────────────────────────────────────────────
+# 라벨과 값 사이에 단위 칸이 끼는 양식이 있다.
+#   예) "Flow Rate | m3/h | ... | 20"  ← m3/h 를 값으로 집으면 안 된다
+# 파서가 값을 찾을 때 이 목록에 걸리면 건너뛴다. 표기가 늘어나면 여기에 추가한다.
+unit_tokens:
+  - kg/cm2
+  - kg/cm2G
+  - kg/cm²
+  - kgf/cm2
+  - kgf/cm2G
+  - kgf/cm²
+  - kg/h
+  - kg/hr
+  - m3/h
+  - m3/hr
+  - M3/H
+  - Sm3/h
+  - Sm3/hr
+  - Nm3/h
+  - Nm3/hr
+  - ℓ/min
+  - l/min
+  - "%"
+  - "℃"
+  - "°C"
+  - "˚C"
+  - mm
+  - in
+  - inch
+  - cP
+  - Cp
+  - mA
+  - dBA
+  - psi
+  - psig
+  - bar
+  - kPa
+  - MPa
+  - min
+  - sec
+  - deg.
+  - "(mm)"
+  - "(mA)"
+  - "(%)"
+  - "(°C)"
+  - "(kg/h)"
+  - "(Sp.Gr.)"
+
+# ── 복합 라벨 분해 ─────────────────────────────────────────────
+# 라벨 하나가 표준 필드 여러 개를 덮는 칸. 벤더 양식에서 흔하다.
+# 1:1 유사표현 사전으로는 풀 수 없어 별도 규칙으로 쪼갠다.
+#
+# 형식 두 가지
+#   separator : 라벨과 값을 같은 구분자로 쪼개 순서대로 짝짓는다.
+#               fields 의 null 은 "대응 표준 필드 없음 → 버림".
+#               조각 수가 fields 수와 다르면 쪼개지 않고 미매핑으로 남긴다.
+#   pattern   : 값에 정규식을 걸고 named group 이름을 field key 로 쓴다.
+#
+# 스키마에 아직 없는 field key 를 적어도 된다. 그 조각은 미매핑으로 남고,
+# 필드가 추가되는 순간 규칙 수정 없이 자동으로 붙는다.
+composite_labels:
+
+  - label: "Size/Pressure Class/Body Form"
+    separator: "/"
+    fields: [valve_body_size, valve_body_rating, valve_body_type]
+    note: "Fisher·Samwoo 계열 텍스트 PDF"
+
+  - label: "Model / Body Type / Trim Type"
+    separator: "/"
+    fields: [model_no, valve_body_type, null]
+    note: |
+      Trim Type("Standard")은 트림 구조 표기이지 유량 특성이 아니다.
+      CHARACTERISTIC 은 같은 문서의 "Trim # - Cv / Characteristic"("Linear")에서 온다.
+      2026-08-24 골든셋 대조에서 확인 — 대응 필드 없음으로 정정.
+
+  - label: "Max Shutoff / Shutoff Class"
+    separator: "/"
+    fields: [null, valve_leakage_class]
+    note: "앞 조각(최대 차압)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Fail/Air-To"
+    separator: "/"
+    fields: [actuator_fail_action, null]
+    note: |
+      Fail 표기와 Air-To 표기를 한 칸에 같이 준다. 예) "Close / Open"
+      앞 조각이 Fail 값이므로 그대로 쓴다. 뒤 조각은 역전 규칙 교차검증에 쓸 수 있다.
+      (Fail=Close 이면 Air-To=Open 이어야 정합)
+
+  - label: "Design Press./Temp."
+    separator: "/"
+    fields: [null, null]
+    note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
+
+  - label: "Process Fluid"
+    separator: "/"
+    fields: [fluid_name, fluid_state]
+    note: "Flowserve 계열. 값이 'LS AR / LIQUID' 형태로 유체명과 상태를 묶어 준다"
+
+  - label: "Size and Type"
+    pattern: '^\s*(?P<valve_body_size>[\d\-/½¼¾\.]+\s*")\s*,?\s*(?P<model_no>\S.*?)\s*$'
+    note: |
+      Fisher 1986 수기 양식. 값이 '1" 1250R-GL' / '2", 657-EZ' 형태로
+      바디 사이즈와 모델번호를 한 칸에 묶어 준다.
+      유사표현으로 넣으면 두 필드가 같은 표기를 다투므로 복합 규칙으로 둔다.
+
+  - label: "Body Matl / Bonnet Matl"
+    separator: "/"
+    fields: [valve_body_material, null]
+    note: "Flowserve·Valtek 계열. 뒤 조각(보닛 재질)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Trim # - Cv / Characteristic"
+    separator: "/"
+    fields: [null, characteristic]
+    note: |
+      앞 조각은 "2.62  Cv:116" 형태로 트림번호와 정격 Cv 가 묶여 있다.
+      Cv 필드 이름이 확정되면(RATED CV / RATED CV MAX) pattern 규칙으로 바꿔 앞 조각도 살릴 것.
+
+  - label: "Body Model(Type)"
+    pattern: '^(?P<model_no>[^(]+)\((?P<valve_body_type>[^)]+)\)$'
+    note: "한국어 리트로핏 점검서. 값이 '657-ED(GLOBE)' 형태로 모델과 바디 형상을 묶어 준다"
 
 # ── To-be (MVP 범위 외) ───────────────────────────────────────
 unit_conversion:

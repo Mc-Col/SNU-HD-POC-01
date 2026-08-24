@@ -22,11 +22,13 @@ ws.merge_cells("A1:D1")
 # 라벨 좌 · 값 우 (가장 흔한 배치)
 ws["A3"], ws["B3"] = "Tag", "11-FV-999"                       # 유사표현
 ws["A4"], ws["B4"] = "Manufacturer", "FISHER"                 # 표준명
-ws["A5"], ws["B5"] = "Model No.", "667-ED"                    # 표준명
+ws["A5"], ws["B5"] = "Body Model(Type)", "657-ED(GLOBE)"       # 복합 라벨(정규식)
 ws["A6"], ws["B6"] = "Fail Position", "Air Fails Valve to Close"   # 유사표현
 ws["A7"], ws["B7"] = "Application", "RECYCLE TO DHC FEED FILTERS"  # 유사표현
 ws["A8"], ws["B8"] = "Spring Range", "0.4 - 2.0 bar"          # 스키마에 없는 항목
 ws["A9"], ws["B9"] = "Body Size", "4 IN"                      # 유사표현 미등록 → 미매핑
+
+ws["A10"], ws["B10"] = "Max Shutoff / Shutoff Class", "120 psi / ANSI IV"  # 복합 라벨(구분자)
 
 # 같은 행 오른쪽 블록
 ws["D3"], ws["E3"] = "Characteristic", "EQUAL %"

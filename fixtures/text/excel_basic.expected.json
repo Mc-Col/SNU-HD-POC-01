@@ -1,17 +1,103 @@
 {
-  "_설명": "excel_basic.xlsx 를 src/parsers/text 로 파싱했을 때의 기대 출력. build_excel_basic.py 로 입력을 재생성할 수 있다.",
+  "_설명": "excel_basic.xlsx 기대 출력. build_excel_basic.py 로 입력을 재생성할 수 있다.",
   "records": [
-    {"field_key": "actuator_fail_action", "raw_value": "Air Fails Valve to Close", "raw_label": "Fail Position", "source_locator": "SPEC!B6", "page": 1, "confidence": 0.95},
-    {"field_key": "characteristic", "raw_value": "EQUAL %", "raw_label": "Characteristic", "source_locator": "SPEC!E3", "page": 1, "confidence": 0.95},
-    {"field_key": "engineering_tag_no", "raw_value": "11-FV-999", "raw_label": "Tag", "source_locator": "SPEC!B3", "page": 1, "confidence": 0.95},
-    {"field_key": "equipment_full_description", "raw_value": "RECYCLE TO DHC FEED FILTERS", "raw_label": "Application", "source_locator": "SPEC!B7", "page": 1, "confidence": 0.95},
-    {"field_key": "manufacturer", "raw_value": "FISHER", "raw_label": "Manufacturer", "source_locator": "SPEC!B4", "page": 1, "confidence": 1.0},
-    {"field_key": "model_no", "raw_value": "667-ED", "raw_label": "Model No.", "source_locator": "SPEC!B5", "page": 1, "confidence": 1.0},
-    {"field_key": "valve_body_size", "raw_value": "4 IN", "raw_label": "VALVE BODY SIZE", "source_locator": "SPEC!A12", "page": 1, "confidence": 1.0},
-    {"field_key": "viscosity", "raw_value": null, "raw_label": "Viscosity", "source_locator": "SPEC!A14", "page": 1, "confidence": 0.0}
+    {
+      "field_key": "actuator_fail_action",
+      "raw_value": "Air Fails Valve to Close",
+      "raw_label": "Fail Position",
+      "source_locator": "SPEC!B6",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "characteristic",
+      "raw_value": "EQUAL %",
+      "raw_label": "Characteristic",
+      "source_locator": "SPEC!E3",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "engineering_tag_no",
+      "raw_value": "11-FV-999",
+      "raw_label": "Tag",
+      "source_locator": "SPEC!B3",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "equipment_full_description",
+      "raw_value": "RECYCLE TO DHC FEED FILTERS",
+      "raw_label": "Application",
+      "source_locator": "SPEC!B7",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "manufacturer",
+      "raw_value": "FISHER",
+      "raw_label": "Manufacturer",
+      "source_locator": "SPEC!B4",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "model_no",
+      "raw_value": "657-ED",
+      "raw_label": "Body Model(Type) → model_no",
+      "source_locator": "SPEC!B5",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Body Model(Type)' 분해"
+    },
+    {
+      "field_key": "valve_body_size",
+      "raw_value": "4 IN",
+      "raw_label": "VALVE BODY SIZE",
+      "source_locator": "SPEC!A12",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "valve_leakage_class",
+      "raw_value": "ANSI IV",
+      "raw_label": "Shutoff Class",
+      "source_locator": "SPEC!B10",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Max Shutoff / Shutoff Class' 분해"
+    },
+    {
+      "field_key": "viscosity",
+      "raw_value": null,
+      "raw_label": "Viscosity",
+      "source_locator": "SPEC!A14",
+      "page": 1,
+      "confidence": 0.0,
+      "note": "라벨은 찾았으나 값 셀이 비어 있음"
+    }
   ],
   "unmapped": [
-    {"text": "Spring Range", "source_locator": "SPEC!A8", "neighbor_value": "0.4 - 2.0 bar"},
-    {"text": "Body Size", "source_locator": "SPEC!A9", "neighbor_value": "4 IN"}
+    {
+      "text": "Spring Range",
+      "source_locator": "SPEC!A8",
+      "neighbor_value": "0.4 - 2.0 bar"
+    },
+    {
+      "text": "Body Size",
+      "source_locator": "SPEC!A9",
+      "neighbor_value": "4 IN"
+    },
+    {
+      "text": "Body Model(Type) → valve_body_type",
+      "source_locator": "SPEC!B5",
+      "neighbor_value": "GLOBE"
+    }
   ]
 }
