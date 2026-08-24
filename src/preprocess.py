@@ -55,24 +55,47 @@ RENDER_DPI = 200
 #  파일명 파싱
 # ══════════════════════════════════════════════════════════════
 
-# 문서 종류 — 오타와 뒤 공백이 실제로 존재한다(REPIAR REPORT, "REPAIR REPORT ").
-# 느슨하게 잡되 긴 패턴을 먼저 검사한다.
 # 오타·변형이 실제로 존재한다 — REPIAR REPORT, DATA SHEEET, INSTURMENT,
 # 뒤 공백("REPAIR REPORT "). 느슨하게 잡되 **긴 패턴을 먼저** 검사한다
 # (INSTRUMENT LIST 가 INSTRUMENT 보다 앞이어야 목록이 대상으로 새지 않는다).
+#
+# ── 정비·개조 보고서는 대상이다 (2026-08-24 결정, C030 철회) ──────────
+#
+#  C030 에서 112건을 제외했다. 근거는 정엔지니어링 발행 체크시트의 사양 칸이
+#  대부분 비어 있다는 실측(22칸 중 2~12칸)이었다. 그 판단을 철회한다.
+#
+#  비어 있는 것은 **추출 수율** 문제이고 **범위** 문제가 아니다. 스캔해서 비면
+#  시스템이 `N/A + note` 로 정직하게 답하는 것이 옳은 동작이고, 그 동작 자체가
+#  이 과제의 산출물이다. 제외하면 아예 보지 않게 되고, 데이터시트가 없는
+#  34개 태그는 영구 도달 불가가 된다.
+#
+#  실물 반례도 있었다 — `10PV018-REPAIR REPORT_REV1.xlsx`(Valstone)는 시트 3에
+#  `CONTROL VALVE SPECIFICATIONS` 블록이 텍스트로 온전히 있다(2,568자,
+#  RATED CV 195). 골든셋 d006 이 이 파일로 66개 값을 채웠다.
+#
+#  ⚠️ 억지로 채우지 않는다. 읽히는 것만 적고 나머지는 N/A + note 다.
+#     "이 문서로는 채울 수 없다" 가 측정 대상이다(철학 4).
+#
+#  여전히 제외하는 것: 도면(DRAWING) · 계기 목록(INSTRUMENT LIST) —
+#  설비 사양표가 아예 없는 문서 종류다.
+
 DOC_KINDS: list[tuple[str, str, bool]] = [
     # (표시명, 정규식, 대상 여부)
     ("SPECIFICATION DATA SHEET", r"SPEC\w*\s*DATA\s*SHE+T",  True),
     ("DATA SHEET",               r"DATA\s*SHE+T",            True),   # SHEEET 오타 포함
     ("SPEC & CALC",              r"SPEC\s*&\s*CALC",         True),
-    ("REPAIR REPORT",            r"REP[AI]{2}R\s*REPORT",    False),
-    ("RETROFIT REPORT",          r"RETROFIT\s*REPORT",       False),
-    ("RETROFIT",                 r"RETROFIT",                False),
-    ("TEST REPORT",              r"TEST\s*REPORT",           False),
+    ("REPAIR REPORT",            r"REP[AI]{2}R\s*REPORT",    True),   # REPIAR 오타 포함
+    ("RETROFIT REPORT",          r"RETROFIT\s*REPORT",       True),
+    ("RETROFIT",                 r"RETROFIT",                True),
+    ("TEST REPORT",              r"TEST\s*REPORT",           True),
     ("INSTRUMENT LIST",          r"INST[UR]{2}MENT\s*LIST",  False),  # 목록은 대상 아님
     ("DRAWING",                  r"DRAWING",                 False),
     ("SPECIFICATION",            r"SPECIFICATION",           True),
 ]
+
+# 보고서 계열 — 대상이지만 사양 칸이 비어 있을 수 있다는 표시.
+# Triage 가 화면·로그에 "보고서 — 사양 칸이 비어 있을 수 있음" 을 남기는 데 쓴다.
+REPORT_KINDS = ("REPAIR REPORT", "RETROFIT REPORT", "RETROFIT", "TEST REPORT")
 
 # 파일명으로 못 가리는 것들 — 실물 확인 결과 (2026-08-24)
 #   30FV522C-DATA-001_REV0.pdf   내용은 "Valve Data Sheet" → 대상. 이름에 SHEET 없음
@@ -293,37 +316,21 @@ class PageText:
 
 
 # ══════════════════════════════════════════════════════════════
-#  정비·개조 보고서 — 추출 대상이 아닌 이유
+#  범위 — 무엇을 제외하고, 무엇을 경고와 함께 처리하는가
 # ══════════════════════════════════════════════════════════════
-#
-#  2026-08-24 범위 결정 (사용자). 112건(정엔지니어링 46 · Valstone 49 · 기타 17)
-#  을 추출 대상에서 제외한다. **글씨를 못 읽어서가 아니라 사양이 안 적혀 있어서다.**
-#
-#  `CONTROL VALVE REPAIR & RETROFIT CHECK SHEET` 의 SPECIFICATIONS 칸은
-#  사양서가 아니라 작업 기록이다. 실측 2건:
-#      15FV031   사양 22칸 중 12칸 기재. RATED CV·MODEL NO. 공란
-#      10PCV072  사양 22칸 중  2칸 기재(Rating, Maker). 나머지 전부 공란
-#  텍스트 레이어에 `Rated Cv` 라벨이 있는 건 46건 중 32.6%, 값까지 붙어
-#  나오는 건 4.3% 다.
-#
-#  두 번째 이유 — 시점이 섞인다. 15FV031 을 제대로 채우려면
-#      MODEL NO. 667-A · RATED CV 34.1  ← p8 Fisher 원본(1986, 사진)
-#      POSITIONER DVC 6200              ← p7 체크시트(2022, 수기)
-#  즉 한 페이지를 고르는 문제가 아니라 **시점이 다른 페이지를 합치는 문제**다.
-#  정비보고서를 빼면 "파일 안에서 페이지 하나를 고른다"는 규칙이 유지된다
-#  (10FV011 의 2003 Retrofit 사양서는 혼자서 MVP 9필드가 전부 채워진다).
-#
-#  제외는 구멍이 아니라 측정 항목으로 둔다 — 골든셋에 정비보고서를
-#  "제외가 정답" 으로 넣어 Triage 가 추출을 시도하지 않는지 채점한다.
-
-REPORT_DOC_KINDS = ("RETROFIT REPORT", "RETROFIT", "REPAIR REPORT", "TEST REPORT")
 
 OUT_OF_SCOPE_REASON = {
-    "REPAIR REPORT": "정비 보고서 — 작업 기록이지 사양서가 아님(사양 칸 대부분 공란)",
-    "RETROFIT REPORT": "개조 보고서 — 작업 기록이지 사양서가 아님",
-    "RETROFIT": "개조 보고서 — 작업 기록이지 사양서가 아님",
-    "TEST REPORT": "시험 보고서 — 사양서가 아님",
+    "INSTRUMENT LIST": "계기 목록 — 설비 사양표가 아님",
     "DRAWING": "도면 — 사양표가 아님",
+}
+
+# 대상이지만 사양 칸이 비어 있을 수 있는 문서. 억지로 채우지 않게 경고를 남긴다.
+CAUTION_REASON = {
+    "REPAIR REPORT": "정비 보고서 — 사양 칸이 비어 있을 수 있음. 읽히는 것만 적고 "
+                     "나머지는 N/A + 사유",
+    "RETROFIT REPORT": "개조 보고서 — 사양 칸이 비어 있을 수 있음",
+    "RETROFIT": "개조 보고서 — 사양 칸이 비어 있을 수 있음",
+    "TEST REPORT": "시험 보고서 — 사양 블록이 있으면 그쪽을 읽는다",
 }
 
 
@@ -337,6 +344,19 @@ def scope_reason(path: str) -> str:
     if info.in_scope is not False:
         return ""
     return OUT_OF_SCOPE_REASON.get(info.doc_kind, f"{info.doc_kind} — 대상 아님")
+
+
+def caution_reason(path: str) -> str:
+    """대상이지만 주의가 필요한 문서의 경고 문구. 없으면 빈 문자열.
+
+    정비·개조 보고서는 범위 안이지만 사양 칸이 대부분 비어 있는 경우가 있다
+    (정엔지니어링 발행분 실측: 22칸 중 2~12칸). 값이 안 나오는 것이 실패가
+    아니라 **측정 대상**이라는 것을 화면과 로그에 남기기 위한 문구다.
+    """
+    info = parse_filename(path)
+    if info.in_scope is not True:
+        return ""
+    return CAUTION_REASON.get(info.doc_kind, "")
 
 
 # ── 아래는 파이프라인이 쓰지 않는다 — 코퍼스 통계용 ─────────────────
@@ -369,7 +389,7 @@ def staleness_warning(path: str, index: dict) -> str:
         return ""
     sibs = [s for s in index.get(info.tag, [])
             if os.path.normcase(s.path) != os.path.normcase(path)
-            and s.doc_kind in REPORT_DOC_KINDS]
+            and s.doc_kind in REPORT_KINDS]
     if not sibs:
         return ""
     names = ", ".join(sorted({s.doc_kind for s in sibs}))
@@ -851,7 +871,9 @@ if __name__ == "__main__":
         print(f"  {ok} {a:<12} vs {b:<14} → {na} / {nb}")
 
     print("\n[2] 파일명 파싱 — 실제 코퍼스")
-    names = sorted({os.path.normcase(p) for p in glob.glob("raw_file/*")})
+    # 하위 폴더(조원 배분·제외항목)를 파일로 세지 않는다
+    names = sorted({os.path.normcase(p) for p in glob.glob("raw_file/*")
+                    if os.path.isfile(p)})
     if names:
         stat = {"대상": 0, "제외": 0, "판단불가": 0, "태그없음": 0}
         for p in names:

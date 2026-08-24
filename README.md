@@ -61,7 +61,9 @@ src/
   validate/format/  ⑤-a                                          ← 서경빈 선임
   validate/domain/  ⑤-b                                          ← 이종수 책임
   state/ ui/        ⑥ ⑦                                          ← 이종수 책임
-eval/               평가 하네스 (홀드아웃 잠금 · --no-vlm)   ← 비어 있음
+eval/
+  compare.py        값 대조 규칙 (숫자만·로마자 정규화)
+  harness.py        평가 하네스 (홀드아웃 잠금 · --no-vlm)  ← 비어 있음
 fixtures/           모듈별 입력·기대출력 + 자체 검증
 tools/              gen_schema.py · gen_labelkit.py
 docs/               ARCHITECTURE · PRINCIPLES · GIT_GUIDE · roles · 로그
@@ -77,12 +79,15 @@ raw_file/           문서 원본 (Git 제외)
 python -m src.pipeline --smoke          엔드투엔드 (기본 구현으로 끝까지 돈다)
 python -m src.preprocess                전처리 도구 자체 확인
 python fixtures/preprocess/test_tag.py       태그 규칙 51건
-python fixtures/preprocess/test_recency.py   페이지 최신성 25건
+python fixtures/preprocess/test_recency.py   페이지 최신성 30건
+python -m pytest                             모듈 테스트 전부 (32건)
 streamlit run app.py                    HITL 화면
 ```
 
-**비어 있는 것** — `src/triage` `src/router` `src/parsers/*` `src/normalize`
-`src/validate/*` `src/state` `eval/`
+**비어 있는 것** — `src/triage` `src/router` `src/parsers/vlm` `src/normalize`
+`src/validate/domain` `src/state` `eval/harness.py`
+
+`src/parsers/text` 와 `src/validate/format` 은 서경빈 선임이 최소 구현을 올렸다.
 
 `src/pipeline.py` 의 기본 구현이 끝까지 도는 경로를 제공하므로 모듈을 하나씩
 끼워 넣으며 진행할 수 있다. 남의 모듈을 기다리지 않는다.
@@ -91,11 +96,14 @@ streamlit run app.py                    HITL 화면
 
 | 판정 | 건수 | 비율 |
 |---|---|---|
-| 대상 | 909 | 85.8% |
-| 제외 (정비·개조 보고서 112 · 도면 13) | 125 | 11.8% |
+| 대상 | 1,021 | 96.4% |
+| 제외 (도면) | 13 | 1.2% |
 | 판단 불가 → 내용 판정으로 | 25 | 2.4% |
 
-대상 909건의 포맷: **`tif` 80.7%** · `pdf` 11.9% · `xlsx`·`xlsm` 7.4%
+대상 1,021건의 포맷: **`tif` 71.9%** · `pdf` 16.6% · `xlsx`·`xlsm` 11.6%
+
+대상 중 정비·개조 보고서 112건(11.0%). 사양 칸이 비어 있으면 `N/A` + 사유로
+두는 것이 정답이다 — 억지로 채우지 않는다.
 
 **VLM 이 주 경로다.** PDF 는 파일의 51.9% 가 텍스트·스캔 혼재여서 텍스트 레이어
 판정은 파일 단위가 아니라 페이지 단위여야 한다.
