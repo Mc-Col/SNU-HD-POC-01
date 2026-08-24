@@ -36,6 +36,8 @@ MIN_PDF_CHARS = 200          # 이보다 적으면 스캔 PDF 로 보고 VLM 에
 SIMILARITY = 0.62            # 추천 필드로 인정할 최소 유사도
 MIN_ALPHA = 3                # 알파벳이 이보다 적으면 라벨로 보지 않는다 (값·기호 걸러내기)
 MIN_BOOST_LEN = 4            # 부분일치 가산은 양쪽이 이 길이 이상일 때만
+MAX_WORDS = 6                # 이보다 길면 항목명이 아니라 문장·비고로 본다
+MIN_PART_ALPHA = 3           # 복합 라벨 조각이 가져야 할 최소 알파벳 수 (단위 걸러내기)
 
 
 @dataclass
@@ -102,6 +104,8 @@ def collect(paths: list[str], ix: FieldIndex, cix: CompositeIndex,
                 continue
             if sum(c.isalpha() and c.isascii() for c in text) < MIN_ALPHA:
                 continue                     # 값·단위·기호는 라벨이 아니다
+            if len(text.split()) > MAX_WORDS:
+                continue                     # 문장·비고는 항목명이 아니다
             if len(normalize_label(text)) < MIN_ALPHA:
                 continue
             st = rep.labels.setdefault(normalize_label(text), LabelStat(text))
@@ -135,9 +139,11 @@ def render(rep: Report, ix: FieldIndex, cix: CompositeIndex, top: int) -> tuple[
     rows = sorted(rep.labels.values(), key=lambda s: (-s.count, s.text))
 
     known_composite = {normalize_label(r.label) for r in cix.rules}
+    names0 = [(normalize_label(f), f) for f in _field_names(ix)]
     comp, plain = [], []
     for s in rows:
-        if "/" in s.text and normalize_label(s.text) not in known_composite:
+        if ("/" in s.text and normalize_label(s.text) not in known_composite
+                and _looks_composite(s.text, ix, names0)):
             comp.append(s)
         else:
             plain.append(s)
@@ -171,7 +177,8 @@ def render(rep: Report, ix: FieldIndex, cix: CompositeIndex, top: int) -> tuple[
         L.append(f"| `{st.text}` | {st.count} | {st.file_count} | — | {sc} |{val}")
 
     if comp:
-        L += ["", "## 복합 라벨 후보 (구분자 포함 · rules.yaml 검토)", "",
+        L += ["", f"## ③ 복합 라벨 후보 — {len(comp)}종 (rules.yaml 검토용)", "",
+              "조각 중 하나 이상이 표준 필드로 보이는 것만 실었다. 단위(kg/cm2)는 제외.", "",
               "| 문서 표기 | 건수 | 조각 |", "|---|---:|---|"]
         for s in comp[:top // 2]:
             parts = " · ".join(p.strip() for p in s.text.split("/") if p.strip())
@@ -191,6 +198,20 @@ def render(rep: Report, ix: FieldIndex, cix: CompositeIndex, top: int) -> tuple[
     for st, f, sc in hit[:top] + miss:
         T.append(f"{st.text}\t{st.count}\t{st.file_count}\t{f}\t{sc}\t")
     return "\n".join(L) + "\n", "\n".join(T) + "\n"
+
+
+def _looks_composite(text: str, ix: FieldIndex, names: list[tuple[str, str]]) -> bool:
+    """구분자가 있다고 다 복합 라벨은 아니다. 단위(kg/cm2)와 값을 걸러낸다.
+
+    조각이 둘 이상이고, 각 조각이 알파벳을 충분히 가지며,
+    적어도 한 조각이 표준 필드로 추천되어야 후보로 본다.
+    """
+    parts = [p.strip() for p in text.split("/") if p.strip()]
+    if len(parts) < 2:
+        return False
+    if any(sum(c.isalpha() and c.isascii() for c in p) < MIN_PART_ALPHA for p in parts):
+        return False
+    return any(suggest(p, ix, names)[0] for p in parts)
 
 
 def _field_names(ix: FieldIndex) -> list[str]:

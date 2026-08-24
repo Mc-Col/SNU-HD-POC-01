@@ -75,6 +75,18 @@ composite_labels:
     fields: [null, null]
     note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
 
+  - label: "Body Matl / Bonnet Matl"
+    separator: "/"
+    fields: [valve_body_material, null]
+    note: "Flowserve·Valtek 계열. 뒤 조각(보닛 재질)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Trim # - Cv / Characteristic"
+    separator: "/"
+    fields: [null, characteristic]
+    note: |
+      앞 조각은 "2.62  Cv:116" 형태로 트림번호와 정격 Cv 가 묶여 있다.
+      Cv 필드 이름이 확정되면(RATED CV / RATED CV MAX) pattern 규칙으로 바꿔 앞 조각도 살릴 것.
+
   - label: "Body Model(Type)"
     pattern: '^(?P<model_no>[^(]+)\((?P<valve_body_type>[^)]+)\)$'
     note: "한국어 리트로핏 점검서. 값이 '657-ED(GLOBE)' 형태로 모델과 바디 형상을 묶어 준다"
