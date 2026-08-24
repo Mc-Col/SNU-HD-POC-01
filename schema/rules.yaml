@@ -59,12 +59,99 @@ domain_rules:
     cross_check_note: "ACTUATOR TYPE 추출 대상 외 → 자동 교차검증 불가"
 
 # ── 표기 매핑 ──────────────────────────────────────────────────
-# 같은 값의 다른 표기. 라벨링 중 raw_label 로 수집되는 것을 여기에 누적한다.
-value_aliases: {}
-  # 예:
-  # valve_body_material:
-  #   - from: ["CS", "C.S.", "CARBON STEEL"]
-  #     to: "CARBON STEEL"
+# 같은 값의 다른 표기. **평가 실행에서 실제로 나온 것만 넣는다.**
+# 상상해서 늘리면 문서에 없는 값을 맞다고 판정하게 된다.
+#
+# 2026-08-24 첫 VLM 실행(68%)의 오답 30건 중 13건이 "값은 맞고 표기만 다름"
+# 이었다. 아래는 그때 관측된 표기다. 출처를 seen 에 남긴다.
+value_aliases:
+
+  # 등급 — 단일 필드 최대 실패(7건). ANSI/ASME/CL 접두어가 붙거나 안 붙는다.
+  valve_body_rating:
+    - from: ["ANSI CLASS 150", "ASME CLASS 150", "ASME CL.150", "CL 150",
+             "CLASS 150", "ANSI 150", "ASME 150#", "150 LB", "150LB"]
+      to: "150#"
+    - from: ["ANSI CLASS 300", "ASME CLASS 300", "ASME CL.300", "CL 300",
+             "CLASS 300", "ANSI 300", "ASME 300#", "300 LB", "300LB"]
+      to: "300#"
+      seen: "d005 · d006 ANSI CLASS 300 / d010 ASME 300# / d011 ASME CLASS 300"
+    - from: ["ANSI CLASS 600", "ASME CLASS 600", "ASME CL.600", "CL 600",
+             "CLASS 600", "ANSI 600", "ASME 600#", "600 LB", "600LB"]
+      to: "600#"
+      seen: "d004 ANSI CLASS 600 / d007 ASME CL.600"
+    - from: ["ANSI CLASS 900", "ASME CL.900", "CL 900", "CLASS 900"]
+      to: "900#"
+    - from: ["ANSI CLASS 1500", "ASME CLASS 1500", "ASME CL.1500", "CL 1500",
+             "CLASS 1500", "ANSI 1500"]
+      to: "1500#"
+      seen: "d008 CL 1500"
+    - from: ["ANSI CLASS 2500", "ASME CL.2500", "CL 2500", "CLASS 2500"]
+      to: "2500#"
+
+  # 제조사 — 법인명 접미(Controls · Co.,Ltd. · Inc.)가 붙는다. 짧은 형으로 통일.
+  manufacturer:
+    - from: ["FISHER CONTROLS", "FISHER CONTROLS INTERNATIONAL",
+             "NIPPON FISHER", "NIPPON FISHER CO.,LTD.", "FISHER CO.,LTD."]
+      to: "FISHER"
+      seen: "d001 Fisher Controls"
+    - from: ["METSO AUTOMATION", "METSO KOREA", "METSO KOREA CO., LTD.",
+             "METSO FLOW CONTROL"]
+      to: "METSO"
+    - from: ["VALSTONE CONTROLS, INC.", "VALSTONE CONTROLS",
+             "VALSTONE SERVICE, CO.", "VALSTONE SERVICE CO."]
+      to: "VALSTONE"
+      seen: "d011 VALSTONE CONTROLS, INC."
+    - from: ["UNICON SYSTEM CO.,LTD.", "UNICON SYSTEM", "UNICON SYSTEM CO."]
+      to: "UNICON"
+      seen: "d007 UNICON SYSTEM CO.,LTD."
+    - from: ["FLOWSERVE CORPORATION", "FLOWSERVE KOREA"]
+      to: "FLOWSERVE"
+    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN"]
+      to: "MASONEILAN"
+      seen: "d006 NIIGATA MASONEILAN — 단 이 건의 정답은 FISHER 였다(별칭이 아니라 오독)"
+    - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL"]
+      to: "AZBIL"
+
+  # 누설등급 — 로마자·아라비아가 섞인다. 대조는 eval/compare 가 로마자를
+  # 정규화하지만, 마스터DB 에 넣는 값은 하나여야 한다.
+  valve_leakage_class:
+    - from: ["ANSI CLASS II", "ANSI CLASS 2", "CLASS II", "CLASS 2", "ANSI II"]
+      to: "CLASS II"
+    - from: ["ANSI CLASS III", "ANSI CLASS 3", "CLASS III", "CLASS 3"]
+      to: "CLASS III"
+    - from: ["ANSI CLASS IV", "ANSI CLASS 4", "CLASS IV", "CLASS 4", "ANSI IV"]
+      to: "CLASS IV"
+      seen: "d004 · d006 CLASS 4 / d005 · d007 CLASS IV / d008 Class IV"
+    - from: ["ANSI CLASS V", "ANSI CLASS 5", "CLASS V", "CLASS 5"]
+      to: "CLASS V"
+    - from: ["ANSI CLASS VI", "ANSI CLASS 6", "CLASS VI", "CLASS 6"]
+      to: "CLASS VI"
+
+  # 유량 특성
+  characteristic:
+    - from: ["EQ%", "EQ %", "EQUAL PERCENT", "EQUAL %", "EQUAL PERCENTAGE",
+             "%EQ", "EQUAL-PERCENT"]
+      to: "EQUAL PERCENT"
+      seen: "d001~d003 Equal Percent / d005 · d010 · d011 EQ%"
+    - from: ["MODIFIED PERCENTAGE", "MODIFIED EQUAL PERCENT", "MOD. EQ%",
+             "MODIFIED %"]
+      to: "MODIFIED PERCENTAGE"
+      seen: "d004"
+    - from: ["LINEAR", "LIN."]
+      to: "LINEAR"
+    - from: ["QUICK OPENING", "Q.O.", "QO"]
+      to: "QUICK OPENING"
+
+  # 본체 형상
+  valve_body_type:
+    - from: ["GLOBE", "GLOBE VALVE", "GLOBE (DOUBLE)", "GLOBE(SINGLE)"]
+      to: "GLOBE"
+    - from: ["ANGLE", "ANGLE VALVE"]
+      to: "ANGLE"
+    - from: ["BALL", "BALL VALVE", "SEGMENT BALL"]
+      to: "BALL"
+    - from: ["BUTTERFLY", "BTFY"]
+      to: "BUTTERFLY"
 
 # ── 모델명 → 제조사 ───────────────────────────────────────────
 #

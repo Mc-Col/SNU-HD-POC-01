@@ -167,8 +167,15 @@ class VlmParser:
         page = self._page_of(triage)
         png = self._png(path, page)
         spec = _field_spec(fields)
-        text = (f"이 페이지에서 아래 필드를 판독하라.\n\n■ 필드\n{spec}\n"
-                f"{_maker_table()}")
+        tag = getattr(triage, "file_tag", None) or ""
+        hint = ""
+        if tag:
+            # 다중 태그 페이지에서 이 파일의 자산을 가리는 유일한 근거다
+            hint = ("이 파일의 태그: " + str(tag) + "\n"
+                    "페이지에 태그가 여러 개 적혀 있으면 이 태그만 "
+                    "engineering_tag_no 에 넣는다.\n")
+        text = ("이 페이지에서 아래 필드를 판독하라.\n\n" + hint
+                + "\n■ 필드\n" + spec + "\n" + _maker_table())
         model = models.for_attempt(0).name
         data = self._ask(model, SYSTEM, text, png)
 

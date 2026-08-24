@@ -46,7 +46,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from eval import compare, groups                    # noqa: E402
+from eval import compare, groups, history           # noqa: E402
 from eval.kit import KitRow, locate, read_kit       # noqa: E402
 from src import schema                              # noqa: E402
 
@@ -323,6 +323,18 @@ def make_text_extractor():
     return extract
 
 
+def _file_tag(row) -> str:
+    """프롬프트에 넣을 태그. **문서 표기 그대로** 넘긴다.
+
+    정규화 키(A10FV011)를 주면 문서에 없는 A 를 찾게 만든다.
+    파일명에 태그가 없으면 골든셋 정답을 쓰지 않는다 — 그건 답을
+    알려주는 것이고 측정이 무의미해진다.
+    """
+    from src import preprocess as pre
+    info = pre.parse_filename(row.path or row.file or "")
+    return info.tag_raw or ""
+
+
 def make_vlm_extractor(only_mvp: bool = False):
     """VLM 으로 추출하고 ④ Normalize 까지 적용한다.
 
@@ -346,6 +358,7 @@ def make_vlm_extractor(only_mvp: bool = False):
         page = int(row.spec_page or 1)
         tri = TriageResult(
             source_path=row.path, document_class=DocumentClass.DATASHEET,
+            file_tag=_file_tag(row),
             pages=[PageInfo(page=page, page_class=PageClass.SPEC, selected=True)])
         recs = parser.extract(row.path, tri, fields)
         raws = {r.field_key: r.raw_value for r in recs if r.found}
@@ -372,6 +385,8 @@ def main(argv=None) -> int:
     ap.add_argument("--by", default="fmt", choices=["", "fmt", "vintage", "cls"])
     ap.add_argument("--holdout", default="", help="쉼표로 구분한 문서ID")
     ap.add_argument("--out", default="runs/eval_report.md")
+    ap.add_argument("--note", default="",
+                    help="이 실행에서 무엇을 바꿨는지. 이력 표에 남는다")
     a = ap.parse_args(argv)
 
     rows = read_kit(a.kit)
@@ -411,8 +426,15 @@ def main(argv=None) -> int:
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         f.write(report)
+
+    # 이력에 남긴다 — 덮어쓰이는 리포트만으로는 개선을 측정할 수 없다
+    kept = history.archive(res, report, stage=a.stage,
+                           note=a.note, parser=parser)
+
     print(report)
     print(f"\n저장: {a.out}", file=sys.stderr)
+    print(f"보관: {kept}", file=sys.stderr)
+    print("이력: docs/eval_history.md", file=sys.stderr)
     return 0
 
 
