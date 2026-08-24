@@ -91,6 +91,8 @@ CASES: dict[str, list[str]] = {
     "14FV001-DRAWING_REV0.pdf": [spec_text("2003/03/25")],
     # ⑦ 미지원 포맷 — 예외가 아니라 UNSUPPORTED
     "19PCV005-DATA SHEET_REV0.doc": [],
+    # ⑧ 텍스트 0자 스캔 — 코퍼스의 85.2%. 페이지를 고르지 않는다
+    "10FV002-DATA SHEET_REV0.tif": [],
 }
 
 
@@ -101,6 +103,12 @@ def build(work: str) -> dict[str, str]:
     made: dict[str, str] = {}
     for name, texts in CASES.items():
         path = os.path.join(work, name)
+        if name.lower().endswith(".tif"):                 # 텍스트 0자 스캔본
+            from PIL import Image
+            # 코퍼스 실측과 같은 1비트 이진 이미지 · 150dpi A4 상당
+            Image.new("1", (1240, 1753), color=1).save(path)
+            made[name] = path
+            continue
         if not name.lower().endswith(".pdf"):             # 미지원 포맷은 내용이 필요 없다
             with open(path, "wb") as fp:
                 fp.write(b"not a real document")
@@ -184,7 +192,20 @@ def main() -> int:
         check("반환됨", r.document_class is not None, True)
         check("사유 있음", bool(r.reason.strip()), True)
 
-        print("\n[9] 같은 입력 → 같은 출력 (철학 6)")
+        print("\n[9] 텍스트 0자 스캔 — 페이지를 고르지 않는다 (지시서 91·118행)")
+        r = triage(made["10FV002-DATA SHEET_REV0.tif"], render_dir=render)
+        check("처리 대상으로 통과", r.processable, True)
+        check("분류 = datasheet (파일명 근거)", r.document_class, DocumentClass.DATASHEET)
+        check("사양표라 단정하지 않음", r.stats["spec_pages"], 0)
+        check("선택 없음", r.selected_page, None)
+        check("타깃 없음", r.targets, [])
+        check("선택 표시된 페이지 없음", any(p.selected for p in r.pages), False)
+        check("렌더는 채운다 (VLM 이 볼 이미지)",
+              all(p.render_path for p in r.pages), True)
+        check("확신도 0.5 미만", r.confidence < 0.5, True)
+        check_in("사유에 '고르지 않는다'", "고르지 않는다", r.reason)
+
+        print("\n[10] 같은 입력 → 같은 출력 (철학 6)")
         a = triage(made["10FV011-DATA SHEET_REV1.pdf"], render_dir=os.path.join(work, "r1"))
         b = triage(made["10FV011-DATA SHEET_REV1.pdf"], render_dir=os.path.join(work, "r2"))
         check("분류 동일", a.document_class, b.document_class)

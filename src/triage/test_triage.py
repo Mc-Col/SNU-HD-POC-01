@@ -145,18 +145,29 @@ def test_embedded_when_spec_is_one_of_many(tmp_path):
     assert "비어 있을 수 있음" in result.reason             # 보고서 경고가 함께 남는다
 
 
-def test_no_text_falls_back_to_vlm_judgement(tmp_path):
-    """텍스트가 없으면(스캔) 임의로 사양표라 하지 않고 VLM 판정으로 넘긴다."""
+def test_no_text_does_not_pick_a_page(tmp_path):
+    """텍스트가 없으면(스캔) 페이지를 **고르지 않고** VLM 판정으로 넘긴다.
+
+    이전 구현은 1페이지를 잠정 대상으로 표시했다. 그것이 지시서 91·118행과
+    어긋났고, 실측상 아무것도 살리지 못했다 — 고르지 않아도 하네스는 문서를
+    버리지 않고 VlmParser 가 자기 폴백으로 p1 을 읽어 결과가 같았다.
+    """
     from PIL import Image
     p = tmp_path / "10FV002-DATA SHEET_REV0.tif"
     Image.new("1", (1240, 1753), color=1).save(p)         # 빈 스캔 (텍스트 0)
     result = triage(str(p), render_dir=str(tmp_path / "render"))
 
     assert result.document_class is DocumentClass.DATASHEET      # 파일명 근거로 통과
+    assert result.processable                                    # 하류로 넘어간다
     assert result.stats["spec_pages"] == 0                       # 사양표라 단정하지 않았다
     assert result.pages[0].page_class is PageClass.OTHER         # 판정 보류
     assert result.pages[0].render_path                           # VLM 이 볼 이미지는 있다
+    # ── 핵심: 고르지 않았다 ──
+    assert result.selected_page is None                          # 선택 없음
+    assert result.targets == []                                  # 타깃도 비었다
+    assert not any(pg.selected for pg in result.pages)           # 어느 페이지도 표시 없음
     assert result.confidence < 0.5                               # 근거가 약하다고 표시
+    assert "고르지 않는다" in result.reason                        # 왜 비었는지 남는다
     assert "VLM" in result.reason                                # 누가 판정할지 남긴다
 
 

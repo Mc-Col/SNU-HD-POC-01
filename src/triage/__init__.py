@@ -305,24 +305,33 @@ def triage(path: str, render_dir: str | None = None) -> TriageResult:
             )
 
         # (나) 후보가 0장 = 텍스트 근거 자체가 없다 (스캔 문서 — 코퍼스의 85.2%).
-        #      여기서 고르지 않으면 VLM 주 경로가 죽는다(지시서 55행 "tif 734건
-        #      전부 스캔 → VLM"). 할 일 5(make_montage VLM 이진 판정)가 구현되면
-        #      이 분기 자체가 없어진다 — 그때까지 1페이지를 잠정 대상으로 두고
-        #      확신도를 낮게 준다. **미해결 사항으로 팀 협의 대상이다.**
+        #      여기서도 **고르지 않는다.** 이전 구현은 1페이지를 잠정 대상으로
+        #      표시했는데 그것이 지시서 91·118행과 정면으로 어긋났다.
+        #
+        #      "고르지 않으면 VLM 주 경로가 죽는다" 는 근거는 실측으로 무너졌다.
+        #      10FV011(8페이지 스캔)로 전 구간을 돌려 비교한 결과:
+        #        · document_class 가 datasheet 이라 하네스는 문서를 버리지 않는다
+        #        · Router 도 파서를 붙인다 (parser=vlm)
+        #        · VlmParser 는 자기 폴백(`_page_of` 의 `return 1`)으로 p1 을 읽는다
+        #      값·bbox·상태·엑셀이 모두 동일했고 달라진 것은 selected_page ·
+        #      targets · reason 뿐이었다. 즉 잠정 선택은 아무것도 살리지 못하면서
+        #      "못 찾았다" 를 "골랐다" 로 기록해 근거 없는 판정을 만든다(철학 4).
+        #
+        #      실제로 페이지를 고르려면 할 일 5(make_montage → VLM 이진 판정)가
+        #      필요하다. **미해결 사항으로 팀 협의 대상이다.**
         has_render = stats["rendered_pages"] > 0
         if has_render and info.in_scope is not False:
-            # 파일명이 대상이라고 말하고 렌더도 됐다 — VLM 이 페이지를 판정한다.
-            first = pages[0] if pages else None
-            if first is not None:
-                first.selected = True                    # 1페이지를 잠정 대상으로
-                first.reason = "사양표 미판정 — VLM 이 렌더 이미지로 판정해야 한다"
+            # 파일명이 대상이고 렌더도 됐다 — 처리 대상으로 통과시키되 페이지는
+            # 지정하지 않는다. 계약이 정의한 대로 `selected_page is None` 이
+            # "사양표를 못 찾음" 을 뜻하는 상태로 넘긴다.
             return TriageResult(
                 document_class=DocumentClass.DATASHEET,
-                targets=_targets(first),
+                targets=[],                              # 비워 둔다 — 고르지 않았다
                 confidence=CONFIDENCE_FILENAME_ONLY,
                 pages=pages,
                 reason=" | ".join(reason_parts + [
-                    "텍스트 근거 없음 — 파일명이 대상이고 렌더가 되었으므로 VLM 판정으로 넘긴다"]),
+                    "텍스트 근거 없음 — 페이지를 고르지 않는다. 파일명이 대상이므로 "
+                    "통과시키되 사양표 페이지는 VLM 이 판정해야 한다"]),
                 stats=stats,
                 **base,
             )
