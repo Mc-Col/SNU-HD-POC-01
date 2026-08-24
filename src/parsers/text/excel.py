@@ -13,8 +13,10 @@ from openpyxl.utils import get_column_letter
 
 from src.contracts import ParserType, RawExtraction
 
+from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .field_index import FieldIndex
+from .units import UnitIndex
 
 SCAN_RIGHT = 4          # 라벨 오른쪽으로 몇 칸까지 값을 찾는가
 SCAN_DOWN = 2           # 오른쪽에 없으면 아래로 몇 칸까지
@@ -58,6 +60,7 @@ def parse_excel(
     index: FieldIndex | None = None,
     composite: CompositeIndex | None = None,
     sheets: list[str | int] | None = None,
+    units: UnitIndex | None = None,
 ) -> TextParseResult:
     """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨.
 
@@ -66,6 +69,7 @@ def parse_excel(
     """
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
+    uix = units if units is not None else UnitIndex.load()
     wb = openpyxl.load_workbook(path, data_only=True)
     result = TextParseResult()
     seen: set[str] = set()                      # 먼저 찾은 값이 이긴다
@@ -85,6 +89,20 @@ def parse_excel(
 
         def locator(r: int, c: int) -> str:
             return f"{ws.title}!{get_column_letter(c)}{r}"
+
+        # 공정 조건 Max/Nor/Min 열 머리글 → 그 아래 행에만 Normal 열을 적용한다.
+        # 시트 전체에 걸면 무관한 행이 엉뚱한 열의 값을 집는다.
+        nor_by_row: dict[int, int] = {}
+        cur: int | None = None
+        for row in ws.iter_rows():
+            if not row:
+                continue
+            found = anchor_from([(c.value, c.column) for c in row if c.value is not None])
+            if found is not None:
+                cur = int(found)
+                continue                     # 머리글 행 자체는 값이 없다
+            if cur is not None:
+                nor_by_row[row[0].row] = cur
 
         # 1패스: 표준 컬럼에 붙는 라벨. 2패스: 나머지 라벨 후보(미매핑 수집).
         # 매핑되는 라벨이 값을 먼저 claim 해야 엉뚱한 텍스트가 값을 채가지 않는다.
@@ -113,7 +131,8 @@ def parse_excel(
                     continue
 
                 hit = ix.lookup(label)
-                value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed)
+                value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed,
+                                          uix, nor_by_row.get(r))
                 if value:
                     consumed.add(vpos)
 
@@ -169,12 +188,25 @@ def parse_excel(
 
 
 def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
-                consumed: set[tuple[int, int]] | None = None):
-    """라벨 오른쪽 → 아래 순서로 값 셀을 찾는다. 다른 라벨을 만나면 멈춘다."""
+                consumed: set[tuple[int, int]] | None = None,
+                units: UnitIndex | None = None,
+                nor_col: int | None = None):
+    """라벨 오른쪽 → 아래 순서로 값 셀을 찾는다. 다른 라벨을 만나면 멈춘다.
+
+    Max/Nor/Min 열을 아는 행이면 Normal 열을 먼저 본다 (탐색 폭 밖이어도).
+    """
     taken = consumed or set()
+    uix = units
     rng = span[1] if span else None
     right_from = rng.max_col if rng else c
     down_from = rng.max_row if rng else r
+
+    if nor_col is not None and nor_col > right_from:
+        pos = (r, nor_col)
+        v = _text(cell_value(*pos))
+        if v and pos not in taken and not (uix and uix.is_unit(v)) \
+                and ix.lookup(v) is None:
+            return v, pos
 
     for dc in range(1, SCAN_RIGHT + 1):
         pos = (r, right_from + dc)
@@ -182,6 +214,8 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
             continue
         v = _text(cell_value(*pos))
         if not v:
+            continue
+        if uix is not None and uix.is_unit(v):  # 단위 칸은 건너뛴다
             continue
         if ix.lookup(v) is not None:            # 값이 아니라 다음 라벨이다
             break
@@ -194,8 +228,26 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
         v = _text(cell_value(*pos))
         if not v:
             continue
+        if uix is not None and uix.is_unit(v):
+            continue
         if ix.lookup(v) is not None:
             break
+        if _has_own_value(cell_value, pos, uix, nor_col):
+            break            # 자기 값을 오른쪽에 달고 있으면 그건 다음 행의 라벨이다
         return v, pos
 
     return "", (r, c)
+
+
+def _has_own_value(cell_value, pos: tuple[int, int], uix,
+                   nor_col: int | None = None) -> bool:
+    """이 셀이 오른쪽에 자기 값을 달고 있는가 (= 다음 행의 라벨이다)."""
+    r, c = pos
+    cols = list(range(c + 1, c + 1 + SCAN_RIGHT))
+    if nor_col is not None and nor_col > c:
+        cols.append(nor_col)
+    for cc in cols:
+        v = _text(cell_value(r, cc))
+        if v and not (uix and uix.is_unit(v)):
+            return True
+    return False
