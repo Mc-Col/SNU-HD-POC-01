@@ -16,6 +16,7 @@ import fitz
 
 from src.contracts import ParserType, RawExtraction
 
+from .composite import CompositeIndex, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
 from .field_index import FieldIndex
 
@@ -91,12 +92,14 @@ def parse_pdf_text(
     path: str,
     index: FieldIndex | None = None,
     pages: list[int] | None = None,
+    composite: CompositeIndex | None = None,
 ) -> TextParseResult:
     """텍스트 레이어가 있는 PDF → RawExtraction[] + 미매핑 라벨.
 
     pages 는 1-based. None 이면 전체. Triage 가 사양표 페이지를 지정하면 그것만 본다.
     """
     ix = index or FieldIndex.load()
+    cix = composite if composite is not None else CompositeIndex.load()
     doc = fitz.open(path)
     result = TextParseResult()
     seen: set[str] = set()
@@ -118,6 +121,30 @@ def parse_pdf_text(
 
                 label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor)
                 if label is None:
+                    continue
+
+                loc = f"p{pno}:L{ri}:c{(vidx if value else ci) + 1}"
+
+                split = try_split(cix, ix, label, value)
+                if split is not None:
+                    ok, pending = split
+                    for pc in ok:
+                        if pc.field_key in seen:
+                            continue
+                        seen.add(pc.field_key)
+                        result.records.append(RawExtraction(
+                            field_key=pc.field_key,
+                            raw_value=pc.value,
+                            raw_label=pc.label,
+                            bbox=(vcell.x0, vcell.y0, vcell.x1, vcell.y1),
+                            page=pno,
+                            confidence=pc.confidence,
+                            parser=ParserType.PDF_TEXT,
+                            source_locator=loc,
+                            note=f"복합 라벨 '{label}' 분해",
+                        ))
+                    for pc in pending:
+                        result.unmapped.append(UnmappedLabel(pc.label, loc, pc.value))
                     continue
 
                 hit = ix.lookup(label)

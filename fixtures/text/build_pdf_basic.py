@@ -24,12 +24,14 @@ for y, text in [(40, "Tag : 11-FV-999"),
 
 # ② 사양표 — 좌우 2단
 ROWS = [
-    (100, [(67, "Model No."),      (172, "667-ED")],
-          [(380, "Fail Position"), (448, "Air Fails Valve to Close")]),
+    (100, [(67, "Model No."),   (172, "667-ED")],
+          [(380, "Fail/Air-To"), (448, "Close / Open")]),              # 복합 라벨
     (112, [(67, "Characteristic"), (172, "EQUAL %")],
-          [(380, "Spring Range"),  (448, "0.4 - 2.0 bar")]),          # 미매핑
-    (124, [(67, "Body Size"),      (172, "4 IN")],                     # 유사표현 미등록
-          [(380, "VALVE BODY RATING"), (448, "ANSI CLASS 300")]),
+          [(380, "Spring Range"),  (448, "0.4 - 2.0 bar")]),           # 미매핑
+    (124, [(67, "Body Size"),   (172, "4 IN")],                        # 유사표현 미등록
+          [(330, "Max Shutoff / Shutoff Class"), (480, "120 psi / ANSI IV")]),
+    (172, [(67, "Size/Pressure Class/Body Form"), (250, "4 / 300 / Globe")],
+          []),                                                          # 복합 라벨
 ]
 for y, left, right in ROWS:
     for x, t in left + right:

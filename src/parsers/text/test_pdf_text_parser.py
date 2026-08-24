@@ -55,7 +55,7 @@ def test_콜론_배치를_읽는다(parsed):
 
 def test_좌우_2단_배치를_읽는다(parsed):
     """라벨 x380 · 값 x448 오른쪽 단."""
-    assert parsed.by_key()["actuator_fail_action"].raw_value == "Air Fails Valve to Close"
+    assert parsed.by_key()["valve_leakage_class"].raw_value == "ANSI IV"
 
 
 def test_MaxNorMin_중_Normal_열을_고른다(parsed):
@@ -91,3 +91,25 @@ def test_같은_입력이면_같은_출력이다():
     a, b = parse_pdf_text(FIXTURE), parse_pdf_text(FIXTURE)
     assert [(r.field_key, r.raw_value, r.source_locator) for r in a.records] == \
            [(r.field_key, r.raw_value, r.source_locator) for r in b.records]
+
+
+def test_복합_라벨을_쪼갠다(parsed):
+    """'Size/Pressure Class/Body Form' = '4 / 300 / Globe' → 세 필드로."""
+    by = parsed.by_key()
+    assert (by["valve_body_size"].raw_value, by["valve_body_size"].raw_label) == ("4", "Size")
+    assert (by["valve_body_rating"].raw_value, by["valve_body_rating"].raw_label) == ("300", "Pressure Class")
+    assert all("복합 라벨" in by[k].note for k in ("valve_body_size", "valve_body_rating"))
+
+
+def test_FailAirTo_는_Fail_조각을_쓴다(parsed):
+    """'Fail/Air-To' = 'Close / Open' → Fail 값이 앞 조각."""
+    r = parsed.by_key()["actuator_fail_action"]
+    assert (r.raw_value, r.raw_label) == ("Close", "Fail")
+
+
+def test_대응_필드가_없는_조각은_버린다():
+    """'Design Press./Temp.' 는 규칙에 fields: [null, null] 로 명시돼 있다."""
+    from src.parsers.text.composite import CompositeIndex
+    rule = CompositeIndex.load().lookup("Design Press./Temp.")
+    assert rule is not None
+    assert rule.split("Design Press./Temp.", "27 / 430") == []

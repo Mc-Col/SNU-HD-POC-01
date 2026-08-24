@@ -1,18 +1,121 @@
 {
-  "_설명": "pdf_basic.pdf 를 src/parsers/text 로 파싱했을 때의 기대 출력. build_pdf_basic.py 로 입력을 재생성할 수 있다.",
+  "_설명": "pdf_basic.pdf 기대 출력. build_pdf_basic.py 로 입력을 재생성할 수 있다.",
   "records": [
-    {"field_key": "actuator_fail_action", "raw_value": "Air Fails Valve to Close", "raw_label": "Fail Position", "source_locator": "p1:L4:c4", "page": 1, "confidence": 0.95, "note": ""},
-    {"field_key": "characteristic", "raw_value": "EQUAL %", "raw_label": "Characteristic", "source_locator": "p1:L5:c2", "page": 1, "confidence": 0.95, "note": ""},
-    {"field_key": "engineering_tag_no", "raw_value": "11-FV-999", "raw_label": "Tag", "source_locator": "p1:L1:c1", "page": 1, "confidence": 0.95, "note": ""},
-    {"field_key": "equipment_full_description", "raw_value": "RECYCLE TO DHC FEED FILTERS", "raw_label": "Application", "source_locator": "p1:L3:c1", "page": 1, "confidence": 0.95, "note": ""},
-    {"field_key": "fluid_name", "raw_value": null, "raw_label": "Fluid Name", "source_locator": "p1:L9:c1", "page": 1, "confidence": 0.0, "note": "라벨은 찾았으나 값이 비어 있음"},
-    {"field_key": "manufacturer", "raw_value": "FISHER", "raw_label": "Manufacturer", "source_locator": "p1:L2:c1", "page": 1, "confidence": 1.0, "note": ""},
-    {"field_key": "model_no", "raw_value": "667-ED", "raw_label": "Model No.", "source_locator": "p1:L4:c2", "page": 1, "confidence": 1.0, "note": ""},
-    {"field_key": "valve_body_rating", "raw_value": "ANSI CLASS 300", "raw_label": "VALVE BODY RATING", "source_locator": "p1:L6:c4", "page": 1, "confidence": 1.0, "note": ""},
-    {"field_key": "viscosity", "raw_value": "0.72", "raw_label": "Viscosity", "source_locator": "p1:L8:c3", "page": 1, "confidence": 1.0, "note": "Max/Nor/Min 중 Normal 열 선택"}
+    {
+      "field_key": "actuator_fail_action",
+      "raw_value": "Close",
+      "raw_label": "Fail",
+      "source_locator": "p1:L4:c4",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Fail/Air-To' 분해"
+    },
+    {
+      "field_key": "characteristic",
+      "raw_value": "EQUAL %",
+      "raw_label": "Characteristic",
+      "source_locator": "p1:L5:c2",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "engineering_tag_no",
+      "raw_value": "11-FV-999",
+      "raw_label": "Tag",
+      "source_locator": "p1:L1:c1",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "equipment_full_description",
+      "raw_value": "RECYCLE TO DHC FEED FILTERS",
+      "raw_label": "Application",
+      "source_locator": "p1:L3:c1",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "fluid_name",
+      "raw_value": null,
+      "raw_label": "Fluid Name",
+      "source_locator": "p1:L9:c1",
+      "page": 1,
+      "confidence": 0.0,
+      "note": "라벨은 찾았으나 값이 비어 있음"
+    },
+    {
+      "field_key": "manufacturer",
+      "raw_value": "FISHER",
+      "raw_label": "Manufacturer",
+      "source_locator": "p1:L2:c1",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "model_no",
+      "raw_value": "667-ED",
+      "raw_label": "Model No.",
+      "source_locator": "p1:L4:c2",
+      "page": 1,
+      "confidence": 1.0,
+      "note": ""
+    },
+    {
+      "field_key": "valve_body_rating",
+      "raw_value": "300",
+      "raw_label": "Pressure Class",
+      "source_locator": "p1:L10:c2",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
+    },
+    {
+      "field_key": "valve_body_size",
+      "raw_value": "4",
+      "raw_label": "Size",
+      "source_locator": "p1:L10:c2",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
+    },
+    {
+      "field_key": "valve_leakage_class",
+      "raw_value": "ANSI IV",
+      "raw_label": "Shutoff Class",
+      "source_locator": "p1:L6:c4",
+      "page": 1,
+      "confidence": 0.95,
+      "note": "복합 라벨 'Max Shutoff / Shutoff Class' 분해"
+    },
+    {
+      "field_key": "viscosity",
+      "raw_value": "0.72",
+      "raw_label": "Viscosity",
+      "source_locator": "p1:L8:c3",
+      "page": 1,
+      "confidence": 1.0,
+      "note": "Max/Nor/Min 중 Normal 열 선택"
+    }
   ],
   "unmapped": [
-    {"text": "Spring Range", "source_locator": "p1:L5:c3", "neighbor_value": "0.4 - 2.0 bar"},
-    {"text": "Body Size", "source_locator": "p1:L6:c1", "neighbor_value": "4 IN"}
+    {
+      "text": "Body Form",
+      "source_locator": "p1:L10:c2",
+      "neighbor_value": "Globe"
+    },
+    {
+      "text": "Spring Range",
+      "source_locator": "p1:L5:c3",
+      "neighbor_value": "0.4 - 2.0 bar"
+    },
+    {
+      "text": "Body Size",
+      "source_locator": "p1:L6:c1",
+      "neighbor_value": "4 IN"
+    }
   ]
 }

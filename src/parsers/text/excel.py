@@ -13,6 +13,7 @@ from openpyxl.utils import get_column_letter
 
 from src.contracts import ParserType, RawExtraction
 
+from .composite import CompositeIndex, try_split
 from .field_index import FieldIndex
 
 SCAN_RIGHT = 4          # 라벨 오른쪽으로 몇 칸까지 값을 찾는가
@@ -52,9 +53,14 @@ def _text(v: object) -> str:
     return "" if v is None else str(v).strip()
 
 
-def parse_excel(path: str, index: FieldIndex | None = None) -> TextParseResult:
+def parse_excel(
+    path: str,
+    index: FieldIndex | None = None,
+    composite: CompositeIndex | None = None,
+) -> TextParseResult:
     """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨."""
     ix = index or FieldIndex.load()
+    cix = composite if composite is not None else CompositeIndex.load()
     wb = openpyxl.load_workbook(path, data_only=True)
     result = TextParseResult()
     seen: set[str] = set()                      # 먼저 찾은 값이 이긴다
@@ -95,6 +101,29 @@ def parse_excel(path: str, index: FieldIndex | None = None) -> TextParseResult:
                 value, vpos = _find_value(cell_value, ix, merged, r, c, span)
                 if value:
                     consumed.add(vpos)
+
+                # 라벨 하나가 여러 필드를 덮는 칸이면 쪼갠다
+                split = try_split(cix, ix, label, value)
+                if split is not None:
+                    ok, pending = split
+                    for pc in ok:
+                        if pc.field_key in seen:
+                            continue
+                        seen.add(pc.field_key)
+                        result.records.append(RawExtraction(
+                            field_key=pc.field_key,
+                            raw_value=pc.value,
+                            raw_label=pc.label,
+                            page=page,
+                            confidence=pc.confidence,
+                            parser=ParserType.EXCEL,
+                            source_locator=locator(*vpos),
+                            note=f"복합 라벨 '{label}' 분해",
+                        ))
+                    for pc in pending:
+                        result.unmapped.append(UnmappedLabel(
+                            pc.label, locator(*vpos), pc.value))
+                    continue
 
                 if hit is None:
                     if value:

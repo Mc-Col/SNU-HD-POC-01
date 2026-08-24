@@ -60,6 +60,7 @@ def test_기대출력과_정확히_일치한다(parsed, expected):
             "source_locator": r.source_locator,
             "page": r.page,
             "confidence": r.confidence,
+            "note": r.note,
         }
         for r in parsed.records
     ]
@@ -105,3 +106,22 @@ def test_같은_입력이면_같은_출력이다():
     a, b = parse_excel(FIXTURE), parse_excel(FIXTURE)
     assert [r.field_key for r in a.records] == [r.field_key for r in b.records]
     assert [r.source_locator for r in a.records] == [r.source_locator for r in b.records]
+
+
+def test_복합_라벨을_쪼갠다(parsed):
+    """'Body Model(Type)' = '657-ED(GLOBE)' → 모델과 바디 형상."""
+    r = parsed.by_key()["model_no"]
+    assert r.raw_value == "657-ED"
+    assert "복합 라벨" in r.note
+
+
+def test_구분자형_복합_라벨도_쪼갠다(parsed):
+    r = parsed.by_key()["valve_leakage_class"]
+    assert r.raw_value == "ANSI IV"          # "120 psi / ANSI IV" 의 뒤 조각
+    assert r.raw_label == "Shutoff Class"
+
+
+def test_스키마에_없는_조각은_버리지_않고_미매핑으로_남긴다(parsed):
+    """valve_body_type 은 아직 스키마에 없다 (이종수 책임 추가 예정)."""
+    pending = [u for u in parsed.unmapped if u.neighbor_value == "GLOBE"]
+    assert pending and "valve_body_type" in pending[0].text

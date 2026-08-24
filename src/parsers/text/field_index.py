@@ -75,5 +75,9 @@ class FieldIndex:
     def lookup(self, label: object) -> FieldHit | None:
         return self._by_label.get(normalize_label(label))
 
+    def keys(self) -> set[str]:
+        """스키마에 존재하는 field key 집합."""
+        return {h.key for h in self._by_label.values()}
+
     def __len__(self) -> int:
         return len(self._by_label)

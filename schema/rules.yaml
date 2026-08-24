@@ -33,6 +33,52 @@ value_aliases: {}
   #   - from: ["CS", "C.S.", "CARBON STEEL"]
   #     to: "CARBON STEEL"
 
+# ── 복합 라벨 분해 ─────────────────────────────────────────────
+# 라벨 하나가 표준 필드 여러 개를 덮는 칸. 벤더 양식에서 흔하다.
+# 1:1 유사표현 사전으로는 풀 수 없어 별도 규칙으로 쪼갠다.
+#
+# 형식 두 가지
+#   separator : 라벨과 값을 같은 구분자로 쪼개 순서대로 짝짓는다.
+#               fields 의 null 은 "대응 표준 필드 없음 → 버림".
+#               조각 수가 fields 수와 다르면 쪼개지 않고 미매핑으로 남긴다.
+#   pattern   : 값에 정규식을 걸고 named group 이름을 field key 로 쓴다.
+#
+# 스키마에 아직 없는 field key 를 적어도 된다. 그 조각은 미매핑으로 남고,
+# 필드가 추가되는 순간 규칙 수정 없이 자동으로 붙는다.
+composite_labels:
+
+  - label: "Size/Pressure Class/Body Form"
+    separator: "/"
+    fields: [valve_body_size, valve_body_rating, valve_body_type]
+    note: "Fisher·Samwoo 계열 텍스트 PDF"
+
+  - label: "Model / Body Type / Trim Type"
+    separator: "/"
+    fields: [model_no, valve_body_type, characteristic]
+    note: "Trim Type → CHARACTERISTIC (TRIM FORM) 대응 확인 필요"
+
+  - label: "Max Shutoff / Shutoff Class"
+    separator: "/"
+    fields: [null, valve_leakage_class]
+    note: "앞 조각(최대 차압)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Fail/Air-To"
+    separator: "/"
+    fields: [actuator_fail_action, null]
+    note: |
+      Fail 표기와 Air-To 표기를 한 칸에 같이 준다. 예) "Close / Open"
+      앞 조각이 Fail 값이므로 그대로 쓴다. 뒤 조각은 역전 규칙 교차검증에 쓸 수 있다.
+      (Fail=Close 이면 Air-To=Open 이어야 정합)
+
+  - label: "Design Press./Temp."
+    separator: "/"
+    fields: [null, null]
+    note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
+
+  - label: "Body Model(Type)"
+    pattern: '^(?P<model_no>[^(]+)\((?P<valve_body_type>[^)]+)\)$'
+    note: "한국어 리트로핏 점검서. 값이 '657-ED(GLOBE)' 형태로 모델과 바디 형상을 묶어 준다"
+
 # ── To-be (MVP 범위 외) ───────────────────────────────────────
 unit_conversion:
   enabled: false
