@@ -84,26 +84,38 @@ DOC_KINDS: list[tuple[str, str, bool]] = [
 
 # ── 태그 규칙 ────────────────────────────────────────────────────
 #
-#  [Area][Unit]-[Type]-[Number][Suffix]      예: A10-FV-001, B10-PV-1631A
+#  공식 명명 규칙 (2026-08-24 이종수 책임 확인)
 #
-#  Area 는 맨 앞 알파벳 한 자다. **없으면 A 가 생략된 것이다** — 1공장이
-#  최초 공장이라 지을 때는 공장 구분이 필요 없었고, 2공장이 생기면서 B 를
-#  붙이기 시작했다(2026-08-24 이종수 책임 확인). 즉 `10-FV-012` 의 정식
-#  표기는 `A10-FV-012` 다.
+#      Area - 설비종류 - 일련번호        A10-FV-001 · B10-PV-1631A
+#      └ 문자+숫자      └ FV·PV·LV…   └ 숫자(+접미 A/B)
 #
-#  그래서 비교용 정규화 키에는 Area 를 **항상** 넣는다. 넣지 않으면
+#  Area 는 **문자와 숫자를 합친 것**이다(A10, B19). 문자는 공장이고,
+#  **없으면 A 가 생략된 것이다** — 1공장이 최초 공장이라 지을 때는 공장
+#  구분이 필요 없었고, 2공장이 생기면서 B 를 붙이기 시작했다. 즉
+#  `10-FV-012` 의 정식 표기는 `A10-FV-012` 다.
+#
+#  그래서 비교용 정규화 키에는 공장 문자를 **항상** 넣는다. 넣지 않으면
 #  `10-FV-012`(A구역)와 `B10-FV-012`(B구역)가 같은 값이 되어 서로 다른
 #  설비가 충돌한다. 현재 코퍼스에서는 충돌 0건이지만 30만 태그에서는 터진다.
 #
 #  ⚠️ 화면·엑셀에 내보내는 값은 문서에 적힌 그대로 쓴다(`tag_raw`).
 #     정규화 키는 대조에만 쓴다 — 문서에 없는 A 를 값으로 만들지 않는다(철학 4).
 #
-#  Type 은 2~4자만 인정한다(FV·PV·LV·PCV·PDV…). 1자를 허용하면 액추에이터
-#  스프링 번호 `1E7924` 같은 것이 태그로 잡힌다. 실측상 1자 타입은 1,059건
-#  중 1건(`B19V10`, 문서 내 태그는 그냥 `V10`)뿐이고 그 파일은 내용이
-#  정비 체크시트여서 내용 판정으로 보내는 편이 맞다.
+#  설비종류는 2~4자만 인정한다(FV·PV·LV·PCV·PDV…). 1자를 허용하면
+#  액추에이터 스프링 번호 `1E7924` 같은 것이 태그로 잡힌다.
+#
+#  ── 알려진 예외: B19 구역 ────────────────────────────────────────
+#  2공장(B)은 미국에서 설비를 그대로 들여왔다. 그래서 자체 명명 규칙이
+#  아니라 원래 공장의 태그를 그대로 쓴다. 도면 호환 때문에 이름을 바꿀 수
+#  없어 Area 표시만 앞에 붙였다 — `B19V10` 은 B19 구역의 `V10` 설비다
+#  (문서 안 태그도 그냥 `V10`).
+#
+#  실측 2건(`B19V1`, `B19V10`)뿐이고 사용자가 예외로 빼도 된다고 확인했다.
+#  규칙을 느슨하게 풀어 이것을 잡으려 하지 않는다 — 1자 설비종류를 허용하는
+#  순간 `1E7974` 류가 대량으로 태그가 된다. 잃는 것은 **파일명 태그 하나**
+#  뿐이고 파일은 그대로 처리된다(`in_scope=True`). 태그는 문서에서 읽는다.
 
-DEFAULT_AREA = "A"
+DEFAULT_PLANT = "A"
 
 TAG_RE = re.compile(
     r"\b([A-Z])?\s*-?\s*(\d{1,3})\s*-?\s*([A-Z]{2,4})\s*-?\s*(\d{2,4})\s*-?\s*([A-Z]{0,2})\b")
@@ -112,18 +124,27 @@ REV_RE = re.compile(r"_?REV\.?\s*(\d+)", re.I)
 
 @dataclass
 class TagParts:
-    """태그를 규칙대로 쪼갠 것. `key` 가 비교용 정규화 값이다."""
-    area: str = DEFAULT_AREA
-    unit: str = ""
-    kind: str = ""
-    number: str = ""
-    suffix: str = ""
+    """태그를 규칙대로 쪼갠 것. `key` 가 비교용 정규화 값이다.
+
+    공식 규칙의 `Area` 는 `plant + unit` 이다(B + 19 = B19). 대조할 때
+    공장만 또는 호기만 비교하는 일이 있어 따로 들고 있다.
+    """
+    plant: str = DEFAULT_PLANT      # 공장 — A(1공장) / B(2공장)
+    unit: str = ""                  # 호기 — 10, 19 …
+    kind: str = ""                  # 설비종류 — FV, PV, PCV …
+    number: str = ""                # 일련번호
+    suffix: str = ""                # 접미 — A, B …
     raw: str = ""                   # 원문에 적힌 그대로
-    implicit_area: bool = False     # 원문에 Area 문자가 없어 A 로 채웠는가
+    implicit_plant: bool = False    # 원문에 공장 문자가 없어 A 로 채웠는가
+
+    @property
+    def area(self) -> str:
+        """공식 규칙의 Area (A10, B19)."""
+        return f"{self.plant}{self.unit}"
 
     @property
     def key(self) -> str:
-        return f"{self.area}{self.unit}{self.kind}{self.number}{self.suffix}"
+        return f"{self.area}{self.kind}{self.number}{self.suffix}"
 
     def __bool__(self) -> bool:
         return bool(self.unit and self.kind and self.number)
@@ -147,7 +168,12 @@ class FileNameInfo:
 
     @property
     def area(self) -> str:
-        return self.tag_parts.area if self.tag_parts else DEFAULT_AREA
+        """공식 규칙의 Area (A10, B19). 태그가 없으면 빈 문자열."""
+        return self.tag_parts.area if self.tag_parts else ""
+
+    @property
+    def plant(self) -> str:
+        return self.tag_parts.plant if self.tag_parts else ""
 
 
 def parse_tag(s: str | None) -> TagParts | None:
@@ -157,10 +183,10 @@ def parse_tag(s: str | None) -> TagParts | None:
     m = TAG_RE.search(unicodedata.normalize("NFKC", str(s)).upper())
     if not m:
         return None
-    area, unit, kind, num, suf = m.groups()
-    return TagParts(area=area or DEFAULT_AREA, unit=str(int(unit)), kind=kind,
+    plant, unit, kind, num, suf = m.groups()
+    return TagParts(plant=plant or DEFAULT_PLANT, unit=str(int(unit)), kind=kind,
                     number=num, suffix=suf or "", raw=m.group(0).strip(),
-                    implicit_area=not area)
+                    implicit_plant=not plant)
 
 
 def normalize_tag(s: str | None) -> str | None:
@@ -201,20 +227,20 @@ def find_tags(text: str) -> list[str]:
     for m in TAG_RE.finditer(up):
         if m.start() < pos:          # 나열로 이미 소비한 구간
             continue
-        area, unit, kind, num, suf = m.groups()
-        area = area or DEFAULT_AREA
-        add(f"{area}{int(unit)}{kind}{num}{suf or ''}")
+        plant, unit, kind, num, suf = m.groups()
+        area = f"{plant or DEFAULT_PLANT}{int(unit)}"
+        add(f"{area}{kind}{num}{suf or ''}")
 
-        # 같은 area·unit·kind 를 공유하는 나열을 이어서 읽는다
+        # 같은 Area·설비종류를 공유하는 나열을 이어서 읽는다
         pos = m.end()
         while True:
             r = _RUN_NUM.match(up, pos)
             if r and len(r.group(1)) == len(num):
-                add(f"{area}{int(unit)}{kind}{r.group(1)}{r.group(2)}")
+                add(f"{area}{kind}{r.group(1)}{r.group(2)}")
                 pos = r.end(); continue
             r = _RUN_SUF.match(up, pos)
             if r and suf:            # 접미만 바뀌는 나열 (481A / B)
-                add(f"{area}{int(unit)}{kind}{num}{r.group(1)}")
+                add(f"{area}{kind}{num}{r.group(1)}")
                 pos = r.end(); continue
             break
     return out
