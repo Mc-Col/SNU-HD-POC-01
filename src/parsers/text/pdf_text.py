@@ -16,24 +16,17 @@ import fitz
 
 from src.contracts import ParserType, RawExtraction
 
+from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
 from .field_index import FieldIndex
+from .units import UnitIndex
 
 Y_TOL = 3.0                 # 이 이내면 같은 행으로 본다
 MAX_VALUE_CELLS = 6         # 한 행에서 값 후보를 몇 개까지 볼 것인가
 COLUMN_TOL = 24.0           # 열 머리글과 값의 x 오차 허용
 
-# 공정 조건은 Max / Nor / Min / Design 여러 열로 적힌다.
-# 표준은 Normal 값을 쓴다 (2026-08-24 이종수 책임 확정).
-# 열 머리글 표기가 늘어나면 schema/rules.yaml 로 옮긴다.
-COLUMN_HEADERS = {
-    "MAX": "max", "MAXIMUM": "max",
-    "NOR": "normal", "NORM": "normal", "NORMAL": "normal",
-    "MIN": "min", "MINIMUM": "min",
-    "DESIGN": "design", "DES": "design",
-}
-PREFERRED_COLUMN = "normal"
+
 
 _COLON = re.compile(r"\s*[:：]\s*")
 
@@ -78,14 +71,7 @@ def _rows(page) -> list[list[_Cell]]:
 
 def _column_anchor(row: list[_Cell]) -> float | None:
     """Max/Nor/Min 열 머리글 행이면 Normal 열의 x 좌표를 돌려준다."""
-    hits = {}
-    for c in row:
-        kind = COLUMN_HEADERS.get(c.text.strip().upper().rstrip("."))
-        if kind and kind not in hits:
-            hits[kind] = c.x0
-    if len(hits) < 2:                       # 두 개 이상 있어야 열 머리글로 본다
-        return None
-    return hits.get(PREFERRED_COLUMN)
+    return anchor_from([(c.text, c.x0) for c in row])
 
 
 def parse_pdf_text(
@@ -93,6 +79,7 @@ def parse_pdf_text(
     index: FieldIndex | None = None,
     pages: list[int] | None = None,
     composite: CompositeIndex | None = None,
+    units: UnitIndex | None = None,
 ) -> TextParseResult:
     """텍스트 레이어가 있는 PDF → RawExtraction[] + 미매핑 라벨.
 
@@ -100,6 +87,7 @@ def parse_pdf_text(
     """
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
+    uix = units if units is not None else UnitIndex.load()
     doc = fitz.open(path)
     result = TextParseResult()
     seen: set[str] = set()
@@ -119,7 +107,7 @@ def parse_pdf_text(
                 if ci in consumed:
                     continue
 
-                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor)
+                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor, uix)
                 if label is None:
                     continue
 
@@ -183,7 +171,8 @@ def parse_pdf_text(
 
 
 def _split(cell: _Cell, row: list[_Cell], ci: int, ix: FieldIndex,
-           consumed: set[int], anchor: float | None = None):
+           consumed: set[int], anchor: float | None = None,
+           units: UnitIndex | None = None):
     """셀 하나에서 (라벨, 값, 값셀, 값인덱스) 를 뽑는다."""
     # ① "Label : Value" — 한 덩어리 안에 콜론
     if _COLON.search(cell.text):
@@ -194,7 +183,7 @@ def _split(cell: _Cell, row: list[_Cell], ci: int, ix: FieldIndex,
             if right and _has_alnum(right):
                 return left, right, cell, ci
             # 콜론 뒤가 비었으면 오른쪽 셀에서 찾는다
-            v, vc, vi = _right_value(row, ci, ix, consumed, anchor)
+            v, vc, vi = _right_value(row, ci, ix, consumed, anchor, units)
             return left, v, vc or cell, vi if vc else ci
         return None, "", cell, ci
 
@@ -202,17 +191,19 @@ def _split(cell: _Cell, row: list[_Cell], ci: int, ix: FieldIndex,
     t = cell.text
     if not t or len(t) > MAX_LABEL_LEN or not any(c.isalpha() for c in t):
         return None, "", cell, ci
-    v, vc, vi = _right_value(row, ci, ix, consumed, anchor)
+    v, vc, vi = _right_value(row, ci, ix, consumed, anchor, units)
     return t, v, vc or cell, vi if vc else ci
 
 
 def _right_value(row: list[_Cell], ci: int, ix: FieldIndex, consumed: set[int],
-                 anchor: float | None = None):
+                 anchor: float | None = None, units: UnitIndex | None = None):
     """같은 행 오른쪽 값. Normal 열을 알면 그 열을 우선한다."""
     cands: list[tuple[int, _Cell]] = []
     for j in range(ci + 1, min(len(row), ci + 1 + MAX_VALUE_CELLS)):
         t = row[j].text.strip()
         if not t or not _has_alnum(t):
+            continue
+        if units is not None and units.is_unit(t):   # 단위 칸은 건너뛴다
             continue
         if ix.lookup(t) is not None:            # 값이 아니라 다음 라벨
             break
