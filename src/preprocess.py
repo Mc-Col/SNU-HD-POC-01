@@ -82,9 +82,51 @@ DOC_KINDS: list[tuple[str, str, bool]] = [
 #   30PV003_REV0.tif             9페이지 스캔, 태그만 있는 이름
 # 이름을 더 짜맞추지 않는다 — 내용 판정(격자 → VLM)으로 보낸다. 2.5% 다.
 
-# 태그 — 파일명은 10FV012, 문서는 10-FV-012 처럼 쓰인다.
-TAG_RE = re.compile(r"(\d{1,3})\s*-?\s*([A-Z]{1,4})\s*-?\s*(\d{2,4})\s*-?\s*([A-Z]{0,2})")
+# ── 태그 규칙 ────────────────────────────────────────────────────
+#
+#  [Area][Unit]-[Type]-[Number][Suffix]      예: A10-FV-001, B10-PV-1631A
+#
+#  Area 는 맨 앞 알파벳 한 자다. **없으면 A 가 생략된 것이다** — 1공장이
+#  최초 공장이라 지을 때는 공장 구분이 필요 없었고, 2공장이 생기면서 B 를
+#  붙이기 시작했다(2026-08-24 이종수 책임 확인). 즉 `10-FV-012` 의 정식
+#  표기는 `A10-FV-012` 다.
+#
+#  그래서 비교용 정규화 키에는 Area 를 **항상** 넣는다. 넣지 않으면
+#  `10-FV-012`(A구역)와 `B10-FV-012`(B구역)가 같은 값이 되어 서로 다른
+#  설비가 충돌한다. 현재 코퍼스에서는 충돌 0건이지만 30만 태그에서는 터진다.
+#
+#  ⚠️ 화면·엑셀에 내보내는 값은 문서에 적힌 그대로 쓴다(`tag_raw`).
+#     정규화 키는 대조에만 쓴다 — 문서에 없는 A 를 값으로 만들지 않는다(철학 4).
+#
+#  Type 은 2~4자만 인정한다(FV·PV·LV·PCV·PDV…). 1자를 허용하면 액추에이터
+#  스프링 번호 `1E7924` 같은 것이 태그로 잡힌다. 실측상 1자 타입은 1,059건
+#  중 1건(`B19V10`, 문서 내 태그는 그냥 `V10`)뿐이고 그 파일은 내용이
+#  정비 체크시트여서 내용 판정으로 보내는 편이 맞다.
+
+DEFAULT_AREA = "A"
+
+TAG_RE = re.compile(
+    r"\b([A-Z])?\s*-?\s*(\d{1,3})\s*-?\s*([A-Z]{2,4})\s*-?\s*(\d{2,4})\s*-?\s*([A-Z]{0,2})\b")
 REV_RE = re.compile(r"_?REV\.?\s*(\d+)", re.I)
+
+
+@dataclass
+class TagParts:
+    """태그를 규칙대로 쪼갠 것. `key` 가 비교용 정규화 값이다."""
+    area: str = DEFAULT_AREA
+    unit: str = ""
+    kind: str = ""
+    number: str = ""
+    suffix: str = ""
+    raw: str = ""                   # 원문에 적힌 그대로
+    implicit_area: bool = False     # 원문에 Area 문자가 없어 A 로 채웠는가
+
+    @property
+    def key(self) -> str:
+        return f"{self.area}{self.unit}{self.kind}{self.number}{self.suffix}"
+
+    def __bool__(self) -> bool:
+        return bool(self.unit and self.kind and self.number)
 
 
 @dataclass
@@ -92,8 +134,9 @@ class FileNameInfo:
     path: str
     stem: str
     ext: str
-    tag: str | None = None          # 정규화된 태그 (10FV012)
-    tag_raw: str | None = None      # 파일명에 있던 그대로
+    tag: str | None = None          # 정규화 키 (A10FV012) — 대조용
+    tag_raw: str | None = None      # 파일명에 있던 그대로 (10FV012) — 표시용
+    tag_parts: TagParts | None = None
     doc_kind: str = ""              # 표시명
     in_scope: bool | None = None    # True 대상 / False 제외 / None 판단 불가
     rev: str = ""
@@ -102,31 +145,78 @@ class FileNameInfo:
     def supported_ext(self) -> bool:
         return self.ext in SUPPORTED
 
+    @property
+    def area(self) -> str:
+        return self.tag_parts.area if self.tag_parts else DEFAULT_AREA
 
-def normalize_tag(s: str | None) -> str | None:
-    """10-FV-012 · 10FV012 · 10 FV 012 를 같은 값으로 만든다.
 
-    파일명 태그와 문서 안 태그를 비교하려면 이 정규화가 필수다.
-    """
+def parse_tag(s: str | None) -> TagParts | None:
+    """문자열에서 태그 하나를 규칙대로 쪼갠다. 못 찾으면 None."""
     if not s:
         return None
     m = TAG_RE.search(unicodedata.normalize("NFKC", str(s)).upper())
     if not m:
         return None
-    unit, kind, num, suf = m.groups()
-    return f"{int(unit)}{kind}{num}{suf}"
+    area, unit, kind, num, suf = m.groups()
+    return TagParts(area=area or DEFAULT_AREA, unit=str(int(unit)), kind=kind,
+                    number=num, suffix=suf or "", raw=m.group(0).strip(),
+                    implicit_area=not area)
+
+
+def normalize_tag(s: str | None) -> str | None:
+    """비교용 정규화 키. Area 를 항상 포함한다.
+
+        10-FV-012 · 10FV012 · 10 FV 012 · A10-FV-012  →  A10FV012
+        B10-PV-1631A                                  →  B10PV1631A
+
+    파일명 태그와 문서 안 태그를 대조하려면 이 정규화가 필수다.
+    내보내는 값에는 쓰지 않는다 — `TagParts.raw` 를 쓴다.
+    """
+    t = parse_tag(s)
+    return t.key if t else None
+
+
+# 태그를 나열할 때 뒤쪽은 번호만 적는다 — `10-FV-011 / 012 / 013 / 014`.
+# 다중 설비 사양표의 태그 대조가 정확히 이 형태이므로 반드시 펼쳐야 한다.
+# 자리수가 같은 번호만 인정한다 — `10-FV-011 / 2003`(날짜)을 태그로 잡지 않기 위해.
+_RUN_NUM = re.compile(r"\s*[/,]\s*(\d{2,4})\s*([A-Z]{0,2})(?![A-Z0-9])")
+_RUN_SUF = re.compile(r"\s*[/,]\s*([A-Z]{1,2})(?![A-Z0-9])")
 
 
 def find_tags(text: str) -> list[str]:
-    """텍스트에서 태그를 모두 뽑는다. 순서 유지, 중복 제거."""
+    """텍스트에서 태그를 모두 뽑는다(정규화 키). 순서 유지, 중복 제거.
+
+    나열 표기를 펼친다:
+        10-FV-011 / 012 / 013 / 014  →  A10FV011 A10FV012 A10FV013 A10FV014
+        B10-TV-481A / B              →  B10TV481A B10TV481B
+    """
+    up = unicodedata.normalize("NFKC", str(text)).upper()
     out, seen = [], set()
-    for m in TAG_RE.finditer(unicodedata.normalize("NFKC", str(text)).upper()):
-        unit, kind, num, suf = m.groups()
-        if not kind or len(num) < 2:
-            continue
-        t = f"{int(unit)}{kind}{num}{suf}"
+
+    def add(t: str) -> None:
         if t not in seen:
             seen.add(t); out.append(t)
+
+    pos = 0
+    for m in TAG_RE.finditer(up):
+        if m.start() < pos:          # 나열로 이미 소비한 구간
+            continue
+        area, unit, kind, num, suf = m.groups()
+        area = area or DEFAULT_AREA
+        add(f"{area}{int(unit)}{kind}{num}{suf or ''}")
+
+        # 같은 area·unit·kind 를 공유하는 나열을 이어서 읽는다
+        pos = m.end()
+        while True:
+            r = _RUN_NUM.match(up, pos)
+            if r and len(r.group(1)) == len(num):
+                add(f"{area}{int(unit)}{kind}{r.group(1)}{r.group(2)}")
+                pos = r.end(); continue
+            r = _RUN_SUF.match(up, pos)
+            if r and suf:            # 접미만 바뀌는 나열 (481A / B)
+                add(f"{area}{int(unit)}{kind}{num}{r.group(1)}")
+                pos = r.end(); continue
+            break
     return out
 
 
@@ -143,12 +233,14 @@ def parse_filename(path: str) -> FileNameInfo:
             info.doc_kind, info.in_scope = name, scope
             break
 
-    # 태그는 파일명 앞부분에서 찾는다 (10FV012-DATA SHEET_REV1)
+    # 태그는 파일명 앞부분에서 찾는다 (10FV012-DATA SHEET_REV1).
+    # 앞부분에 없으면 전체에서 찾되, 문서종류 단어에 걸린 것은 버린다.
     head = re.split(r"[-_]", stem, maxsplit=1)[0]
-    info.tag = normalize_tag(head) or normalize_tag(stem)
-    if info.tag:
-        m = TAG_RE.search(unicodedata.normalize("NFKC", stem).upper())
-        info.tag_raw = m.group(0).strip() if m else None
+    parts = parse_tag(head) or parse_tag(stem)
+    if parts:
+        info.tag_parts = parts
+        info.tag = parts.key
+        info.tag_raw = parts.raw
 
     m = REV_RE.search(stem)
     if m:

@@ -65,30 +65,30 @@ check("GOLD 는 OLD 아님", find_marks("GOLD PLATED")[1], False)
 # ══ 3. 실물 — 10FV011 ════════════════════════════════════════════
 print("\n[3] 10FV011-DATA SHEET_REV1.tif — 사양표 2장")
 pages = [
-    spec(1, "2003/03/25", "RETROFIT", tags=["10FV011", "10FV012", "10FV013", "10FV014"]),
+    spec(1, "2003/03/25", "RETROFIT", tags=["A10FV011", "A10FV012", "A10FV013", "A10FV014"]),
     PageInfo(page=2, page_class=PageClass.DRAWING),
     PageInfo(page=3, page_class=PageClass.COVER),
-    spec(4, "9/6/1986", "OLD", superseded=True, tags=["10FV011"]),
+    spec(4, "9/6/1986", "OLD", superseded=True, tags=["A10FV011"]),
     PageInfo(page=5, page_class=PageClass.DRAWING),
     PageInfo(page=6, page_class=PageClass.CALC),
     PageInfo(page=7, page_class=PageClass.BOM),
     PageInfo(page=8, page_class=PageClass.BOM),
 ]
-got, why = pick_latest_spec(pages, file_tag="10FV011")
+got, why = pick_latest_spec(pages, file_tag="A10FV011")
 check("p1(2003 Retrofit)을 고른다 — p4 가 아니다", got.page if got else None, 1)
 print(f"       사유: {why}")
 
 print("\n[3-b] 수기 OLD 를 못 읽었을 때도 날짜로 같은 답이 나오는가")
 pages_nomark = [
-    spec(1, "2003/03/25", "RETROFIT", tags=["10FV011", "10FV012"]),
-    spec(4, "9/6/1986", tags=["10FV011"]),
+    spec(1, "2003/03/25", "RETROFIT", tags=["A10FV011", "A10FV012"]),
+    spec(4, "9/6/1986", tags=["A10FV011"]),
 ]
-got, why = pick_latest_spec(pages_nomark, file_tag="10FV011")
+got, why = pick_latest_spec(pages_nomark, file_tag="A10FV011")
 check("날짜만으로 p1", got.page if got else None, 1)
 print(f"       사유: {why}")
 
 print("\n[3-c] 태그 단독성으로 고르면 틀린다 (이전 규칙의 회귀 방지)")
-solo = [p for p in pages_nomark if p.tags == ["10FV011"]]
+solo = [p for p in pages_nomark if p.tags == ["A10FV011"]]
 check("태그 단독 페이지는 p4 — 이것을 고르면 오답", solo[0].page, 4)
 
 # ══ 4. 못 가리는 경우는 고르지 않는다 ═════════════════════════════
@@ -121,12 +121,12 @@ print(f"       사유: {why}")
 # ══ 5. 선택 후 태그 검증 ═════════════════════════════════════════
 print("\n[5] 태그는 선택이 아니라 검증에 쓴다")
 got, why = pick_latest_spec(
-    [spec(1, "2003/03/25", "RETROFIT", tags=["10FV099"]), spec(4, "9/6/1986", tags=["10FV011"])],
-    file_tag="10FV011")
+    [spec(1, "2003/03/25", "RETROFIT", tags=["A10FV099"]), spec(4, "9/6/1986", tags=["A10FV011"])],
+    file_tag="A10FV011")
 check("파일명 태그가 없는 페이지라도 최신이면 선택된다",
       got.page if got else None, 1)
 check("선택된 페이지에 파일명 태그 없음 → 호출자가 REVIEW 처리해야 함",
-      "10FV011" in got.tags, False)
+      "A10FV011" in got.tags, False)
 
 print("\n" + "=" * 62)
 print(f"  통과 {ok} / 실패 {fail}")

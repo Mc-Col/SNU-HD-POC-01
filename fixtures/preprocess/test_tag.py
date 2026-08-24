@@ -1,0 +1,104 @@
+# -*- coding: utf-8 -*-
+"""태그 규칙 자체 검증
+
+    python fixtures/preprocess/test_tag.py
+
+규칙 (2026-08-24 이종수 책임 확인)
+    [Area][Unit]-[Type]-[Number][Suffix]
+    Area 는 맨 앞 알파벳 한 자. **없으면 A 가 생략된 것.**
+    1공장이 최초 공장이라 지을 때 구분이 필요 없었고, 2공장부터 B 를 붙였다.
+
+이 파일이 지키는 것
+    ① `10-FV-012`(A구역)와 `B10-FV-012`(B구역)가 절대 같은 값이 되지 않는다
+    ② 견적번호·스프링번호·클래스 표기를 태그로 잡지 않는다
+    ③ `10-FV-011 / 012 / 013 / 014` 나열을 4개로 펼친다
+"""
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.stdout.reconfigure(encoding="utf-8")
+
+from src.preprocess import find_tags, normalize_tag, parse_filename, parse_tag
+
+ok = fail = 0
+
+
+def check(label, got, want):
+    global ok, fail
+    if got == want:
+        ok += 1
+        print(f"  OK   {label}")
+    else:
+        fail += 1
+        print(f"  실패 {label}\n         받음 {got!r}\n         기대 {want!r}")
+
+
+print("\n[1] Area 생략은 A 로 채운다")
+for s in ["10-FV-012", "10FV012", "10 FV 012", "A10-FV-012", "A10FV012"]:
+    check(f"{s:<12} → A10FV012", normalize_tag(s), "A10FV012")
+
+print("\n[2] 구역이 다르면 다른 설비다 — 이 검사가 깨지면 마스터DB 가 오염된다")
+check("10-FV-012 ≠ B10-FV-012",
+      normalize_tag("10-FV-012") != normalize_tag("B10-FV-012"), True)
+check("B10-FV-012 → B10FV012", normalize_tag("B10-FV-012"), "B10FV012")
+check("B10-PV-1631A → B10PV1631A", normalize_tag("B10-PV-1631A"), "B10PV1631A")
+
+print("\n[3] 쪼갠 결과")
+t = parse_tag("B10-PV-1631A")
+check("area", t.area, "B")
+check("unit", t.unit, "10")
+check("kind", t.kind, "PV")
+check("number", t.number, "1631")
+check("suffix", t.suffix, "A")
+check("raw 는 원문 그대로", t.raw, "B10-PV-1631A")
+check("implicit_area False", t.implicit_area, False)
+t2 = parse_tag("10-FV-012")
+check("Area 없으면 implicit_area True", t2.implicit_area, True)
+check("그래도 raw 에는 A 를 넣지 않는다", t2.raw, "10-FV-012")
+
+print("\n[4] 태그가 아닌 것을 태그로 잡지 않는다")
+for s in ["1E7924", "Quote No. 85-1874", "ANSI CLASS 600", "REV1", "REV. 2",
+          '1 1/2" 300#', "N2 7kgf", "03-04 22:59 THU", "QUOT 11/1/85",
+          "Serial No. J58278", "Form S-1017", "60.3.100x50"]:
+    check(f"{s[:26]:<28} → 없음", normalize_tag(s), None)
+
+print("\n[5] 나열 펼치기 — 다중 설비 사양표의 태그 대조가 이 형태다")
+check("10-FV-011 / 012 / 013 / 014",
+      find_tags("TAG NO. 10 - FV - 011 / 012 / 013 / 014"),
+      ["A10FV011", "A10FV012", "A10FV013", "A10FV014"])
+check("쉼표 나열",
+      find_tags("10-FV-011, 012, 013, 014 Retrofit 4 Sets"),
+      ["A10FV011", "A10FV012", "A10FV013", "A10FV014"])
+check("접미만 바뀌는 나열", find_tags("B10-TV-481A / B"),
+      ["B10TV481A", "B10TV481B"])
+check("자리수가 다르면 나열이 아니다 (날짜)",
+      find_tags("10-FV-011 / 2003"), ["A10FV011"])
+check("숫자 표만 있는 줄", find_tags("Cv% / Signal% 8.2 / 17  28 / 44"), [])
+check("유량 3열", find_tags("Flow Rate 42.0 / 123.0 / 200.0"), [])
+
+print("\n[6] 파일명")
+for name, key, raw, area in [
+        ("10FV011-DATA SHEET_REV1.tif", "A10FV011", "10FV011", "A"),
+        ("B10FV1031-DATA SHEET_REV1.pdf", "B10FV1031", "B10FV1031", "B"),
+        ("10FV007B-DATA SHEET_REV0.tif", "A10FV007B", "10FV007B", "A"),
+]:
+    i = parse_filename("raw_file/" + name)
+    check(f"{name[:30]:<32} key={key}", (i.tag, i.tag_raw, i.area), (key, raw, area))
+
+i = parse_filename("raw_file/070055_REV0.pdf")
+check("070055_REV0.pdf 는 파일명에 태그 없음 (문서 안에 B10-PV-1631A)", i.tag, None)
+check("문서 안에서는 찾는다",
+      find_tags("Valve Tag # : B10-PV-1631A"), ["B10PV1631A"])
+
+print("\n[7] 내보내는 값에는 A 를 만들어 넣지 않는다 (철학 4)")
+i = parse_filename("raw_file/10FV011-DATA SHEET_REV1.tif")
+check("정규화 키에는 A 가 있고", i.tag, "A10FV011")
+check("표시용 원문에는 없다", i.tag_raw, "10FV011")
+
+print("\n" + "=" * 62)
+print(f"  통과 {ok} / 실패 {fail}")
+print("=" * 62)
+sys.exit(1 if fail else 0)
