@@ -38,6 +38,8 @@ fixtures 로 검증 가능한 최소 구현부터 시작하자.
 | **`docs/ARCHITECTURE.md`** | **결정된 규칙 전부** — 태그·페이지 선택·범위·함정·코퍼스 실측 |
 | `CLAUDE.md` | 개발 철학 6개, 절대 하지 말 것 |
 | `docs/roles/<내 이름>.md` | 내 담당 모듈과 우선순위 |
+| **`docs/TODO.md`** | **남은 작업 · 대기 중인 결정 · 골든셋 후보** |
+| `docs/eval_history.md` | 평가 실행 이력 — 무엇을 바꿨더니 올랐나 |
 | `docs/change_log.md` | 결정의 경과 (C001~) |
 | `docs/insight_memory.md` | 판단의 배경 — 왜 그렇게 정했나 |
 
