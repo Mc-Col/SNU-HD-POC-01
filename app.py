@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src import env
 from src.ui import hitl, screens, session, theme
+
+env.load()      # .env 는 프로세스 시작 시 한 번 읽는다 (VLM 키)
 
 st.set_page_config(page_title="Datasheet 정보추출 Agent (PoC)",
                    page_icon="🔧", layout="wide")

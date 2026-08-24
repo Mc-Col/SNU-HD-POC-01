@@ -146,3 +146,23 @@ def bulk_approve_auto(d: UiDoc) -> int:
             apply_human(r, "approve")
             n += 1
     return n
+
+# ── VLM 실행 설정 ─────────────────────────────────────────────
+#
+#  화면에서 고른 값을 추출 단계까지 실어 보낸다. 기본은 VLM 사용 —
+#  대상의 71.9% 가 스캔이므로 규칙 경로만으로는 아무 값도 안 나온다.
+
+def set_use_vlm(v: bool) -> None:
+    st.session_state["use_vlm"] = bool(v)
+
+
+def use_vlm() -> bool:
+    return bool(st.session_state.get("use_vlm", True))
+
+
+def set_page(n: int) -> None:
+    st.session_state["vlm_page"] = max(1, int(n))
+
+
+def page() -> int:
+    return int(st.session_state.get("vlm_page", 1))

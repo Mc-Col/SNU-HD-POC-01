@@ -140,10 +140,99 @@ def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True) -> 
     return UiDoc(
         result=result,
         display_name=os.path.basename(path),
-        page_path=path if ext == ".pdf" else None,
+        # tif 는 PDF 뷰어로 못 띄운다 — PNG 로 떠서 넘긴다(대상의 71.9%)
+        page_path=(path if ext == ".pdf" else render_page_png(path)),
         size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
         route_reason=result.triage.reason,
         origin="pipeline",
+    )
+
+
+# ── VLM 경로 ──────────────────────────────────────────────────
+#
+#  실제 문서를 읽는 유일한 경로다. 대상의 71.9% 가 스캔 tif 이므로 화면에서
+#  의미 있는 것을 보려면 여기를 거쳐야 한다.
+#
+#  평가 하네스(`eval/harness.py --stage vlm`)와 **같은 부품**을 쓴다 —
+#  화면에서 본 것과 채점된 숫자가 다르면 둘 중 하나는 거짓이다.
+
+def render_page_png(path: str, page: int = 1) -> str | None:
+    """페이지를 PNG 로 떠서 경로를 돌려준다. 화면 표시·bbox 오버레이용.
+
+    tif 는 PDF 뷰어로 못 띄우므로 반드시 이 변환이 필요하다.
+    실패하면 None — 화면은 이미지 없이 표 만이라도 보여준다(철학 5).
+    """
+    import tempfile
+
+    from src import preprocess
+    try:
+        out = os.path.join(tempfile.gettempdir(), "d2s_ui_pages")
+        os.makedirs(out, exist_ok=True)
+        got = preprocess.render_pages(path, out, pages=[int(page or 1)])
+        return got[0] if got else None
+    except Exception:
+        return None
+
+
+def from_vlm(path: str, *, only_mvp: bool = True, page: int | None = None) -> UiDoc:
+    """실제 문서를 VLM 으로 읽어 화면용 결과를 만든다.
+
+    page 를 주지 않으면 1페이지를 읽는다. 사양표 페이지 자동 선택은 Triage
+    구현 후에 붙는다 — 지금은 사람이 화면에서 페이지를 고른다.
+
+    ④ Normalize 까지 적용한다. 파서는 문서 원문(`Close`)을 내고 표준값
+    (`FAIL CLOSE`)은 Normalize 몫이므로, 화면에는 최종값과 원문을 함께 보여준다.
+    """
+    from src import schema
+    from src.contracts import (DocumentClass, DocumentResult, FailureKind,
+                               FieldRecord, PageClass, PageInfo, TriageResult)
+    from src.parsers.vlm.openai_vlm import VlmParser
+    from src.pipeline import DefaultNormalize, _decide
+
+    from src import preprocess
+
+    pg = int(page or 1)
+    info = preprocess.parse_filename(path)
+    triage = TriageResult(
+        source_path=path, document_class=DocumentClass.DATASHEET,
+        file_tag=info.tag_raw or "",
+        pages=[PageInfo(page=pg, page_class=PageClass.SPEC, selected=True)],
+        reason=preprocess.caution_reason(path) or "VLM 판독",
+    )
+
+    fields = [f for f in (schema.mvp_fields() if only_mvp else schema.all_fields())
+              if f.source == "document"]
+    parser, norm = VlmParser(), DefaultNormalize()
+    raws = parser.extract(path, triage, fields)
+
+    records = []
+    for ex in raws:
+        f = schema.get(ex.field_key)
+        value, trace = norm.run(ex, f)
+        # 값이 없으면 NO_EVIDENCE 로 넘겨야 N/A 로 판정된다 —
+        # 파이프라인과 같은 판정 함수를 쓴다. 화면과 채점이 갈리면 안 된다.
+        failure = FailureKind.NONE if value else FailureKind.NO_EVIDENCE
+        state, note = _decide(f, ex, value, failure, "", "", None)
+        records.append(FieldRecord(
+            doc_id=os.path.basename(path), field_key=f.key, field_name=f.name,
+            value=value, raw_value=ex.raw_value, raw_label=ex.raw_label,
+            state=state, failure=failure, note=note,
+            confidence=ex.confidence, threshold=f.threshold,
+            bbox=ex.bbox, page=ex.page, source_locator=ex.source_locator,
+            transform_trace=trace, required=f.required, safety=f.safety,
+            parser=ex.parser,
+        ))
+
+    result = DocumentResult(
+        doc_id=os.path.basename(path), source_path=path,
+        triage=triage, records=records)
+    return UiDoc(
+        result=result,
+        display_name=os.path.basename(path),
+        page_path=render_page_png(path, pg),
+        size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
+        route_reason=triage.reason,
+        origin="vlm",
     )
 
 

@@ -102,6 +102,28 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
    Normal 에 해당하는 칸을 고른다.
 8. 값이 있는 행을 착각하지 않도록, 반드시 **그 값의 왼쪽 항목명을 함께 읽어
    raw_label 에 적는다.** 항목명과 값이 어긋나면 그 판독은 틀린 것이다.
+9. **한 필드에는 값 하나만. 괄호·화살표·부가기호가 남으면 틀린 것이다.**
+   - 괄호 안 부가정보는 버린다:  195 (Cg=4040 -> 7580)  =>  195
+   - 개조 전후가 함께 적히면 화살표 뒤(개조 후)만 쓴다
+       4" X 2-7/8" -> 4" X 4"   =>   4"
+       치수가 곱해져 있으면 본체 호칭(앞의 큰 값)을 쓴다
+   - 규격 접미는 뺀다:  1" (25A) => 1" ,  NPS 3/4 => 3/4"
+   - 슬래시 나열은 Normal 열 하나만:  12.051 / 12.249  =>  앞의 것
+   버린 정보는 raw_label 끝에 괄호로 적어 근거를 남긴다.
+   자기 점검 — raw_value 에 ( 나 -> 가 남아 있으면 다시 고른다.
+10. **태그가 여러 개 적힌 페이지가 있다.** 같은 사양의 밸브를 한꺼번에
+   개조하면 10-FV-011 / 012 / 013 / 014 처럼 한 장으로 갈음하기 때문이다.
+   engineering_tag_no 에는 **아래에 주어진 이 파일의 태그**만 넣는다.
+   페이지의 태그 목록 전체를 넣지 않는다.
+11. **제조사(manufacturer)는 밸브를 만든 회사다. 시공·정비 업체가 아니다.**
+   개조·정비 문서는 하단 꼬리말·주소 블록에 **시공사** 이름이 찍혀 있다.
+   그것을 제조사로 쓰면 틀린다. 판단 순서:
+     (1) 표 안에 Maker / Manufacturer 항목이 있으면 그 값
+     (2) 없으면 모델명으로 판단한다 (아래 표)
+     (3) Note / 비고 문장에 적혀 있을 수 있다 —
+         예: 현재 Valve의 Body 사용 (Model : ED, FISHER)
+     (4) 그래도 모르면 null 이다. **꼬리말 회사명으로 채우지 않는다.**
+   raw_label 에 출처를 적어라 — (Maker 항목) / (모델명으로 판단) / (Note 문장)
 
 출력은 JSON 하나다:
 {"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
@@ -133,6 +155,10 @@ class VlmParser:
     @property
     def client(self):
         if self._client is None:
+            # 진입점이 여러 개다(화면·하네스·스크립트). 각자 기억하게 두면
+            # 잊힌다 — 여기서 한 번 더 확인하고 사람이 읽을 오류를 낸다.
+            from src import env
+            env.require_key()
             from openai import OpenAI
             self._client = OpenAI()
         return self._client
@@ -167,6 +193,13 @@ class VlmParser:
         page = self._page_of(triage)
         png = self._png(path, page)
         spec = _field_spec(fields)
+        # 정비·개조 보고서면 꼬리말 회사명이 시공사다 — 미리 경고한다
+        warn = preprocess.caution_reason(path)
+        note = ""
+        if warn:
+            note = ("주의: " + warn + "\n"
+                    "하단 꼬리말의 회사명은 시공사일 수 있다. "
+                    "제조사는 표·모델명·Note 에서 찾아라.\n\n")
         tag = getattr(triage, "file_tag", None) or ""
         hint = ""
         if tag:
@@ -174,7 +207,7 @@ class VlmParser:
             hint = ("이 파일의 태그: " + str(tag) + "\n"
                     "페이지에 태그가 여러 개 적혀 있으면 이 태그만 "
                     "engineering_tag_no 에 넣는다.\n")
-        text = ("이 페이지에서 아래 필드를 판독하라.\n\n" + hint
+        text = ("이 페이지에서 아래 필드를 판독하라.\n\n" + note + hint
                 + "\n■ 필드\n" + spec + "\n" + _maker_table())
         model = models.for_attempt(0).name
         data = self._ask(model, SYSTEM, text, png)

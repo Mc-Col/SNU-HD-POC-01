@@ -46,9 +46,16 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from eval import compare, groups, history           # noqa: E402
+from dataclasses import replace                     # noqa: E402
+
+from eval import compare, escalate, groups, history  # noqa: E402
 from eval.kit import KitRow, locate, read_kit       # noqa: E402
 from src import schema                              # noqa: E402
+
+def _join(*parts) -> str:
+    """비고를 이어 붙인다. 빈 것은 버린다."""
+    return " | ".join(p for p in parts if p)
+
 
 # 판정 — 나쁜 순서대로
 VERDICTS = ("근거없음오답", "오답", "페이지오선택", "미추출", "정규화대기", "정확")
@@ -174,7 +181,7 @@ def _rate(cells, wanted) -> str:
     return f"{hit / len(cells) * 100:.0f}%"
 
 
-def render(res: Result, by: str = "") -> str:
+def render(res: Result, by: str = "", escalations=None) -> str:
     n = res.counts()
     tot = sum(n.values())
     L = ["# 평가 하네스 — 골든셋 대조", ""]
@@ -282,6 +289,54 @@ def render(res: Result, by: str = "") -> str:
         L += [f"> 라벨러가 확신하지 못한 칸 {len(unc)}개(`?` 표시) 포함. "
               f"이 칸의 정확도는 참고치다.", ""]
 
+    # 승격 효과 — 상위 모델이 비용을 정당화하는가
+    if escalations:
+        by_verdict = Counter(e[4] for e in escalations)
+        truth = {(c.doc_id, c.field_key): c.truth for c in res.cells}
+        better = worse = same_wrong = 0
+        rows_e = []
+        for doc, key, first, second, verdict, note, why in escalations:
+            t = truth.get((doc, key))
+            if t is None or verdict != "changed":
+                continue
+            ok1 = compare.same(t, first)
+            ok2 = compare.same(t, second)
+            if ok2 and not ok1:
+                better += 1
+                mark = "개선"
+            elif ok1 and not ok2:
+                worse += 1
+                mark = "**악화**"
+            else:
+                same_wrong += 1
+                mark = "변화없음"
+            rows_e.append((doc, key, first, second, t, mark, why))
+
+        L += ["## 승격 효과 — 상위 모델이 비용을 정당화하는가", "",
+              f"- 승격 대상 **{len(escalations)}칸** "
+              f"(일치 {by_verdict.get('agree', 0)} · "
+              f"값 변경 {by_verdict.get('changed', 0)} · "
+              f"2차 실패 {by_verdict.get('kept', 0)} · "
+              f"오류 {by_verdict.get('error', 0)})",
+              f"- 값이 바뀐 것 중 — **개선 {better} · 악화 {worse} · "
+              f"변화없음 {same_wrong}**", ""]
+        if better or worse:
+            net = better - worse
+            L += [f"> 순효과 **{net:+d}칸**. "
+                  + ("상위 모델이 값을 했다." if net > 0 else
+                     "상위 모델이 값을 하지 못했다 — 비용만 늘었다." if net < 0 else
+                     "개선과 악화가 상쇄되었다.") + "", ""]
+        if by_verdict.get("agree"):
+            L += [f"> 일치 {by_verdict['agree']}칸 — 두 모델이 같은 값을 읽었다. "
+                  f"확신을 높이는 근거이지만 **비용은 그대로 들었다.** "
+                  f"승격 조건을 좁힐 여지가 여기 있다.", ""]
+        if rows_e:
+            L += ["| 문서 | 필드 | 1차(luna) | 2차(terra) | 정답 | 판정 | 승격 사유 |",
+                  "|---|---|---|---|---|---|---|"]
+            for doc, key, f1, f2, t, mark, why in rows_e:
+                L.append(f"| {doc} | `{key}` | {f1} | {f2} | {t} | {mark} | {why} |")
+            L += [""]
+
     # 실패 상세
     fails = [c for c in res.cells if c.verdict not in GOOD]
     if fails:
@@ -335,7 +390,7 @@ def _file_tag(row) -> str:
     return info.tag_raw or ""
 
 
-def make_vlm_extractor(only_mvp: bool = False):
+def make_vlm_extractor(only_mvp: bool = False, do_escalate: bool = False):
     """VLM 으로 추출하고 ④ Normalize 까지 적용한다.
 
     파서는 문서 원문(`Close`)을 내고 표준값(`FAIL CLOSE`)은 Normalize 몫이다.
@@ -356,11 +411,36 @@ def make_vlm_extractor(only_mvp: bool = False):
 
     def extract(row: KitRow):
         page = int(row.spec_page or 1)
+        tag = _file_tag(row)
         tri = TriageResult(
             source_path=row.path, document_class=DocumentClass.DATASHEET,
-            file_tag=_file_tag(row),
+            file_tag=tag,
             pages=[PageInfo(page=page, page_class=PageClass.SPEC, selected=True)])
         recs = parser.extract(row.path, tri, fields)
+
+        # ── 상위 모델 2차 판독 (독립 의견, 재시도가 아니다) ──
+        if do_escalate:
+            for idx, r in enumerate(recs):
+                f = schema.get(r.field_key)
+                why = escalate.reasons(f, r, tag)
+                if not why:
+                    continue
+                try:
+                    second = parser.reread(row.path, f, r, attempt=1)
+                except Exception as e:
+                    extract.escalations.append(
+                        (row.doc_id, f.key, r.raw_value, None, "error",
+                         f"{type(e).__name__}: {e}", "; ".join(why)))
+                    continue
+                value, verdict, note = escalate.settle(f, r, second)
+                extract.escalations.append(
+                    (row.doc_id, f.key, r.raw_value,
+                     second.raw_value if second else None,
+                     verdict, note, "; ".join(why)))
+                if verdict == "changed":
+                    recs[idx] = replace(r, raw_value=value,
+                                        note=_join(r.note, note))
+
         raws = {r.field_key: r.raw_value for r in recs if r.found}
         values = {}
         for r in recs:
@@ -370,6 +450,7 @@ def make_vlm_extractor(only_mvp: bool = False):
         return values, raws, page
 
     extract.parser = parser        # 비용 요약을 리포트에 쓴다
+    extract.escalations = []       # 승격 효과를 리포트에 쓴다
     return extract
 
 
@@ -385,6 +466,8 @@ def main(argv=None) -> int:
     ap.add_argument("--by", default="fmt", choices=["", "fmt", "vintage", "cls"])
     ap.add_argument("--holdout", default="", help="쉼표로 구분한 문서ID")
     ap.add_argument("--out", default="runs/eval_report.md")
+    ap.add_argument("--escalate", action="store_true",
+                    help="확신도 미달·규칙 불일치·안전필드를 상위 모델로 2차 판독한다")
     ap.add_argument("--note", default="",
                     help="이 실행에서 무엇을 바꿨는지. 이력 표에 남는다")
     a = ap.parse_args(argv)
@@ -405,14 +488,16 @@ def main(argv=None) -> int:
         return 2
 
     if a.stage == "vlm":
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(ROOT, ".env"))
-        extract = make_vlm_extractor(only_mvp=a.only_mvp)
+        from src import env
+        env.require_key()
+        extract = make_vlm_extractor(only_mvp=a.only_mvp,
+                                     do_escalate=a.escalate)
     else:
         extract = make_text_extractor()
     holdout = tuple(x.strip() for x in a.holdout.split(",") if x.strip())
     res = score(rows, extract, holdout, only_mvp=a.only_mvp)
-    report = render(res, a.by)
+    report = render(res, a.by,
+                    escalations=getattr(extract, "escalations", None))
     parser = getattr(extract, "parser", None)
     if parser is not None and parser.calls:
         cost = parser.cost_summary()
