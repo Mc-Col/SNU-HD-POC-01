@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from dataclasses import dataclass, field as _field
 from functools import lru_cache
 from typing import Any
@@ -165,6 +166,50 @@ def domain_rule(field_key: str) -> dict[str, Any] | None:
 
 def value_aliases(field_key: str) -> list[dict[str, Any]]:
     return (_rules_doc().get("value_aliases") or {}).get(field_key) or []
+
+
+# ── 모델명 → 제조사 ───────────────────────────────────────────
+#
+# 데이터시트에 제조사가 안 적혀 있고 모델명만 있는 경우가 많다(골든셋 11건 중
+# 6건). 그 지식이 사람 머릿속에만 있으면 AI 는 영구히 오답이므로 규칙으로 둔다.
+#
+# 사실이지만 **문서에 없는 값을 채우는 것**이다. 반드시 `transform_trace` 에
+# 근거를 남긴다 — 사람이 되짚을 수 있어야 한다(철학 4).
+
+def model_to_manufacturer(model: str, kind: str | None = None) -> tuple[str, str] | None:
+    """모델명으로 제조사를 찾는다. → (제조사, 근거문구) 또는 None.
+
+        model_to_manufacturer("667-EZ")               → ("FISHER", "모델명 …")
+        model_to_manufacturer("3582G", "positioner")  → ("FISHER", "…")
+
+    kind 를 주면 그 종류(body·actuator·positioner·regulator)만 본다.
+    포지셔너 제조사와 밸브 제조사가 다른 경우가 많아 구분이 필요하다.
+    긴 접두어를 먼저 검사한다 — `1098` 이 `98` 보다 먼저 맞아야 한다.
+    """
+    doc = _rules_doc().get("model_to_manufacturer") or {}
+    if not doc.get("enabled"):
+        return None
+    m = re.sub(r"[^A-Z0-9/ ]+", "", str(model or "").upper()).strip()
+    if not m:
+        return None
+    best = None
+    for rule in doc.get("rules") or []:
+        if kind and rule.get("kind") != kind:
+            continue
+        for pre in rule.get("prefix") or []:
+            p = str(pre).upper()
+            if m.startswith(p) and (best is None or len(p) > best[0]):
+                best = (len(p), rule.get("to"), p)
+    if not best:
+        return None
+    _, maker, pre = best
+    return maker, f"모델명 {model} 의 접두어 {pre} → {maker} (rules.yaml)"
+
+
+def manufacturer_rules() -> list[dict[str, Any]]:
+    """VLM 프롬프트에 넣을 모델→제조사 표. 비어 있으면 규칙이 꺼진 것."""
+    doc = _rules_doc().get("model_to_manufacturer") or {}
+    return list(doc.get("rules") or []) if doc.get("enabled") else []
 
 
 # ── 판단 지침 (자연어 규칙) ───────────────────────────────────

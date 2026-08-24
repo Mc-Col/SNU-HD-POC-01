@@ -36,6 +36,82 @@ value_aliases: {}
   #   - from: ["CS", "C.S.", "CARBON STEEL"]
   #     to: "CARBON STEEL"
 
+# ── 모델명 → 제조사 ───────────────────────────────────────────
+#
+# 왜 필요한가 (2026-08-24)
+#   데이터시트에 제조사가 안 적혀 있고 모델명만 있는 경우가 많다. 골든셋 11건
+#   중 6건이 그랬다 — `3582G` 만 적혀 있는데 정답은 `FISHER` 다.
+#
+#   그 지식이 라벨러 머릿속에만 있으면 AI 는 영구히 오답이다. 문서에는 `3582G`
+#   밖에 없으니까. 여기 적어두면 규칙이 되고, 도메인 전문가가 검토할 수 있고,
+#   AI 도 같은 값을 낸다(철학 2).
+#
+# 쓰는 곳
+#   ① VLM 프롬프트 — 이 표를 함께 넣어, 제조사가 안 적혀 있으면 모델명으로
+#      판단하게 한다. 판단 근거를 `transform_trace` 에 남긴다
+#   ② Normalize — VLM 이 놓쳤을 때 모델명으로 채운다
+#
+# ⚠️ 이것은 **추정이 아니라 사실**이다(`3582G` 는 Fisher 제품이다). 다만 문서에
+#    없는 값을 채우는 것이므로 `transform_trace` 에 "모델명 3582G → Fisher
+#    (rules.yaml)" 를 남겨 사람이 되짚을 수 있게 한다.
+#
+# 채우는 방법 — 접두어 매칭. 긴 접두어를 먼저 검사한다.
+model_to_manufacturer:
+  enabled: true
+  note: "골든셋에서 관측된 것만. 상상해서 늘리지 않는다 — 실물에서 나온 것만 추가"
+  rules:
+    # ── 밸브 본체·액추에이터 ──
+    - prefix: ["667", "657", "1052", "1061", "471", "480"]
+      to: "FISHER"
+      kind: actuator
+      seen: "d001 667-EZ · d002/d004 667-ED · d003/d006 657-ED"
+    - prefix: ["EZ", "ED", "ES", "HP", "CAV"]
+      to: "FISHER"
+      kind: body
+      note: "본체 모델. 결합 표기의 뒷자리 (667-EZ 의 EZ)"
+    - prefix: ["627", "98", "95", "1098", "MR95", "63EG"]
+      to: "FISHER"
+      kind: regulator
+      seen: "d009 627 — Direct Operated Regulator"
+    - prefix: ["GU", "VDR", "RE", "RF"]
+      to: "METSO"
+      kind: body
+      seen: "d005 GU-VDR"
+    - prefix: ["MARK ONE", "MARK 1", "MARKONE"]
+      to: "FLOWSERVE"
+      kind: body
+      seen: "d008 Mark One"
+    - prefix: ["V100", "V200"]
+      to: "UNICON"
+      kind: body
+      seen: "d007 V100 SERIES"
+    - prefix: ["2121", "1121", "880"]
+      to: "VALSTONE"
+      kind: body
+      seen: "d010 2121 · d011 880-2221"
+
+    # ── 포지셔너 ── (필드가 다르므로 positioner_manufacturer 로 들어간다)
+    - prefix: ["3582", "3570", "DVC"]
+      to: "FISHER"
+      kind: positioner
+      seen: "d001~d003/d006 3582G · d007 DVC6200 HC"
+    - prefix: ["4200", "SVI"]
+      to: "MASONEILAN"
+      kind: positioner
+      seen: "d004 4200P"
+    - prefix: ["AVP"]
+      to: "AZBIL"
+      kind: positioner
+      seen: "d005 AVP-302"
+    - prefix: ["IP", "I/P"]
+      to: "SMC"
+      kind: positioner
+      seen: "d010 I/P5000 · d011 IP8000"
+    - prefix: ["YT"]
+      to: "YTC"
+      kind: positioner
+      note: "Young Tech. 15LV010 에서 YT-200 관측"
+
 # ── To-be (MVP 범위 외) ───────────────────────────────────────
 unit_conversion:
   enabled: false
