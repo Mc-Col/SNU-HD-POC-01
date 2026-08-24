@@ -696,13 +696,14 @@ def pick_latest_spec(pages, file_tag: str | None = None):
 
     순서
       1) 폐기 표기("OLD" 등)가 있는 후보를 먼저 버린다 (사람이 이미 표시함)
-      2) 남은 것 중 연도가 가장 늦은 것
-      3) 연도가 같으면 월·일. 단 순서가 모호한 날짜끼리는 비교하지 않는다
-      4) 날짜로 못 가리면 RETROFIT / AS-BUILT / REVISED 표기가 있는 쪽
-      5) 그래도 못 가리면 None — 사람이 고른다
+      2) **같은 설비의 다른 시점인지, 다른 설비인지 가른다** — 태그 교집합
+      3) 남은 것 중 연도가 가장 늦은 것
+      4) 연도가 같으면 월·일. 단 순서가 모호한 날짜끼리는 비교하지 않는다
+      5) 날짜로 못 가리면 RETROFIT / AS-BUILT / REVISED 표기가 있는 쪽
+      6) 그래도 못 가리면 None — 사람이 고른다
 
-    file_tag 은 **선택에 쓰지 않는다.** 고른 뒤 그 페이지에 이 태그가
-    보이는지 검증하는 데만 쓴다(사유 문구에 반영).
+    file_tag 은 **최신성 판단에는 쓰지 않는다.** 다만 후보가 서로 다른 설비일
+    때(2번) 어느 설비가 이 파일의 것인지 가르는 데는 쓴다.
     """
     cands = [p for p in pages if getattr(p, "is_spec", False)]
     if not cands:
@@ -720,6 +721,33 @@ def pick_latest_spec(pages, file_tag: str | None = None):
         return None, f"후보 전부 폐기 표기 — 사람이 확인{note}"
     if len(live) == 1:
         return live[0], f"폐기 표기 없는 유일한 사양표 (p{live[0].page}){note}"
+
+    # ── 같은 설비의 다른 시점인가, 다른 설비인가 ───────────────────
+    #
+    #  사양표가 2장이라고 다 같은 문제가 아니다.
+    #    10FV011  p1 태그 [011,012,013,014] · p4 태그 [011]  → 교집합 있음
+    #             = 같은 설비의 2003년 / 1986년 → 최신을 고른다
+    #    070100   p4 태그 [B10TV040] · p5 태그 [B10TV1016]   → 교집합 없음
+    #             = 서로 다른 설비 2건 → 최신성 문제가 아니다
+    #
+    #  교집합이 비면 파일명 태그로 가른다. 파일명에도 태그가 없으면
+    #  고르지 않는다 — "자산 N건 발견" 으로 사람에게 넘긴다.
+    if all(p.tags for p in live):
+        shared = set(live[0].tags)
+        for p in live[1:]:
+            shared &= set(p.tags)
+        if not shared:
+            names = ", ".join(f"p{p.page}({'/'.join(p.tags)})" for p in live)
+            if file_tag:
+                hit = [p for p in live if file_tag in p.tags]
+                if len(hit) == 1:
+                    others = ", ".join(f"p{p.page}({'/'.join(p.tags)})"
+                                       for p in live if p is not hit[0])
+                    return hit[0], (f"자산 {len(live)}건 발견 — 파일명 태그"
+                                    f"({file_tag})와 일치하는 p{hit[0].page} 선택"
+                                    f" / 미선택: {others}{note}")
+            return None, (f"자산 {len(live)}건 발견 — 서로 다른 설비이고 파일명"
+                          f" 태그로 가릴 수 없음. 사람이 선택: {names}{note}")
 
     dated = [p for p in live if p.date_key and p.date_key[0]]
     if dated:

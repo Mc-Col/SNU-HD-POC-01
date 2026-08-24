@@ -118,15 +118,49 @@ got, why = pick_latest_spec([spec(2)])
 check("사양표 1장이면 날짜 없어도 확정", got.page if got else None, 2)
 print(f"       사유: {why}")
 
-# ══ 5. 선택 후 태그 검증 ═════════════════════════════════════════
-print("\n[5] 태그는 선택이 아니라 검증에 쓴다")
+# ══ 5. 태그의 역할 — 두 가지를 구분한다 ═══════════════════════════
+#
+#   같은 설비의 다른 시점 (태그 교집합 있음)  → 최신성으로 고른다.
+#                                              태그 단독성으로 고르지 않는다.
+#   서로 다른 설비      (태그 교집합 없음)  → 파일명 태그로 고른다.
+#                                              최신성은 의미가 없다.
+#
+#   이 구분이 무너지면 C028(태그 단독성) 또는 C029(맹목적 최신성)로 되돌아간다.
+
+print("\n[5-a] 같은 설비의 다른 시점 — 태그 단독성으로 고르지 않는다 (C028 회귀 방지)")
 got, why = pick_latest_spec(
-    [spec(1, "2003/03/25", "RETROFIT", tags=["A10FV099"]), spec(4, "9/6/1986", tags=["A10FV011"])],
+    [spec(1, "2003/03/25", "RETROFIT",
+          tags=["A10FV011", "A10FV012", "A10FV013", "A10FV014"]),
+     spec(4, "9/6/1986", tags=["A10FV011"])],
     file_tag="A10FV011")
-check("파일명 태그가 없는 페이지라도 최신이면 선택된다",
-      got.page if got else None, 1)
-check("선택된 페이지에 파일명 태그 없음 → 호출자가 REVIEW 처리해야 함",
-      "A10FV011" in got.tags, False)
+check("태그가 단독인 p4 가 아니라 최신인 p1", got.page if got else None, 1)
+print(f"       사유: {why}")
+
+print("\n[5-b] 서로 다른 설비 — 파일명 태그로 고른다 (최신성 아님)")
+# 070100_REV0.pdf 실물: p4 = B10-TV-040, p5 = B10-TV-1016. 견적서 한 건에
+# 서로 다른 밸브 2대의 사양표가 각각 들어 있다. 최신성 문제가 아니다.
+pages_multi = [spec(4, tags=["B10TV040"]), spec(5, tags=["B10TV1016"])]
+got, why = pick_latest_spec(pages_multi, file_tag="B10TV1016")
+check("파일명 태그와 일치하는 p5", got.page if got else None, 5)
+print(f"       사유: {why}")
+
+got, why = pick_latest_spec(pages_multi)
+check("파일명에 태그가 없으면 고르지 않는다 → 자산 N건 발견", got, None)
+check("사유에 자산 건수가 담긴다", "자산 2건" in why, True)
+print(f"       사유: {why}")
+
+got, why = pick_latest_spec(
+    [spec(4, "2007/02/21", tags=["B10TV040"]),
+     spec(5, "2007/02/21", tags=["B10TV1016"])])
+check("날짜가 같아도 다른 설비면 최신성으로 풀지 않는다", got, None)
+
+print("\n[5-c] 선택된 페이지에 파일명 태그가 없으면 호출자가 확인필요 처리")
+got, why = pick_latest_spec(
+    [spec(1, "2003/03/25", "RETROFIT", tags=["A10FV011", "A10FV099"]),
+     spec(4, "9/6/1986", tags=["A10FV011"])],
+    file_tag="A10FV011")
+check("교집합이 있으므로 최신성으로 p1", got.page if got else None, 1)
+check("p1 에 파일명 태그가 있으므로 검증 통과", "A10FV011" in got.tags, True)
 
 print("\n" + "=" * 62)
 print(f"  통과 {ok} / 실패 {fail}")
