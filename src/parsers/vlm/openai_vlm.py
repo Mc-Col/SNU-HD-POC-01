@@ -81,12 +81,51 @@ def _maker_table() -> str:
     return "\n".join(out)
 
 
+# 없음 사유 → note 접두. 계약의 FailureKind 가 NO_EVIDENCE 와 EXTRACTION 을 구분하고
+# 하류 처리가 다르다 — 근거 없음은 N/A 로 확정, 판독 실패는 재시도 대상이다.
+# 사유를 note 로만 구분하지 않으면 하류가 둘을 가릴 수 없다.
+NOTE_BY_ABSENCE = {
+    "no_evidence": "근거 없음 — 문서에 항목 자체가 없음",
+    "unreadable": "판독 실패 — 항목은 있으나 값을 읽을 수 없음",
+    "checkbox_ambiguous": "판독 실패 — 체크박스 표시가 없거나 둘 이상이거나 판독 불가",
+}
+
+
+def _note_for(value, d: dict) -> str:
+    """note 를 조립한다 — 없음 사유, 모델 관찰, 행 전체 텍스트를 함께 남긴다.
+
+    입력  : value — 정리된 raw_value(None 가능), d — 모델 응답 항목
+    출력  : note 문자열
+    부수효과: 없음
+    """
+    parts = []
+    if value is None:                              # 값이 없으면 왜 없는지가 핵심 정보다
+        reason = str(d.get("absence_reason") or "").strip()
+        parts.append(NOTE_BY_ABSENCE.get(reason, "문서에서 찾지 못함"))
+    row = str(d.get("row_text") or "").strip()      # 한 칸이 여러 필드를 먹인 경우의 원본
+    if row:
+        parts.append(f"행 원문: {row}")
+    model_note = str(d.get("note") or "").strip()   # 모델이 남긴 관찰 (체크박스 상태 등)
+    if model_note:
+        parts.append(model_note)
+    return " | ".join(parts)
+
+
 SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추론하지 말고 판독한다.
 
 규칙
 1. 문서에 **적혀 있는 글자 그대로** 옮긴다. 단위·대소문자·기호를 바꾸지 않는다.
 2. 문서에 없으면 raw_value 를 null 로 둔다. **절대 만들어내지 않는다.**
    빈칸·해당없음·미기재는 모두 null 이다.
+2-1. null 일 때는 **왜 없는지**를 absence_reason 에 적는다. 하류 처리가 다르다.
+   - "no_evidence" : 문서에 그 항목 자체가 없다 (칸도 라벨도 없다)
+   - "unreadable"  : 항목·라벨은 보이지만 값의 글씨를 읽을 수 없다 (흐림·겹침·잘림)
+   - "checkbox_ambiguous" : 체크박스인데 표시가 없거나 둘 이상이거나 판독 불가
+   값이 있으면 absence_reason 은 "present" 다.
+2-2. **한 칸의 값이 여러 필드에 걸쳐 있으면 그 칸 전체를 row_text 에 그대로 담는다.**
+   예) 라벨 "Size and Type" 의 값이 '2", 667-EZ' 이면 바디 사이즈와 모델번호가 한 칸에 있다.
+   각 필드의 raw_value 에는 해당 조각을 담되, row_text 에는 '2", 667-EZ' 전체를 담는다.
+   하류에 칸 전체를 분해하는 규칙이 있어서, 원본이 남아 있어야 그 규칙이 동작한다.
 3. raw_label 에는 그 값 옆에 적힌 **항목명을 그대로** 적는다. 항목명이 없고
    로고·머리글에만 있는 값이면 위치를 괄호로 적는다 — 예: (좌측 상단 로고)
 4. bbox 는 그 값이 있는 위치다. [x0, y0, x1, y1], 각 0.0~1.0, 좌상단이 (0,0).
@@ -97,7 +136,8 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
 
 출력은 JSON 하나다:
 {"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
-            "bbox": [x0,y0,x1,y1], "confidence": 0.0}}}
+            "row_text": null, "bbox": [x0,y0,x1,y1], "confidence": 0.0,
+            "absence_reason": "present", "note": ""}}}
 값이 없는 필드도 raw_value: null 로 포함한다."""
 
 REREAD_SYSTEM = """너는 문서의 한 영역을 판독한다.
@@ -114,12 +154,26 @@ class VlmParser:
     """계약 `ParserModule` 구현. OpenAI 호환 API 를 쓴다."""
 
     def __init__(self, client=None, render_dir: str | None = None,
-                 only_mvp: bool = False):
+                 only_mvp: bool = False, deskew: bool = False, cache=None):
+        """
+        deskew — 기하 전처리(방향·기울기 보정)를 켠다. **기본 꺼짐.**
+            공용 `src/preprocess.render_pages` 는 페이지를 렌더하지만 기하 보정은
+            하지 않는다. 실측(스캔 758건)에서 **71.5% 가 기울기 0.5도를 초과**하고,
+            보정하면 글줄 투영 점수가 중앙값 159% 개선된다.
+            켜면 모델에 보내는 이미지가 달라지므로 기본값은 꺼둔다 — 검증되지 않은
+            동작을 기본으로 만들지 않는다. bbox 는 보정 후에도 원본 기준으로 되돌린다.
+        cache — 응답 캐시(`ResponseCache`). **기본 없음(캐시 미사용).**
+            VLM API 는 완전한 결정론이 아니므로, 캐시가 없으면 파이프라인 재실행이
+            재현되지 않는다(철학 6). 재현성이 필요하면 명시적으로 넘긴다.
+        """
         self._client = client
         self.render_dir = render_dir or os.path.join(tempfile.gettempdir(), "d2s_vlm")
         self.only_mvp = only_mvp
+        self.deskew = deskew                       # 기하 전처리 사용 여부
+        self.cache = cache                         # 응답 캐시 (None 이면 미사용)
         os.makedirs(self.render_dir, exist_ok=True)
         self.calls: list[dict[str, Any]] = []      # 비용 추적 — 로그에 남긴다
+        self._transforms: dict[str, Any] = {}      # 렌더 PNG 경로 → PageTransform
 
     # ── 클라이언트 ──────────────────────────────────────────
     @property
@@ -162,7 +216,7 @@ class VlmParser:
         text = (f"이 페이지에서 아래 필드를 판독하라.\n\n■ 필드\n{spec}\n"
                 f"{_maker_table()}")
         model = models.for_attempt(0).name
-        data = self._ask(model, SYSTEM, text, png)
+        data = self._ask_cached(model, SYSTEM, text, png, path, page, fields)
 
         got = data.get("fields") or {}
         out = []
@@ -173,13 +227,41 @@ class VlmParser:
             out.append(RawExtraction(
                 field_key=f.key, raw_value=v,
                 raw_label=(d.get("raw_label") or None),
-                bbox=self._bbox(d.get("bbox")),
+                # 기하 보정을 켰으면 보정본 기준 좌표를 원본 기준으로 되돌린다.
+                bbox=self._bbox_to_original(png, self._bbox(d.get("bbox"))),
                 page=page, confidence=float(d.get("confidence") or 0.0),
                 parser=ParserType.VLM,
                 source_locator=f"p{page}:vlm",
-                note="" if v is not None else "문서에서 찾지 못함",
+                note=_note_for(v, d),
             ))
         return out
+
+    def _ask_cached(self, model: str, system: str, text: str, png: str,
+                    path: str, page: int, fields) -> dict:
+        """캐시가 있으면 재사용하고, 없으면 호출한 뒤 저장한다.
+
+        역할  : 같은 입력에 같은 출력을 보장한다(철학 6). VLM API 는 완전한 결정론이
+                아니므로 캐시 없이는 파이프라인 재실행 결과가 흔들린다.
+        입력  : model/system/text/png — 호출 인자, path/page/fields — 캐시 키 재료
+        출력  : 응답 dict
+        부수효과: 캐시 읽기/쓰기, 미적중 시 네트워크 호출
+        """
+        if self.cache is None:                     # 캐시를 쓰지 않으면 바로 호출
+            return self._ask(model, system, text, png)
+
+        from .cache import cache_key, hash_source
+        from .constants import PROMPT_VERSION
+
+        # 프롬프트 버전에 모델과 필드 구성을 함께 넣는다 — 어느 하나만 바뀌어도
+        # 응답이 달라지므로, 넣지 않으면 옛 응답을 잘못 재사용한다.
+        version = f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}"
+        key = cache_key(hash_source(path), page, version)
+        hit = self.cache.get(key)
+        if hit is not None:                        # 적중 — 호출을 건너뛴다
+            return json.loads(hit)
+        data = self._ask(model, system, text, png)
+        self.cache.put(key, json.dumps(data, ensure_ascii=False))
+        return data
 
     # ── Loop A 재판독 ───────────────────────────────────────
     def reread(self, path: str, f, prev: RawExtraction,
@@ -224,10 +306,62 @@ class VlmParser:
         return 1
 
     def _png(self, path: str, page: int) -> str:
+        """페이지를 PNG 로 렌더한다. `deskew=True` 면 기하 보정까지 적용한다.
+
+        보정을 적용하면 원본 ↔ 보정본의 좌표 대응(`PageTransform`)을 보관한다.
+        모델은 보정본을 보고 답하므로, bbox 를 원본 기준으로 되돌려야 화면
+        하이라이트가 어긋나지 않는다(`_bbox_to_original`).
+        """
         out = preprocess.render_pages(path, self.render_dir, pages=[page])
         if not out:
             raise RuntimeError(f"렌더 실패: {path} p{page}")
-        return out[0]
+        png = out[0]
+        if not self.deskew:                        # 기본 경로 — 렌더 결과를 그대로 쓴다
+            return png
+        return self._deskewed(png)
+
+    def _deskewed(self, png: str) -> str:
+        """렌더된 PNG 에 방향·기울기 보정을 적용하고 보정본 경로를 돌려준다.
+
+        입력  : png — 렌더된 PNG 경로
+        출력  : 보정본 PNG 경로 (보정할 것이 없으면 원래 경로)
+        부수효과: 보정본을 render_dir 에 쓰고 변환 기록을 self._transforms 에 남긴다.
+                 실패해도 예외를 올리지 않는다 — 보정은 보조 기능이므로 원본으로
+                 진행하는 편이 낫다. 다만 사유는 로그에 남긴다(철학 5).
+        """
+        from PIL import Image                      # 지역 import — 기본 경로에서는 필요 없다
+        from .preprocess import preprocess as geo_preprocess
+
+        try:
+            with Image.open(png) as opened:
+                prepared = geo_preprocess(opened.copy())   # 방향·기울기·해상도
+            transform = prepared.transform
+            if not (transform.orientation_degrees or abs(transform.deskew_degrees) > 0):
+                return png                          # 보정할 것이 없으면 그대로 (파일도 늘리지 않는다)
+            out = os.path.join(self.render_dir, f"deskew_{os.path.basename(png)}")
+            prepared.image.save(out, "PNG")
+            self._transforms[out] = transform       # bbox 역변환에 쓴다
+            return out
+        except Exception as exc:                    # 보조 기능 실패로 추출 전체를 막지 않는다
+            print(f"[vlm] 기하 보정 실패 — 원본으로 진행: {png} ({type(exc).__name__}: {exc})")
+            return png
+
+    def _bbox_to_original(self, png: str, bbox):
+        """보정본 기준 정규화 bbox 를 원본 기준 정규화 bbox 로 되돌린다.
+
+        입력  : png — 모델에 보낸 이미지 경로, bbox — 정규화 bbox 또는 None
+        출력  : 원본 기준 정규화 bbox (보정이 없었으면 입력 그대로)
+        부수효과: 없음
+        """
+        transform = self._transforms.get(png)      # 보정이 적용된 이미지인가
+        if transform is None or bbox is None:
+            return bbox                             # 보정이 없었으면 되돌릴 것도 없다
+        pixels = transform.norm_bbox_to_original(bbox)          # 원본 픽셀 좌표로
+        x0, y0, x1, y1 = transform.clamp_to_original(pixels)    # 페이지 경계 안으로
+        width, height = transform.original_size                 # 정규화의 분모
+        w = float(width) if width else 1.0
+        h = float(height) if height else 1.0
+        return (x0 / w, y0 / h, x1 / w, y1 / h)                 # 다시 정규화
 
     @staticmethod
     def _bbox(v) -> tuple[float, float, float, float] | None:
