@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 
@@ -25,6 +26,12 @@ from .units import UnitIndex
 Y_TOL = 3.0                 # 이 이내면 같은 행으로 본다
 MAX_VALUE_CELLS = 6         # 한 행에서 값 후보를 몇 개까지 볼 것인가
 COLUMN_TOL = 24.0           # 열 머리글과 값의 x 오차 허용
+MIN_TEXT_CHARS = 200        # 이보다 적으면 텍스트 레이어가 없는 스캔본으로 본다
+TEXT_PROBE_PAGES = 5        # 문서 앞 몇 장으로 판정할 것인가
+
+
+class ScannedPdfError(RuntimeError):
+    """텍스트 레이어가 없는 PDF. 이 파서가 아니라 VLM 이 처리해야 한다."""
 
 
 
@@ -92,7 +99,17 @@ def parse_pdf_text(
     result = TextParseResult()
     seen: set[str] = set()
 
-    targets = pages or range(1, doc.page_count + 1)
+    targets = list(pages or range(1, doc.page_count + 1))
+
+    # 실패를 삼키지 않는다 — 스캔본을 조용히 0건으로 돌려주면 원인을 알 수 없다.
+    # 판정은 문서 단위로 한다. 특정 페이지만 요청했다고 스캔본으로 몰면 안 된다.
+    chars = sum(len(doc[i].get_text().strip())
+                for i in range(min(doc.page_count, TEXT_PROBE_PAGES)))
+    if chars < MIN_TEXT_CHARS:
+        raise ScannedPdfError(
+            f"텍스트 레이어가 거의 없음 ({chars}자) — 스캔 PDF 로 보인다. "
+            f"③-b VLM 파서가 처리해야 한다: {os.path.basename(path)}")
+
     for pno in targets:
         page = doc[pno - 1]
         anchor: float | None = None         # 현재 유효한 Normal 열 x 좌표

@@ -17,6 +17,7 @@ from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .field_index import FieldIndex
 from .units import UnitIndex
+from .xls_compat import load_xls
 
 SCAN_RIGHT = 4          # 라벨 오른쪽으로 몇 칸까지 값을 찾는가
 SCAN_DOWN = 2           # 오른쪽에 없으면 아래로 몇 칸까지
@@ -70,7 +71,8 @@ def parse_excel(
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
-    wb = openpyxl.load_workbook(path, data_only=True)
+    wb = (load_xls(path) if path.lower().endswith(".xls")
+          else openpyxl.load_workbook(path, data_only=True))
     result = TextParseResult()
     seen: set[str] = set()                      # 먼저 찾은 값이 이긴다
 

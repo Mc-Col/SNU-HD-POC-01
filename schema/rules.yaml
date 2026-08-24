@@ -126,6 +126,18 @@ composite_labels:
     fields: [null, null]
     note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
 
+  - label: "Process Fluid"
+    separator: "/"
+    fields: [fluid_name, fluid_state]
+    note: "Flowserve 계열. 값이 'LS AR / LIQUID' 형태로 유체명과 상태를 묶어 준다"
+
+  - label: "Size and Type"
+    pattern: '^\s*(?P<valve_body_size>[\d\-/½¼¾\.]+\s*")\s*,?\s*(?P<model_no>\S.*?)\s*$'
+    note: |
+      Fisher 1986 수기 양식. 값이 '1" 1250R-GL' / '2", 657-EZ' 형태로
+      바디 사이즈와 모델번호를 한 칸에 묶어 준다.
+      유사표현으로 넣으면 두 필드가 같은 표기를 다투므로 복합 규칙으로 둔다.
+
   - label: "Body Matl / Bonnet Matl"
     separator: "/"
     fields: [valve_body_material, null]

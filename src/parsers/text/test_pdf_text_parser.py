@@ -113,3 +113,17 @@ def test_대응_필드가_없는_조각은_버린다():
     rule = CompositeIndex.load().lookup("Design Press./Temp.")
     assert rule is not None
     assert rule.split("Design Press./Temp.", "27 / 430") == []
+
+
+def test_스캔본은_조용히_0건을_돌려주지_않는다(tmp_path):
+    """텍스트 레이어가 없으면 VLM 담당이라고 명시적으로 알린다 (원칙 5)."""
+    import fitz
+    from src.parsers.text.pdf_text import ScannedPdfError
+
+    blank = tmp_path / "scanned.pdf"
+    d = fitz.open()
+    d.new_page(width=595, height=842)
+    d.save(str(blank))
+    with pytest.raises(ScannedPdfError) as e:
+        parse_pdf_text(str(blank))
+    assert "VLM" in str(e.value)
