@@ -57,17 +57,30 @@ RENDER_DPI = 200
 
 # 문서 종류 — 오타와 뒤 공백이 실제로 존재한다(REPIAR REPORT, "REPAIR REPORT ").
 # 느슨하게 잡되 긴 패턴을 먼저 검사한다.
+# 오타·변형이 실제로 존재한다 — REPIAR REPORT, DATA SHEEET, INSTURMENT,
+# 뒤 공백("REPAIR REPORT "). 느슨하게 잡되 **긴 패턴을 먼저** 검사한다
+# (INSTRUMENT LIST 가 INSTRUMENT 보다 앞이어야 목록이 대상으로 새지 않는다).
 DOC_KINDS: list[tuple[str, str, bool]] = [
     # (표시명, 정규식, 대상 여부)
-    ("SPECIFICATION DATA SHEET", r"SPEC\w*\s*DATA\s*SHEET", True),
-    ("DATA SHEET",               r"DATA\s*SHEET",           True),
-    ("REPAIR REPORT",            r"REP[AI]{2}R\s*REPORT",   False),
-    ("RETROFIT REPORT",          r"RETROFIT\s*REPORT",      False),
-    ("RETROFIT",                 r"RETROFIT",               False),
-    ("TEST REPORT",              r"TEST\s*REPORT",          False),
-    ("DRAWING",                  r"DRAWING",                False),
-    ("SPECIFICATION",            r"SPECIFICATION",          True),
+    ("SPECIFICATION DATA SHEET", r"SPEC\w*\s*DATA\s*SHE+T",  True),
+    ("DATA SHEET",               r"DATA\s*SHE+T",            True),   # SHEEET 오타 포함
+    ("SPEC & CALC",              r"SPEC\s*&\s*CALC",         True),
+    ("REPAIR REPORT",            r"REP[AI]{2}R\s*REPORT",    False),
+    ("RETROFIT REPORT",          r"RETROFIT\s*REPORT",       False),
+    ("RETROFIT",                 r"RETROFIT",                False),
+    ("TEST REPORT",              r"TEST\s*REPORT",           False),
+    ("INSTRUMENT LIST",          r"INST[UR]{2}MENT\s*LIST",  False),  # 목록은 대상 아님
+    ("DRAWING",                  r"DRAWING",                 False),
+    ("SPECIFICATION",            r"SPECIFICATION",           True),
 ]
+
+# 파일명으로 못 가리는 것들 — 실물 확인 결과 (2026-08-24)
+#   30FV522C-DATA-001_REV0.pdf   내용은 "Valve Data Sheet" → 대상. 이름에 SHEET 없음
+#   070055_REV0.pdf              내용은 "Control Valve Specification".
+#                                태그가 파일명이 아니라 문서 안에 있다(B10-PV-1631A)
+#   20LV009-INSTRUMENT-001       내용은 RADIOGRAPHIC EXAMINATION REPORT → 제외 대상
+#   30PV003_REV0.tif             9페이지 스캔, 태그만 있는 이름
+# 이름을 더 짜맞추지 않는다 — 내용 판정(격자 → VLM)으로 보낸다. 2.5% 다.
 
 # 태그 — 파일명은 10FV012, 문서는 10-FV-012 처럼 쓰인다.
 TAG_RE = re.compile(r"(\d{1,3})\s*-?\s*([A-Z]{1,4})\s*-?\s*(\d{2,4})\s*-?\s*([A-Z]{0,2})")
@@ -161,16 +174,63 @@ class PageText:
         return len(self.text.strip())
 
 
-# ── 태그별 형제 문서 — 데이터시트가 이미 낡았을 수 있다는 신호 ──────
+# ══════════════════════════════════════════════════════════════
+#  정비·개조 보고서 — 추출 대상이 아닌 이유
+# ══════════════════════════════════════════════════════════════
 #
-#  10FV011 에서 확인한 것: 2003년 Retrofit 으로 MODEL NO. 와 RATED CV 가
-#  바뀌었다. 그 문서는 다행히 DATA SHEET 파일 안에 함께 철되어 있었다.
-#  그렇지 않은 태그가 있다 — Retrofit Report 만 있고 데이터시트가 없거나,
-#  데이터시트가 Retrofit 이전 상태인 경우다. 파일명만으로 공짜로 잡힌다.
+#  2026-08-24 범위 결정 (사용자). 112건(정엔지니어링 46 · Valstone 49 · 기타 17)
+#  을 추출 대상에서 제외한다. **글씨를 못 읽어서가 아니라 사양이 안 적혀 있어서다.**
+#
+#  `CONTROL VALVE REPAIR & RETROFIT CHECK SHEET` 의 SPECIFICATIONS 칸은
+#  사양서가 아니라 작업 기록이다. 실측 2건:
+#      15FV031   사양 22칸 중 12칸 기재. RATED CV·MODEL NO. 공란
+#      10PCV072  사양 22칸 중  2칸 기재(Rating, Maker). 나머지 전부 공란
+#  텍스트 레이어에 `Rated Cv` 라벨이 있는 건 46건 중 32.6%, 값까지 붙어
+#  나오는 건 4.3% 다.
+#
+#  두 번째 이유 — 시점이 섞인다. 15FV031 을 제대로 채우려면
+#      MODEL NO. 667-A · RATED CV 34.1  ← p8 Fisher 원본(1986, 사진)
+#      POSITIONER DVC 6200              ← p7 체크시트(2022, 수기)
+#  즉 한 페이지를 고르는 문제가 아니라 **시점이 다른 페이지를 합치는 문제**다.
+#  정비보고서를 빼면 "파일 안에서 페이지 하나를 고른다"는 규칙이 유지된다
+#  (10FV011 의 2003 Retrofit 사양서는 혼자서 MVP 9필드가 전부 채워진다).
+#
+#  제외는 구멍이 아니라 측정 항목으로 둔다 — 골든셋에 정비보고서를
+#  "제외가 정답" 으로 넣어 Triage 가 추출을 시도하지 않는지 채점한다.
 
-# 최신 상태를 담고 있을 수 있으나 MVP 범위 밖인 문서 종류
-LATER_DOC_KINDS = ("RETROFIT REPORT", "RETROFIT", "REPAIR REPORT", "TEST REPORT")
+REPORT_DOC_KINDS = ("RETROFIT REPORT", "RETROFIT", "REPAIR REPORT", "TEST REPORT")
 
+OUT_OF_SCOPE_REASON = {
+    "REPAIR REPORT": "정비 보고서 — 작업 기록이지 사양서가 아님(사양 칸 대부분 공란)",
+    "RETROFIT REPORT": "개조 보고서 — 작업 기록이지 사양서가 아님",
+    "RETROFIT": "개조 보고서 — 작업 기록이지 사양서가 아님",
+    "TEST REPORT": "시험 보고서 — 사양서가 아님",
+    "DRAWING": "도면 — 사양표가 아님",
+}
+
+
+def scope_reason(path: str) -> str:
+    """제외 사유 문구. 대상이거나 판단 불가면 빈 문자열.
+
+    Triage 가 `TriageResult.reason` 에 그대로 넣는다. 철학 5 — 왜 안 했는지를
+    남긴다. 조용히 건너뛰면 처리 실패율과 구분되지 않는다.
+    """
+    info = parse_filename(path)
+    if info.in_scope is not False:
+        return ""
+    return OUT_OF_SCOPE_REASON.get(info.doc_kind, f"{info.doc_kind} — 대상 아님")
+
+
+# ── 아래는 파이프라인이 쓰지 않는다 — 코퍼스 통계용 ─────────────────
+#
+#  2026-08-24 범위 결정 (사용자): *"동일한 설비 파일이 여러개인데 이중에 뭐가
+#  정답이지?는 이번 고민사항이 아니다"*. 이번 과제는 **개별 파일을 넣었을 때
+#  추출이 되는가** 이고, 파일 간 권위 판단은 범위 밖이다.
+#
+#  그래서 아래 두 함수는 Triage 에서 호출하지 않는다. 코퍼스에 이런 구조적
+#  문제가 얼마나 있는지 세는 용도로만 남긴다(발표 자료용).
+#      대상 데이터시트 907건 중 정비·개조 보고서가 따로 있는 것  79건 (8.7%)
+#      데이터시트가 아예 없고 보고서만 있는 태그               34건
 
 def index_by_tag(paths: Iterable[str]) -> dict[str | None, list[FileNameInfo]]:
     """파일 목록을 태그별로 묶는다. 파일명만 보므로 비용이 없다."""
@@ -182,22 +242,20 @@ def index_by_tag(paths: Iterable[str]) -> dict[str | None, list[FileNameInfo]]:
 
 
 def staleness_warning(path: str, index: dict) -> str:
-    """이 파일의 값이 최신이 아닐 수 있다는 경고 문구. 없으면 빈 문자열.
+    """이 태그에 정비·개조 보고서가 따로 있는가. 없으면 빈 문자열.
 
-    Triage 가 이 문구를 `reason` 에 넣고 레코드를 확인필요로 내리는 데 쓴다.
-    경고만 하고 값을 바꾸지 않는다 — 판단은 사람이 한다(철학 4).
+    ⚠️ 파이프라인에서 쓰지 않는다(위 범위 결정 참조). 코퍼스 통계용.
     """
     info = parse_filename(path)
     if not info.tag:
         return ""
     sibs = [s for s in index.get(info.tag, [])
             if os.path.normcase(s.path) != os.path.normcase(path)
-            and s.doc_kind in LATER_DOC_KINDS]
+            and s.doc_kind in REPORT_DOC_KINDS]
     if not sibs:
         return ""
     names = ", ".join(sorted({s.doc_kind for s in sibs}))
-    return (f"{info.tag} 에 {names} 가 별도로 있음 — 이 데이터시트 값이 "
-            f"최신이 아닐 수 있다(사람 확인)")
+    return f"{info.tag} 에 {names} 가 별도로 있음 (파일 간 판단은 범위 밖)"
 
 
 def probe_pages(path: str) -> list[PageText]:
