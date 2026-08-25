@@ -1,8 +1,29 @@
 # -*- coding: utf-8 -*-
-"""schema/fields.yaml → 라벨 텍스트 검색 인덱스.
+"""③-a TEXT PARSER — schema/fields.yaml → 라벨 텍스트 검색 인덱스.
 
 유사표현(aliases)을 코드에 넣지 않는다. 전부 yaml 에서 읽는다.
 표준명·유사표현이 늘어나면 이 파일을 고칠 필요 없이 스키마만 고치면 된다.
+
+■ 한 이름이 여러 필드에 걸릴 수 있다 (2026-08-25, 구역 인식)
+────────────────────────────────────────────────────────────────────
+데이터시트는 부품별로 묶여 있어서 같은 항목명이 되풀이된다.
+
+    "Maker"  → 밸브 제조사일 수도, 포지셔너 제조사일 수도 있다
+    "Model"  → 밸브 본체 모델일 수도, 포지셔너 모델일 수도 있다
+
+예전에는 이런 표기를 사전에서 아예 뺐다. 넣으면 한 필드가 이기고 나머지가
+굶기 때문이다. 그 대가로 MVP 필드 `MANUFACTURER` 는 유사표현이 0개였다.
+
+이제는 **여러 필드에 등록해 두고 구역으로 고른다**. 문서가 이 항목을 어느
+부품 묶음에 넣었는지는 `sections.py` 가 알려준다.
+
+    lookup("Maker")                          → None   (애매하면 만들지 않는다)
+    lookup("Maker",     allowed=본체 필드들)  → manufacturer
+    lookup("Maker",     allowed=포지셔너들)   → positioner_manufacturer
+    lookup("Model No.", allowed=액추에이터들) → None   ← 오답이 여기서 죽는다
+
+마지막 줄이 중요하다. 후보가 하나뿐이어도 그 구역에서 나올 수 없는 필드면
+버린다. 액추에이터 묶음의 `Model No.`(880)를 밸브 모델로 집던 오답이 이것이다.
 """
 from __future__ import annotations
 
@@ -43,10 +64,12 @@ class FieldHit:
 
 
 class FieldIndex:
-    """정규화된 라벨 → 필드 조회."""
+    """정규화된 라벨 → 필드 후보들."""
 
     def __init__(self, fields: list[dict]):
-        self._by_label: dict[str, FieldHit] = {}
+        # 한 라벨에 후보가 여러 개일 수 있다. 등록 순서가 곧 우선순위다
+        # (표준명이 먼저, 그다음 yaml 에 적힌 순서의 유사표현).
+        self._by_label: dict[str, list[FieldHit]] = {}
         self.collisions: list[tuple[str, str, str]] = []
         self.field_count = len(fields)
 
@@ -59,12 +82,14 @@ class FieldIndex:
     def _put(self, label: str, f: dict, conf: float, how: str) -> None:
         if not label:
             return
-        prev = self._by_label.get(label)
-        if prev is not None:
-            if prev.key != f["key"]:
-                self.collisions.append((label, prev.key, f["key"]))
-            return                                          # 먼저 등록된 쪽이 이긴다
-        self._by_label[label] = FieldHit(f["key"], f["name"], conf, how)
+        hits = self._by_label.setdefault(label, [])
+        if any(h.key == f["key"] for h in hits):
+            return                                          # 같은 필드 중복 등록
+        if hits:
+            # 여러 필드에 걸린 표기. 구역 없이는 여전히 매핑하지 않으므로
+            # 오답이 되지는 않지만, 사전을 검토할 때 보이도록 남긴다.
+            self.collisions.append((label, hits[0].key, f["key"]))
+        hits.append(FieldHit(f["key"], f["name"], conf, how))
 
     @classmethod
     def load(cls, path: str = SCHEMA_PATH) -> "FieldIndex":
@@ -72,12 +97,48 @@ class FieldIndex:
             doc = yaml.safe_load(fp)
         return cls(doc["fields"])
 
-    def lookup(self, label: object) -> FieldHit | None:
-        return self._by_label.get(normalize_label(label))
+    def lookup(self, label: object,
+               allowed: set[str] | None = None) -> FieldHit | None:
+        """라벨 → 필드. 애매하면 None (틀린 값을 만들지 않는다).
+
+        allowed
+            이 위치(구역)에서 나올 수 있는 field key 집합.
+            None  구역을 모른다 → 이름만으로 판단한다 (구역 구조가 없는 문서)
+            집합  구역을 안다   → 그 집합 밖의 필드는 후보에서 버린다.
+                  빈 집합이면 이 구역에서는 아무 필드도 나오지 않는다는 뜻이다
+                  (LIMIT SW · ACCESSORIES 같은 우리 스키마 밖 묶음)
+        """
+        hits = self._by_label.get(normalize_label(label))
+        if not hits:
+            return None
+
+        if allowed is not None:
+            hits = [h for h in hits if h.key in allowed]
+            if not hits:
+                return None                 # 이 구역에서 나올 수 없는 항목이다
+            return hits[0]                  # 구역이 갈라줬다 — 우선순위대로
+
+        if len(hits) == 1:
+            return hits[0]
+
+        # 후보가 여럿이어도 **표준명 소유 필드가 있으면 그쪽**이다.
+        # `Model No.` 는 MODEL NO. 의 이름이고, POSITIONER MODEL NO. 는 그 이름을
+        # 빌려 쓸 뿐이다. 이 규칙이 없으면 킷 열 이름("MODEL NO.")조차 애매해져
+        # 채점에서 통째로 빠진다 (실제로 채점 칸이 205 → 196 으로 줄었다).
+        if hits[0].matched_on == "name":
+            return hits[0]
+
+        # 유사표현끼리 걸린 경우는 고르지 않는다. 반쯤 맞는 값보다 미추출이
+        # 낫다 — 미추출은 사람이 채우고, 오답은 그대로 흘러간다.
+        return None
+
+    def candidates(self, label: object) -> list[FieldHit]:
+        """구역과 무관한 후보 전부. 리포트·진단용."""
+        return list(self._by_label.get(normalize_label(label)) or [])
 
     def keys(self) -> set[str]:
         """스키마에 존재하는 field key 집합."""
-        return {h.key for h in self._by_label.values()}
+        return {h.key for hits in self._by_label.values() for h in hits}
 
     def __len__(self) -> int:
         return len(self._by_label)

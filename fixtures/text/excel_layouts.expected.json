@@ -76,9 +76,9 @@
   ],
   "unmapped": [
     {
-      "text": "MATERIAL",
-      "source_locator": "SPEC!A22",
-      "neighbor_value": "Body"
+      "text": "Body",
+      "source_locator": "SPEC!B22",
+      "neighbor_value": "ASTM A216 Gr-WCB"
     },
     {
       "text": "Positioner Type",

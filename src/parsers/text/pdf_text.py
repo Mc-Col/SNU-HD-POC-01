@@ -6,6 +6,12 @@
   ② 같은 행에 라벨 · 값이 x 좌표로 분리    (좌우 2단 사양표)
 
 엑셀 파서와 같은 FieldIndex 를 쓴다. 유사표현은 코드가 아니라 스키마에만 있다.
+
+구역(section) 인식 — 2026-08-25
+    같은 항목명이 부품마다 되풀이되므로(`Model`=밸브 본체 / `Model No.`=액추에이터)
+    라벨이 **어느 묶음에 있는지**를 함께 본다. PDF 에서 묶음의 이름표는 여백에
+    90도 회전된 글자다. 자세한 것은 `sections.py` 의 머리말에 적어 두었다.
+    구역 구조가 없는 문서는 이 장치가 조용히 꺼진다 (지금까지와 같게 동작).
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
 from .field_index import FieldIndex
+from .sections import SectionIndex, SectionMap
 from .units import UnitIndex
 
 Y_TOL = 3.0                 # 이 이내면 같은 행으로 본다
@@ -60,6 +67,11 @@ def _rows(page) -> list[list[_Cell]]:
         if block["type"] != 0:
             continue
         for line in block["lines"]:
+            # 90도 회전된 글자는 구역 이름표다 (sections.py). 라벨도 값도 아니므로
+            # 여기서 뺀다. 남겨두면 `MATERIAL` 같은 이름표가 라벨로 읽혀 옆 글자를
+            # 값으로 집는다.
+            if line.get("dir", (1.0, 0.0)) != (1.0, 0.0):
+                continue
             for span in line["spans"]:
                 t = span["text"].strip()
                 if t:
@@ -89,6 +101,7 @@ def parse_pdf_text(
     pages: list[int] | None = None,
     composite: CompositeIndex | None = None,
     units: UnitIndex | None = None,
+    sections: SectionIndex | None = None,
 ) -> TextParseResult:
     """텍스트 레이어가 있는 PDF → RawExtraction[] + 미매핑 라벨.
 
@@ -97,6 +110,7 @@ def parse_pdf_text(
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
     doc = fitz.open(path)
     result = TextParseResult()
     seen: set[str] = set()
@@ -117,6 +131,7 @@ def parse_pdf_text(
     # 기준(100자)이라, 글자가 적어도 라벨 몇 개는 읽히는 페이지를 버리게 된다.
     for pno in targets:
         page = doc[pno - 1]
+        secmap = SectionMap.from_pdf(page, six)   # 회전 텍스트 = 구역 이름표
         anchor: float | None = None         # 현재 유효한 Normal 열 x 좌표
         for ri, row in enumerate(_rows(page), start=1):
             found_anchor = _column_anchor(row)
@@ -132,6 +147,9 @@ def parse_pdf_text(
                 label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor, uix)
                 if label is None:
                     continue
+
+                # 이 라벨이 속한 구역에서 나올 수 있는 필드 (모르면 None)
+                allowed = six.allowed(secmap.at(cell.y0, cell.x0)) if secmap else None
 
                 loc = f"p{pno}:L{ri}:c{(vidx if value else ci) + 1}"
 
@@ -157,7 +175,7 @@ def parse_pdf_text(
                         result.unmapped.append(UnmappedLabel(pc.label, loc, pc.value))
                     continue
 
-                hit = ix.lookup(label)
+                hit = ix.lookup(label, allowed)
                 if hit is None:
                     if value:
                         result.unmapped.append(UnmappedLabel(

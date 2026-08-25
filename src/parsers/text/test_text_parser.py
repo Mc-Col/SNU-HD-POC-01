@@ -51,7 +51,20 @@ def test_유사표현은_스키마에서만_읽는다():
     assert ix.field_count == len(_schema.all_fields())
     assert ix.lookup("Tag").key == "engineering_tag_no"
     assert ix.lookup("Fail Position").key == "actuator_fail_action"
-    assert ix.collisions == []
+
+
+def test_여러_필드에_걸린_표기는_구역_없이_매핑하지_않는다():
+    """`Maker` · `Model` 처럼 부품마다 되풀이되는 표기는 일부러 여러 필드에 등록한다.
+
+    구역(section)을 읽으면 갈라 쓰고, 못 읽으면 아무것도 만들지 않는다.
+    이름의 주인(표준명)만 예외로 이긴다 — `MODEL NO.` 는 MODEL NO. 의 이름이다.
+    """
+    ix = FieldIndex.load()
+    assert ix.collisions, "구역으로 갈리는 표기가 하나도 없다면 사전이 낡은 것이다"
+    for label, _, _ in ix.collisions:
+        hit = ix.lookup(label)
+        assert hit is None or hit.matched_on == "name", (
+            f"{label!r} 가 구역 없이 {hit and hit.key} 로 매핑된다")
 
 
 # ── 파서 출력 ──────────────────────────────────────────────────
