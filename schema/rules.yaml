@@ -199,6 +199,76 @@ unit_tokens:
   - Kg/cm2A
   - Cv             # 52PV014 "Required Cv | Cv | 75.7" — 유량계수의 단위 칸
 
+# ── 형식 검증 규칙 (⑤-a) ───────────────────────────────────────
+#
+# 무엇을 보는가 (2026-08-25)
+#   `src/validate/format` 이 읽는다. **형식만** 본다 — 값이 옳은지는 도메인
+#   검증(⑤-b)과 사람의 몫이다. 위반을 찾아도 재시도를 걸지 않는다
+#   (재시도는 "못 읽음" 에만. 값이 틀렸다고 모델에게 말하면 환각을 유도한다).
+#
+# 규칙을 어떻게 정했는가
+#   골든셋 20건의 정답값을 실측해서 정했다. 상상으로 만든 규칙은 없다.
+#     · numeric    : 그 필드의 정답이 **전부** 숫자를 포함한 필드만 지정
+#     · max_length : 실측 최대 길이의 2배 안팎. 통째로 잘못 집힌 값(문장 한 줄)을
+#                    잡는 용도이지 값을 재는 자가 아니다
+#     · tag        : 태그 명명 규칙은 `preprocess.parse_tag()` 가 이미 안다.
+#                    정규식을 여기 다시 쓰지 않는다
+#
+# ⚠️ 범주형 허용값 목록(GLOBE/BUTTERFLY …)은 MVP 범위 밖이다.
+#    벤더 표기가 계속 나와서 목록을 닫으면 정상 값을 위반으로 잡는다.
+#
+# ⚠️ numeric 은 **단위 표기를 위반으로 보지 않는다.** 옛 데이터시트는 단위를
+#    사람이 손으로 썼고 `142.6 m3/Hr` · `205 kg/cm2(g)` 가 모두 정상이다.
+#    숫자가 하나라도 있으면 통과이고, 하나도 없으면 위반이다.
+#
+#    한 칸 더 좁혀 "숫자와 **알려진 단위**만 허용" 하는 규칙도 만들어 재봤다.
+#    `약 53.8` 같은 값을 잡을 수 있지만, 골든셋 정답 3건을 오탐했다 —
+#    `30 m3h`(슬래시 없음) · `205 kg/cm2(g)`(괄호 게이지 표기) · `8 g/cm2G`.
+#    사람이 손으로 쓴 단위 변형은 어휘로 끝까지 못 따라간다(2026-08-25 실측).
+#    그래서 켜지 않았다. 정상 값을 위반으로 부르는 검사는 쓸 수 없다.
+format_rules:
+
+  # ── 식별 ──
+  engineering_tag_no:
+    tag: true                 # preprocess.parse_tag() 로 판정 (Area-설비종류-일련번호)
+    max_length: 20            # 실측 최대 10 ('10-FV-007A')
+
+  # ── 숫자 필드 — 정답 전부가 숫자를 포함했다 ──
+  normal_flow_rate:   { numeric: true, max_length: 30 }   # 실측 11 ('142.6 m3/Hr')
+  normal_pressure:    { numeric: true, max_length: 30 }   # 실측 13 ('205 kg/cm2(g)')
+  normal_temperature: { numeric: true, max_length: 30 }   # 실측 7
+  specific_gravity:   { numeric: true, max_length: 20 }   # 실측 5
+  viscosity:          { numeric: true, max_length: 20 }   # 실측 5
+  rated_cv:           { numeric: true, max_length: 20 }   # 실측 5
+  required_cv:        { numeric: true, max_length: 20 }   # 실측 6
+  # 아래 둘은 unit_only 를 켜지 않는다 — 정답에 설명 글자가 정상으로 들어온다
+  # ('ANSI CLASS 300' · 'IN DIA. 200 mm'). 숫자가 있는지만 본다.
+  valve_body_size:    { numeric: true, max_length: 30 }   # 실측 14 ('IN DIA. 200 mm')
+  valve_body_rating:  { numeric: true, max_length: 30 }   # 실측 14 ('ANSI CLASS 300')
+                                                          # 등급에는 반드시 숫자가 있다.
+                                                          # 'RF FLANGED' 같은 연결 형식이
+                                                          # 들어오면 여기서 잡힌다
+
+  # ── 글자 필드 — 길이만 본다 ──
+  type_name:                  { max_length: 60 }   # 실측 25
+  equipment_full_description: { max_length: 80 }
+  manufacturer:               { max_length: 60 }   # 실측 23
+  model_no:                   { max_length: 40 }   # 실측 11
+  fluid_name:                 { max_length: 40 }   # 실측 14
+  fluid_state:                { max_length: 20 }   # 실측 6
+  valve_body_type:            { max_length: 30 }   # 실측 5
+  valve_body_material:        { max_length: 40 }   # 실측 17
+  valve_leakage_class:        { max_length: 30 }   # 실측 13
+  characteristic:             { max_length: 40 }   # 실측 19
+  valve_plug_material:        { max_length: 40 }   # 실측 18
+  valve_cage_material:        { max_length: 40 }   # 실측 13
+  valve_seat_material:        { max_length: 40 }   # 실측 18
+  valve_stem_material:        { max_length: 40 }   # 실측 17
+  actuator_type:              { max_length: 40 }   # 실측 19
+  actuator_fail_action:       { max_length: 20 }   # 실측 10 ('Fail Close')
+  positioner_manufacturer:    { max_length: 60 }   # 실측 10
+  positioner_model_no:        { max_length: 40 }   # 실측 22
+
 # ── 구역(section) 사전 ─────────────────────────────────────────
 #
 # 무엇인가 (2026-08-25)
