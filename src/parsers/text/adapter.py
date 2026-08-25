@@ -22,6 +22,7 @@ from .composite import CompositeIndex
 from .excel import parse_excel
 from .field_index import FieldIndex
 from .pdf_text import ScannedPdfError, parse_pdf_text
+from .sections import SectionIndex
 
 EXCEL_EXT = {".xlsx", ".xlsm", ".xls"}
 
@@ -40,7 +41,8 @@ class TextParser:
 
     def __init__(self, index: FieldIndex | None = None,
                  composite: CompositeIndex | None = None) -> None:
-        self.index = index or FieldIndex.load()
+        # 파서가 구역 한정 표기를 쓰려면 구역 이름을 아는 인덱스여야 한다
+        self.index = index or FieldIndex.load(section_names=SectionIndex.load().name_map())
         self.composite = composite if composite is not None else CompositeIndex.load()
 
     def extract(self, path: str, triage: TriageResult,

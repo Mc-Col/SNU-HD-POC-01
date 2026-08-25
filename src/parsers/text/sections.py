@@ -125,6 +125,15 @@ class SectionIndex:
             return None
         return self._fields.get(key)
 
+    def name_map(self) -> dict[str, str]:
+        """정규화된 구역 표기 → 표준 구역.
+
+        `FieldIndex` 가 유사표현 앞에 붙은 구역 접두어를 떼는 데 쓴다.
+        (킷의 원문라벨은 라벨러가 구역명을 앞에 붙여 적은 것이 많다 —
+        `MATERIAL Body/Bonnet`. 문서의 실제 라벨은 `Body /Bonnet` 뿐이다.)
+        """
+        return dict(self._alias)
+
     def __len__(self) -> int:
         return len(self._alias)
 

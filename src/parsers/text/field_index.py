@@ -61,12 +61,16 @@ class FieldHit:
     name: str
     confidence: float
     matched_on: str          # "name" | "alias"
+    section: str | None = None
+    # 구역 한정 표기. 구역 접두어를 뗀 표기는 그 구역 안에서만 쓴다 —
+    # `MATERIAL Body/Bonnet` 에서 뗀 `Body/Bonnet` 은 재질 묶음에서만 유효하다.
+    # 아무 데서나 쓰면 `BODY Size` 에서 뗀 `Size` 가 액추에이터 크기를 집는다.
 
 
 class FieldIndex:
     """정규화된 라벨 → 필드 후보들."""
 
-    def __init__(self, fields: list[dict]):
+    def __init__(self, fields: list[dict], section_names: dict[str, str] | None = None):
         # 한 라벨에 후보가 여러 개일 수 있다. 등록 순서가 곧 우선순위다
         # (표준명이 먼저, 그다음 yaml 에 적힌 순서의 유사표현).
         self._by_label: dict[str, list[FieldHit]] = {}
@@ -78,29 +82,61 @@ class FieldIndex:
         for f in fields:                                   # 표준명이 유사표현보다 우선
             for a in f.get("aliases") or []:
                 self._put(normalize_label(a), f, CONF_ALIAS, "alias")
+                self._put_stripped(a, f, section_names or {})
 
-    def _put(self, label: str, f: dict, conf: float, how: str) -> None:
+    def _put_stripped(self, alias: str, f: dict, section_names: dict[str, str]) -> None:
+        """구역 접두어를 뗀 표기도 등록한다 (그 구역 안에서만 쓰도록).
+
+        킷의 원문라벨은 라벨러가 구역명을 앞에 붙여 적은 것이 많다.
+
+            사전            "MATERIAL Body/Bonnet"
+            문서의 실제 라벨  "Body /Bonnet"      ← 구역명은 여백에 세로로 따로 선다
+
+        그대로는 영영 만나지 못한다. 실물 9건 중 15칸이 이 이유로 미추출이었다.
+        구역 인식이 생겼으니 접두어를 떼고 **그 구역 한정**으로 등록할 수 있다.
+        """
+        n = normalize_label(alias)
+        for sname, skey in section_names.items():
+            if not sname or not n.startswith(sname):
+                continue
+            rest = n[len(sname):]
+            if len(rest) < 3:            # 접두어를 떼고 남은 게 없으면 표기가 아니다
+                continue
+            self._put(rest, f, CONF_ALIAS, "alias", section=skey)
+
+    def _put(self, label: str, f: dict, conf: float, how: str,
+             section: str | None = None) -> None:
         if not label:
             return
         hits = self._by_label.setdefault(label, [])
-        if any(h.key == f["key"] for h in hits):
+        if any(h.key == f["key"] and h.section == section for h in hits):
             return                                          # 같은 필드 중복 등록
         if hits:
             # 여러 필드에 걸린 표기. 구역 없이는 여전히 매핑하지 않으므로
             # 오답이 되지는 않지만, 사전을 검토할 때 보이도록 남긴다.
             self.collisions.append((label, hits[0].key, f["key"]))
-        hits.append(FieldHit(f["key"], f["name"], conf, how))
+        hits.append(FieldHit(f["key"], f["name"], conf, how, section))
 
     @classmethod
-    def load(cls, path: str = SCHEMA_PATH) -> "FieldIndex":
+    def load(cls, path: str = SCHEMA_PATH,
+             section_names: dict[str, str] | None = None) -> "FieldIndex":
+        """section_names 를 주면 구역 접두어를 뗀 표기까지 등록한다.
+
+        `SectionIndex.name_map()` 을 그대로 넘기면 된다. 넘기지 않으면 예전과
+        똑같이 동작한다 (구역을 모르는 호출부·도구가 그대로 돌아간다).
+        """
         with open(path, encoding="utf-8") as fp:
             doc = yaml.safe_load(fp)
-        return cls(doc["fields"])
+        return cls(doc["fields"], section_names)
 
     def lookup(self, label: object,
-               allowed: set[str] | None = None) -> FieldHit | None:
+               allowed: set[str] | None = None,
+               section: str | None = None) -> FieldHit | None:
         """라벨 → 필드. 애매하면 None (틀린 값을 만들지 않는다).
 
+        section
+            이 위치의 표준 구역 (`body` · `trim` …). 구역 한정 표기를 쓸지
+            정하는 데 쓴다. 모르면 None.
         allowed
             이 위치(구역)에서 나올 수 있는 field key 집합.
             None  구역을 모른다 → 이름만으로 판단한다 (구역 구조가 없는 문서)
@@ -109,6 +145,16 @@ class FieldIndex:
                   (LIMIT SW · ACCESSORIES 같은 우리 스키마 밖 묶음)
         """
         hits = self._by_label.get(normalize_label(label))
+        if not hits:
+            return None
+
+        if section is None:
+            # 구역을 모르면 구역 한정 표기는 쓰지 않는다.
+            hits = [h for h in hits if h.section is None]
+        else:
+            hits = [h for h in hits if h.section in (None, section)]
+            # 이 구역 전용 표기가 있으면 그쪽이 먼저다
+            hits.sort(key=lambda h: h.section != section)
         if not hits:
             return None
 
