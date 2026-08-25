@@ -3,6 +3,12 @@
 
 셀 좌표로 매핑하지 않는다. 벤더 양식은 디테일이 바뀌므로 헤더 텍스트가 기준이다.
 값은 라벨의 오른쪽 → 아래 순서로 찾는다.
+
+구역(section) 인식 — 2026-08-25
+    같은 항목명이 부품마다 되풀이되므로(`Model`=밸브 본체 / `Model No.`=액추에이터)
+    라벨이 **어느 묶음에 있는지**를 함께 본다. 엑셀에서 묶음의 이름표는 세로로
+    병합된 셀이다. 자세한 것은 `sections.py` 의 머리말에 적어 두었다.
+    구역 구조가 없는 문서는 이 장치가 조용히 꺼진다 (지금까지와 같게 동작).
 """
 from __future__ import annotations
 
@@ -16,6 +22,7 @@ from src.contracts import ParserType, RawExtraction
 from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .field_index import FieldIndex
+from .sections import SectionIndex, SectionMap
 from .units import UnitIndex
 from .xls_compat import load_xls
 
@@ -65,6 +72,7 @@ def parse_excel(
     composite: CompositeIndex | None = None,
     sheets: list[str | int] | None = None,
     units: UnitIndex | None = None,
+    sections: SectionIndex | None = None,
 ) -> TextParseResult:
     """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨.
 
@@ -74,6 +82,7 @@ def parse_excel(
     ix = index or FieldIndex.load()
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
     wb = (load_xls(path) if path.lower().endswith(".xls")
           else openpyxl.load_workbook(path, data_only=True))
     result = TextParseResult()
@@ -83,6 +92,7 @@ def parse_excel(
         if sheets is not None and page not in sheets and ws.title not in sheets:
             continue
         merged = _merged_index(ws)
+        secmap = SectionMap.from_excel(ws, six)  # 세로 병합 셀 = 구역 이름표
         consumed: set[tuple[int, int]] = set()   # 값으로 이미 쓰인 셀은 라벨이 아니다
 
         def cell_value(r: int, c: int) -> object:
@@ -111,10 +121,14 @@ def parse_excel(
 
         # 1패스: 표준 컬럼에 붙는 라벨. 2패스: 나머지 라벨 후보(미매핑 수집).
         # 매핑되는 라벨이 값을 먼저 claim 해야 엉뚱한 텍스트가 값을 채가지 않는다.
+        def allowed_at(r: int, c: int) -> set[str] | None:
+            """이 칸이 속한 구역에서 나올 수 있는 필드. 구역을 모르면 None."""
+            return six.allowed(secmap.at(r, c)) if secmap else None
+
         candidates = [c for row in ws.iter_rows() for c in row]
         known = [c for c in candidates
                  if isinstance(c.value, str)
-                 and (ix.lookup(_text(c.value)) is not None
+                 and (ix.lookup(_text(c.value), allowed_at(c.row, c.column)) is not None
                       or cix.lookup(_text(c.value)) is not None)]
         rest = [c for c in candidates if c not in known]
 
@@ -128,6 +142,8 @@ def parse_excel(
                     continue
                 if not isinstance(cell.value, str):      # 숫자·날짜는 라벨이 아니다
                     continue
+                if secmap and secmap.is_marker(r, c):    # 구역 이름표는 라벨이 아니다
+                    continue
 
                 label = _text(cell.value)
                 if not label or len(label) > MAX_LABEL_LEN:
@@ -135,7 +151,7 @@ def parse_excel(
                 if not any(ch.isalpha() for ch in label):
                     continue
 
-                hit = ix.lookup(label)
+                hit = ix.lookup(label, allowed_at(r, c))
                 value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed,
                                           uix, nor_by_row.get(r))
                 if value:

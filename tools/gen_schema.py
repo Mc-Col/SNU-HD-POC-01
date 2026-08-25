@@ -85,6 +85,21 @@ ADD = [
 MERGE = {"RATED CV MAX": "RATED CV"}
 MERGE_DROP = {"RATED CV NORMAL"}
 MERGE_ALIASES = {
+    # ── 구역(section)으로 갈리는 표기 (2026-08-25) ─────────────────────
+    # 한 표기를 **여러 필드에 등록**한다. 예전에는 이런 표기를 아예 뺐다 —
+    # 한 필드가 이기고 나머지가 굶기 때문이다. 이제 파서가 문서의 구역
+    # 이름표를 읽으므로(`src/parsers/text/sections.py`), 밸브 본체 묶음의
+    # `Model` 과 포지셔너 묶음의 `Model` 을 갈라 쓸 수 있다.
+    #
+    # 구역을 못 읽는 문서에서는 후보가 여럿이라 그대로 미매핑이 된다.
+    # 즉 되살려도 오답이 늘지 않는다 (`FieldIndex.lookup` 의 마지막 줄).
+    "MANUFACTURER": ["Maker"],
+    "POSITIONER MANUFACTURER": ["Maker"],
+    # `Model No.` 는 MODEL NO. 의 표준명이지만 포지셔너 블록에서도 그 이름을
+    # 쓴다 (44LV001 r43 `Model No. | YT-1200`). 표준명 소유 필드가 우선한다는
+    # 규칙(`FieldIndex.lookup`)이 있어서 빌려 써도 이름 해석이 깨지지 않는다.
+    "POSITIONER MODEL NO.": ["Model", "Model #", "Model No."],
+
     # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
     #   "Guide Material" → VALVE CAGE MATERIAL : 10FV079 에서 가이드는 케이지와 다른 부품
     #                                            ("SOLID STELLITE" vs 정답 "316 SST")
@@ -94,7 +109,6 @@ MERGE_ALIASES = {
     # 킷의 원문라벨에서 수집 (2026-08-25, 골든셋 21건). 사람이 상상해서 채울 수 없는
     # 표기 변종을 실물에서 모은 것이다. 한 표기가 여러 필드에 걸리는 것,
     # 다른 필드의 표준명과 겹치는 것, 복합 라벨 규칙이 이미 처리하는 것은 뺐다.
-    "RATED CV": ["VALVE COEFFICIENT"],
     "ACTUATOR FAIL ACTION": [
         "Air Fails Valve to", "ACT'N Fail Position", "ACTUATOR Fail Position",
         "ACTUATOR Failure Mode", "Actuator Fail", "Fail",
@@ -108,6 +122,8 @@ MERGE_ALIASES = {
     "FLUID NAME": ["GENERAL Fluid", "SERVICE CONDITION Fluid"],
     "FLUID STATE": ["GENERAL Fluid Type"],
     "MODEL NO.": [
+        # "Model" · "Model #" 는 포지셔너에도 걸린다 — 구역이 가른다
+        "Model", "Model #",
         "Model Number", "VALVE BODY/BONNET Model", "VALVE BODY/BONNET Model No.", "Valve Model",
     ],
     "NORMAL FLOW RATE": [
@@ -129,6 +145,9 @@ MERGE_ALIASES = {
     ],
     "SPECIFIC GRAVITY": ["Density", "SG-MW"],
     "VALVE BODY MATERIAL": [
+        # "Material" 단독은 바디 재질로만 둔다. 트림 묶음의 "Material" 은 어느
+        # 부품인지 문서가 말해주지 않아 구역으로도 갈리지 않는다
+        "Material",
         "Body Material", "Body Matl", "MATERIAL Body", "VALVE BODY / BONNET Material",
         "Body Style Material", "MATERIAL Body/Bonnet",
     ],
@@ -211,7 +230,29 @@ def q(s):
     return f'"{s}"'
 
 
+def assert_no_duplicate_alias_keys() -> None:
+    """MERGE_ALIASES 에 같은 필드명이 두 번 나오면 멈춘다.
+
+    파이썬 딕셔너리 리터럴은 같은 키가 두 번 나오면 **뒤엣것이 앞엣것을 조용히
+    덮는다.** 2026-08-25 에 구역용 표기를 넣었다가 이걸로 잃었다 —
+    `"MODEL NO.": ["Model", "Model #"]` 를 위에 적었는데 아래에 이미 같은 키가
+    있어서 새로 넣은 표기가 사라졌고, 생성된 fields.yaml 만 봐서는 알 수 없었다.
+    """
+    import ast
+
+    tree = ast.parse(open(__file__, encoding="utf-8").read())
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "MERGE_ALIASES" for t in node.targets)):
+            continue
+        names = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+        dups = {n for n in names if names.count(n) > 1}
+        if dups:
+            raise SystemExit(f"MERGE_ALIASES 에 중복 키가 있다 (뒤엣것만 살아남는다): {sorted(dups)}")
+
+
 def main():
+    assert_no_duplicate_alias_keys()
     wb = openpyxl.load_workbook(SRC, data_only=True)
     ws = wb["Output"]
 
