@@ -35,6 +35,31 @@ value_aliases:
   # valve_body_material:
   #   - from: ["CS", "C.S.", "CARBON STEEL"]
   #     to: "CARBON STEEL"
+  #
+  # ── 숫자 필드 표시 (2026-08-25) ────────────────────────────────
+  # `numeric: true` 면 값 대조에서 **글자를 통째로 무시하고 숫자만** 본다.
+  # `eval/harness.py` 의 `_numeric()` 과 텍스트 파서 채점기가 여기를 읽는다.
+  #
+  # 왜 필요한가
+  #   단위 어휘를 아무리 늘려도 못 잡는 경우가 있다.
+  #     · 어휘에 없는 표기      `5Nm3/h`      → 정답을 숫자로 못 읽어 오답 처리
+  #     · 글자가 깨진 표기      `(m?h)` `kg/cm?(g)`  (2026-08-24 실측)
+  #   숫자 필드라고 알려주면 둘 다 통과한다. 재질·형식처럼 글자가 값인 필드에는
+  #   절대 쓰지 않는다 — `A351 CF8M` 과 `A351 CF3M` 이 같아진다.
+  normal_flow_rate:
+    - numeric: true
+  normal_pressure:
+    - numeric: true
+  normal_temperature:
+    - numeric: true
+  specific_gravity:
+    - numeric: true
+  viscosity:
+    - numeric: true
+  rated_cv:
+    - numeric: true
+  required_cv:
+    - numeric: true
   actuator_fail_action:
     # 52PV014 의 "Fail Position" 칸 값이 "VALVE CLOSE" 다. 파서는 맞는 칸을 읽었고
     # 표준값으로 바꾸는 것은 ④ Normalize 몫이다 (2026-08-25).
