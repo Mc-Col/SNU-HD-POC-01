@@ -171,6 +171,23 @@ def test_no_text_does_not_pick_a_page(tmp_path):
     assert "VLM" in result.reason                                # 누가 판정할지 남긴다
 
 
+def test_multiline_spec_header_is_matched(tmp_path):
+    """머리글이 두 줄로 조판돼도 사양표로 판정한다.
+
+    양식은 `CONTROL VALVE` 와 `SPECIFICATIONS` 를 두 줄로 앉히는 일이 많고,
+    텍스트 추출은 그 줄바꿈을 남긴다. 공백을 접지 않으면 놓친다 —
+    실물 `10PV081` p2 · `10PDV067` 시트 SPEC 이 그래서 빠졌다.
+    """
+    from src.triage import _looks_like_spec
+    body = ("\nItem No. 1\nCustomer HYUNDAI OILBANK CO., LTD.\n"
+            "Date 2006/04/16\nTag No. 10-PDV-067\nModel No. 880-2221\n"
+            "Rated Cv 118\nBody Size 3in\nRating ANSI CLASS 300\n") * 2
+    assert _looks_like_spec("CONTROL VALVE\nSPECIFICATIONS" + body)      # 줄바꿈
+    assert _looks_like_spec("CONTROL   VALVE   SPECIFICATIONS" + body)   # 연속 공백
+    assert _looks_like_spec("CONTROL VALVE SPECIFICATIONS" + body)       # 한 줄
+    assert not _looks_like_spec("TRANSMITTAL\nCOVER SHEET" + body)       # 무관한 문서
+
+
 def test_ambiguous_candidates_are_not_picked(tmp_path):
     """사양표 후보가 2장인데 날짜가 같으면 **고르지 않는다.**
 

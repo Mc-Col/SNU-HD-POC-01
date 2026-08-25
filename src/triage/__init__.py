@@ -41,6 +41,7 @@ from __future__ import annotations                      # 타입 표기 일관�
 
 import logging                                          # 실패를 삼키지 않고 기록
 import os                                               # 확장자·경로
+import re                                               # 머리글 비교 전 공백 접기
 import tempfile                                         # 렌더 기본 위치
 
 from src import preprocess                              # 조립할 공용 도구
@@ -130,11 +131,17 @@ def _looks_like_spec(text: str) -> bool:
 
     텍스트가 짧으면 판정하지 않는다 — 도장·표제만 텍스트인 스캔본이 있어서,
     적은 글자로 판정하면 사양표를 놓치거나 아닌 것을 사양표로 만든다.
+
+    **공백을 하나로 접고 비교한다.** 양식의 머리글은 두 줄로 조판되는 일이 많고
+    텍스트 추출은 그 줄바꿈을 그대로 남긴다. 접지 않으면 놓친다 — 실물 확인:
+    `10PV081` p2 와 `10PDV067` 시트 `SPEC` 은 `"CONTROL VALVE\nSPECIFICATIONS"`
+    라서 연속 문자열 비교로는 걸리지 않았고, 그 결과 골든셋 2건이 사양표 없음으로
+    떨어졌다(하나는 out_of_scope 까지 갔다).
     """
     if len(text.strip()) < MIN_TEXT_FOR_SPEC_JUDGEMENT:
         return False
-    upper = text.upper()
-    return any(keyword in upper for keyword in SPEC_HEADER_KEYWORDS)
+    probe = re.sub(r"\s+", " ", text.upper())               # 줄바꿈·연속 공백 → 공백 1개
+    return any(keyword in probe for keyword in SPEC_HEADER_KEYWORDS)
 
 
 def classify_pages(path: str, pages, render_dir: str | None = None) -> list[PageInfo]:
