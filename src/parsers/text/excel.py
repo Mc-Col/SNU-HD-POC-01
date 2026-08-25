@@ -79,10 +79,12 @@ def parse_excel(
     sheets 는 시트 이름 또는 1-based 순번. None 이면 전체.
     Triage 가 사양표 시트를 지정하면 그것만 본다 (사진·이력 시트 노이즈 배제).
     """
-    ix = index or FieldIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
+    # 구역 사전을 먼저 읽어 넘긴다 — 구역 접두어가 붙은 유사표현
+    # (`MATERIAL Body/Bonnet`)을 떼어 등록하려면 구역 이름을 알아야 한다.
+    ix = index or FieldIndex.load(section_names=six.name_map())
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
-    six = sections if sections is not None else SectionIndex.load()
     wb = (load_xls(path) if path.lower().endswith(".xls")
           else openpyxl.load_workbook(path, data_only=True))
     result = TextParseResult()
@@ -121,14 +123,16 @@ def parse_excel(
 
         # 1패스: 표준 컬럼에 붙는 라벨. 2패스: 나머지 라벨 후보(미매핑 수집).
         # 매핑되는 라벨이 값을 먼저 claim 해야 엉뚱한 텍스트가 값을 채가지 않는다.
-        def allowed_at(r: int, c: int) -> set[str] | None:
-            """이 칸이 속한 구역에서 나올 수 있는 필드. 구역을 모르면 None."""
-            return six.allowed(secmap.at(r, c)) if secmap else None
+        def section_at(r: int, c: int) -> str | None:
+            """이 칸이 속한 표준 구역. 구역 구조가 없는 문서면 None."""
+            return secmap.at(r, c) if secmap else None
 
         candidates = [c for row in ws.iter_rows() for c in row]
         known = [c for c in candidates
                  if isinstance(c.value, str)
-                 and (ix.lookup(_text(c.value), allowed_at(c.row, c.column)) is not None
+                 and (ix.lookup(_text(c.value),
+                                six.allowed(section_at(c.row, c.column)),
+                                section_at(c.row, c.column)) is not None
                       or cix.lookup(_text(c.value)) is not None)]
         rest = [c for c in candidates if c not in known]
 
@@ -151,7 +155,8 @@ def parse_excel(
                 if not any(ch.isalpha() for ch in label):
                     continue
 
-                hit = ix.lookup(label, allowed_at(r, c))
+                sec = section_at(r, c)
+                hit = ix.lookup(label, six.allowed(sec), sec)
                 value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed,
                                           uix, nor_by_row.get(r))
                 if value:

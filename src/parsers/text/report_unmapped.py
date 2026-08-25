@@ -26,6 +26,7 @@ if ROOT not in sys.path:
 from src.parsers.text.composite import CompositeIndex          # noqa: E402
 from src.parsers.text.excel import parse_excel                 # noqa: E402
 from src.parsers.text.field_index import FieldIndex, normalize_label  # noqa: E402
+from src.parsers.text.sections import SectionIndex                 # noqa: E402
 from src.parsers.text.pdf_text import parse_pdf_text           # noqa: E402
 
 EXCEL_EXT = {".xlsx", ".xlsm"}
@@ -250,7 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = [a.root] if os.path.isfile(a.root) else gather(a.root, a.exclude, a.limit)
     print(f"대상 {len(paths)}건 훑는 중...", flush=True)
 
-    ix, cix = FieldIndex.load(), CompositeIndex.load()
+    six = SectionIndex.load()
+    ix, cix = FieldIndex.load(section_names=six.name_map()), CompositeIndex.load()
     rep = collect(paths, ix, cix, a.with_values)
     md, tsv = render(rep, ix, cix, a.top)
 

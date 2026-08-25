@@ -107,10 +107,11 @@ def parse_pdf_text(
 
     pages 는 1-based. None 이면 전체. Triage 가 사양표 페이지를 지정하면 그것만 본다.
     """
-    ix = index or FieldIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
+    # 구역 사전을 먼저 읽어 넘긴다 (excel.py 와 같은 이유)
+    ix = index or FieldIndex.load(section_names=six.name_map())
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
-    six = sections if sections is not None else SectionIndex.load()
     doc = fitz.open(path)
     result = TextParseResult()
     seen: set[str] = set()
@@ -148,8 +149,9 @@ def parse_pdf_text(
                 if label is None:
                     continue
 
-                # 이 라벨이 속한 구역에서 나올 수 있는 필드 (모르면 None)
-                allowed = six.allowed(secmap.at(cell.y0, cell.x0)) if secmap else None
+                # 이 라벨이 속한 구역 (모르면 None)
+                sec = secmap.at(cell.y0, cell.x0) if secmap else None
+                allowed = six.allowed(sec)
 
                 loc = f"p{pno}:L{ri}:c{(vidx if value else ci) + 1}"
 
@@ -175,7 +177,7 @@ def parse_pdf_text(
                         result.unmapped.append(UnmappedLabel(pc.label, loc, pc.value))
                     continue
 
-                hit = ix.lookup(label, allowed)
+                hit = ix.lookup(label, allowed, sec)
                 if hit is None:
                     if value:
                         result.unmapped.append(UnmappedLabel(

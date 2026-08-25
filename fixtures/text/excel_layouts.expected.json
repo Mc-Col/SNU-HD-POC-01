@@ -47,6 +47,15 @@
       "note": ""
     },
     {
+      "field_key": "valve_body_material",
+      "raw_value": "ASTM A216 Gr-WCB",
+      "raw_label": "Body",
+      "source_locator": "SPEC!E22",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
       "field_key": "valve_body_rating",
       "raw_value": "ANSI CLASS 300",
       "raw_label": "Rating",
@@ -75,11 +84,6 @@
     }
   ],
   "unmapped": [
-    {
-      "text": "Body",
-      "source_locator": "SPEC!B22",
-      "neighbor_value": "ASTM A216 Gr-WCB"
-    },
     {
       "text": "Positioner Type",
       "source_locator": "SPEC!B42",
