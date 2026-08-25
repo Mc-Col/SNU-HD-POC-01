@@ -397,7 +397,6 @@ fields:
       - "Retainer or Cage"
       - "Seat Retainer Mtl"
       - "TRIM Retainer / Cage"
-      - "Work Scope 2. 3)"
 
   - key: valve_seat_material
     name: "VALVE SEAT MATERIAL"
@@ -436,7 +435,6 @@ fields:
       - "Stem"
       - "Stem Matl"
       - "Stem Mtl"
-      - "Work Scope 2. 1)"
 
   - key: actuator_type
     name: "ACTUATOR TYPE"

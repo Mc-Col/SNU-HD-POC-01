@@ -106,6 +106,8 @@ MERGE_ALIASES = {
     ],
 
     # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
+    #   "Work Scope 2. 1)" · "Work Scope 2. 3)" : 각주 참조이지 항목명이 아니다
+    #                                            ("Note. 3)" 을 뺀 것과 같은 이유)
     #   "Guide Material" → VALVE CAGE MATERIAL : 10FV079 에서 가이드는 케이지와 다른 부품
     #                                            ("SOLID STELLITE" vs 정답 "316 SST")
     #   "End Connection" → VALVE BODY RATING   : 15LV015 에서 연결 형식을 담는다
@@ -171,7 +173,7 @@ MERGE_ALIASES = {
         "Cage and/or Bushing Material", "Trim Cage and/or Bushing Material", "Cage Material",
         "MATERIAL Cage/Retainer", "MATERIAL Guide Bushing",
         "MATERIAL Retainer or Cage", "Retainer Matl", "Retainer or Cage", "Seat Retainer Mtl",
-        "TRIM Retainer / Cage", "Work Scope 2. 3)",
+        "TRIM Retainer / Cage",
     ],
     "VALVE LEAKAGE CLASS": [
         "Shutoff Class", "Leakage Spec.", "Seat Leakage", "BODY Leakage Spec.",
@@ -187,7 +189,7 @@ MERGE_ALIASES = {
     ],
     "VALVE STEM MATERIAL": [
         "Trim Stem", "MATERIAL Stem", "TRIM Stem Material", "Stem", "Stem Matl", "Stem Mtl",
-        "Work Scope 2. 1)",
+       
     ],
 }
 
