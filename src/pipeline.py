@@ -644,8 +644,16 @@ def _smoke(echo: bool) -> int:
 # 사유를 남기고 기본 구현을 유지한다 — 왜 값이 안 나오는지 알 수 있어야 한다.
 
 def build(only_mvp: bool = True, use_vlm: bool = True, max_retries: int = 2,
-          dual: bool = True, notes: list[str] | None = None) -> "Pipeline":
+          dual: bool = True, cache: bool = True,
+          notes: list[str] | None = None) -> "Pipeline":
     """완성된 모듈을 꽂은 Pipeline.
+
+    cache
+        VLM 응답 캐시를 쓸지. **기본 켜짐.**
+        VLM API 는 완전한 결정론이 아니다 — 같은 페이지를 두 번 보내면 값이
+        달라질 수 있다(2026-08-25 실측: 같은 문서에서 두 경로 합의율이 71% 와
+        100% 로 갈렸다). 캐시가 없으면 개발 철학 6(같은 입력 → 같은 출력)이
+        깨지고, 개선을 측정할 수 없다. 비용도 재실행마다 다시 든다.
 
     dual
         VLM 이 꽂힐 때 텍스트 파서로 **한 번 더 읽어 대조**할지.
@@ -680,7 +688,17 @@ def build(only_mvp: bool = True, use_vlm: bool = True, max_retries: int = 2,
                 raise ModuleNotFoundError(
                     "openai 패키지가 없다 (requirements.txt 에는 있다 — pip install 필요)")
             from src.parsers.vlm import VlmParser
-            vlm: Any = VlmParser(only_mvp=only_mvp)
+            vlm_cache = None
+            if cache:
+                from pathlib import Path
+
+                from src.parsers.vlm import ResponseCache
+                from src.parsers.vlm.cache import DEFAULT_CACHE_DIR
+                # 경로를 명시해서 넘긴다. `ResponseCache()` 를 인자 없이 만들면
+                # 기본 경로가 str 로 들어가 `cache_dir / key` 가 TypeError 를 낸다
+                # (2026-08-25 실측 — cache.py 의 잠재 버그. 강민호 책임께 전달)
+                vlm_cache = ResponseCache(Path(DEFAULT_CACHE_DIR))
+            vlm: Any = VlmParser(only_mvp=only_mvp, cache=vlm_cache)
             if dual:
                 from src.parsers.text.dual import DualParser
                 vlm = DualParser(vlm=vlm, text=text_parser)
