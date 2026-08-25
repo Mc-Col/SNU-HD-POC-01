@@ -76,6 +76,19 @@ class Score:
         return out
 
 
+def _cell_text(v: object) -> str:
+    """킷 셀 값을 문자로. 엑셀 왕복으로 숫자가 된 값을 되살린다.
+
+    사람이 킷을 엑셀에서 열어 저장하면 텍스트 "195" 가 숫자 195 로 바뀌고
+    openpyxl 은 195.0 으로 읽는다. 그대로 대조하면 `195.0` vs 문서의
+    `195 (Cg=4040 → 7580)` 이 달라져 맞는 값이 오답으로 잡힌다
+    (2026-08-25 실제로 발생). 정수인 실수는 소수점을 떼고 본다.
+    """
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v or "").strip()
+
+
 def _norm(v: object) -> str:
     return re.sub(r"\s+", " ", str(v or "").strip()).upper()
 
@@ -167,7 +180,7 @@ def score(kit_path: str, root: str) -> Score:
         sc.docs.append((row["doc_id"], row["file"], "채점"))
 
         for key, (truth, name) in row["truth"].items():
-            t = str(truth or "").strip()
+            t = _cell_text(truth)
             uncertain = t.startswith("?")
             if uncertain:
                 t = t[1:].strip()
