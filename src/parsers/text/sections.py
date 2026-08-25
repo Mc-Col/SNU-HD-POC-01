@@ -163,6 +163,17 @@ class SectionMap:
             return None
         return max(cands, key=lambda m: m.col).key
 
+    def band(self, pos: float, col: float) -> float | None:
+        """이 위치를 지배하는 이름표가 **선 열**(밴드). 모르면 None.
+
+        `at()` 은 표준 구역을 돌려주는데, 2단 양식에서는 같은 열 밴드 안에서도
+        구역이 여러 개다(오른쪽 블록에 ACCESSORIES · OTHERS · SERVICE CONDITIONS).
+        "같은 블록인가" 를 물어야 할 때는 구역이 아니라 이 밴드를 비교한다 —
+        Max/Nor/Min 열이 자기 블록 밖에 쓰이는 것을 막는 데 쓴다.
+        """
+        cands = [m for m in self.marks if m.col < col and m.lo <= pos <= m.hi]
+        return max(cands, key=lambda m: m.col).col if cands else None
+
     def is_marker(self, row: int, col: int) -> bool:
         """이 칸이 구역 이름표 자신인가.
 

@@ -108,8 +108,13 @@ MERGE_ALIASES = {
     # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
     #   "Work Scope 2. 1)" · "Work Scope 2. 3)" : 각주 참조이지 항목명이 아니다
     #                                            ("Note. 3)" 을 뺀 것과 같은 이유)
-    #   "Guide Material" → VALVE CAGE MATERIAL : 10FV079 에서 가이드는 케이지와 다른 부품
-    #                                            ("SOLID STELLITE" vs 정답 "316 SST")
+    #   "Guide Material" · "MATERIAL Guide Bushing" → VALVE CAGE MATERIAL
+    #       가이드 부싱은 케이지와 다른 부품이다. 10FV079 는 두 칸이 따로 있고 값도
+    #       다르며("SOLID STELLITE" vs 케이지 "316 SST"), 10PV081 도 같다
+    #       (`Cage 630SST` / `Guide Bushing` 은 빈 칸).
+    #       ⚠️ 킷은 갈린다 — d010·d011 은 Guide 행 값을 케이지 정답으로 적었다.
+    #       설계에 따라 케이지가 가이드 역할을 겸하기도 해서 도메인 판단이 필요하다.
+    #       그때까지는 빼 둔다 — 미추출이 오답보다 낫다.
     #   "End Connection" → VALVE BODY RATING   : 15LV015 에서 연결 형식을 담는다
     #                                            ("RF FLANGED" vs 정답 "600#").
     #                                            "End Connection/Flg. ANSI class" 는 남긴다
@@ -171,7 +176,7 @@ MERGE_ALIASES = {
     "VALVE BODY TYPE": ["VALVE BODY / BONNET Type"],
     "VALVE CAGE MATERIAL": [
         "Cage and/or Bushing Material", "Trim Cage and/or Bushing Material", "Cage Material",
-        "MATERIAL Cage/Retainer", "MATERIAL Guide Bushing",
+        "MATERIAL Cage/Retainer",
         "MATERIAL Retainer or Cage", "Retainer Matl", "Retainer or Cage", "Seat Retainer Mtl",
         "TRIM Retainer / Cage",
     ],

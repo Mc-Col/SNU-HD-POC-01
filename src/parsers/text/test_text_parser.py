@@ -296,3 +296,18 @@ def test_Nor_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
     by = parse_excel(_twocol_sheet(str(tmp_path / "twocol.xlsx"))).by_key()
     assert by["rated_cv"].raw_value == "26"          # 'Body Color' 가 아니다
     assert by["required_cv"].raw_value == "2.51"     # 블록 안에서는 Nor 열이 이긴다
+
+
+def test_가이드_부싱을_케이지_재질로_보지_않는다():
+    """가이드 부싱은 케이지와 다른 부품이다.
+
+    실물 10FV079 는 두 칸이 따로 있고 값도 다르며(`Guide Material` = SOLID
+    STELLITE vs 케이지 316 SST), 10PV081 은 `Cage` 에만 값이 있다.
+    킷은 갈린다 — d010·d011 은 Guide 행 값을 케이지 정답으로 적었다. 설계에 따라
+    케이지가 가이드를 겸하기도 해서 도메인 판단이 필요하고, 그때까지는
+    **미추출이 오답보다 낫다**는 원칙으로 빼 둔다.
+    """
+    ix = FieldIndex.load()
+    for label in ("Guide Material", "Guide Bushing", "MATERIAL Guide Bushing"):
+        hits = [h.key for h in ix.candidates(label)]
+        assert "valve_cage_material" not in hits, (label, hits)
