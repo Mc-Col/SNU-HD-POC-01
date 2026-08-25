@@ -111,9 +111,13 @@ value_aliases:
       seen: "d007 UNICON SYSTEM CO.,LTD."
     - from: ["FLOWSERVE CORPORATION", "FLOWSERVE KOREA"]
       to: "FLOWSERVE"
-    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN"]
+    # N/ 은 일본 합작사 표기의 축약이다 — 니가타인지 닛폰인지는 문서만으로
+    # 확정할 수 없으나 어느 쪽이든 모브랜드는 같다. NIPPON FISHER → FISHER 와
+    # 같은 처리다. d022 · d023 두 건에서 확신도 0.99 로 그대로 나왔다.
+    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN",
+             "N/MASONEILAN", "N/ MASONEILAN", "N/MASONEILAN CO.,LTD."]
       to: "MASONEILAN"
-      seen: "d006 NIIGATA MASONEILAN — 단 이 건의 정답은 FISHER 였다(별칭이 아니라 오독)"
+      seen: "d006 NIIGATA MASONEILAN — 단 이 건의 정답은 FISHER 였다(별칭이 아니라 오독) / d022 · d023 N/MASONEILAN"
     - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL"]
       to: "AZBIL"
 

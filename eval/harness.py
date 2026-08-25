@@ -693,9 +693,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="골든셋 평가 하네스")
     ap.add_argument("--kit", default="readme/labeling_kit.xlsx")
     ap.add_argument("--root", default="raw_file")
-    ap.add_argument("--stage", default="text", choices=["text", "vlm", "pipeline"],
+    ap.add_argument("--stage", default=None, choices=["text", "vlm", "pipeline"],
                     help="text = 텍스트 파서만 / vlm = VLM + Normalize / "
-                         "pipeline = 전체 (모듈 구현 후)")
+                         "pipeline = 전체 (모듈 구현 후). "
+                         "--replay 와 함께 쓰면 생략 가능 — 저장된 단계를 쓴다")
     ap.add_argument("--no-vlm", action="store_true", help="VLM 경로를 쓰지 않는다")
     ap.add_argument("--only-mvp", action="store_true", help="MVP 9필드만")
     ap.add_argument("--by", default="fmt", choices=["", "fmt", "vintage", "cls"])
@@ -719,6 +720,32 @@ def main(argv=None) -> int:
         print(f"⚠ 스키마에 없는 킷 컬럼: {', '.join(read_kit.unmatched)}", file=sys.stderr)
     if missing:
         print(f"⚠ 파일을 찾지 못함: {', '.join(missing)}", file=sys.stderr)
+
+    # --replay 는 저장된 단계를 그대로 쓴다. 예전에는 --stage 를 생략하면
+    # 기본값 text 로 떨어지고 --replay 가 **조용히 무시**됐다 — 스캔 문서가
+    # 전부 처리 실패로 빠지면서 실제 89% 가 32% 로 보고됐다.
+    # 받아들이고 무시하는 플래그는 오류보다 나쁘다.
+    if a.replay:
+        recorded = ""
+        try:
+            import json as _json
+            with open(os.path.join(a.replay, "_run.json"),
+                      encoding="utf-8") as fh:
+                meta = _json.load(fh)
+            recorded = str(meta.get("stage") or "")
+        except Exception as e:
+            print(f"⚠ {a.replay}/_run.json 을 읽지 못했다 ({type(e).__name__}). "
+                  f"--stage 를 직접 지정할 것.", file=sys.stderr)
+        if recorded and a.stage and a.stage != recorded:
+            print(f"--replay 저장 단계는 '{recorded}' 인데 --stage {a.stage} 를 "
+                  f"지정했다. 다른 단계로 재생하면 채점이 뜻을 잃는다.",
+                  file=sys.stderr)
+            return 2
+        if recorded and not a.stage:
+            a.stage = recorded
+            print(f"재생 단계: {recorded} (저장된 값)", file=sys.stderr)
+    if a.stage is None:
+        a.stage = "text"
 
     if a.stage == "pipeline":
         print("전체 파이프라인 채점은 Triage·Router 구현 후 붙인다. "
