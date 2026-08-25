@@ -17,6 +17,8 @@ import fitz
 
 from src.contracts import ParserType, RawExtraction
 
+from src.preprocess import probe_pages
+
 from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
@@ -28,8 +30,6 @@ MAX_VALUE_CELLS = 6         # 한 행에서 값 후보를 몇 개까지 볼 것�
 COLUMN_TOL = 12.0           # 열 머리글과 값의 x 오차 허용
                             # 실측(52PV014): 블록 안의 값은 머리글 ±6 안에 선다.
                             # 24 로 두면 2단 양식 오른쪽 라벨 열(21 떨어짐)까지 삼킨다.
-MIN_TEXT_CHARS = 200        # 이보다 적으면 텍스트 레이어가 없는 스캔본으로 본다
-TEXT_PROBE_PAGES = 5        # 문서 앞 몇 장으로 판정할 것인가
 
 
 class ScannedPdfError(RuntimeError):
@@ -104,14 +104,17 @@ def parse_pdf_text(
     targets = list(pages or range(1, doc.page_count + 1))
 
     # 실패를 삼키지 않는다 — 스캔본을 조용히 0건으로 돌려주면 원인을 알 수 없다.
-    # 판정은 문서 단위로 한다. 특정 페이지만 요청했다고 스캔본으로 몰면 안 된다.
-    chars = sum(len(doc[i].get_text().strip())
-                for i in range(min(doc.page_count, TEXT_PROBE_PAGES)))
-    if chars < MIN_TEXT_CHARS:
+    # 판정은 preprocess 가 한다 (CLAUDE.md — 전처리를 다시 만들지 않는다).
+    # 문서 단위로 본다: 특정 페이지만 요청했다고 멀쩡한 문서를 스캔본으로 몰면 안 된다.
+    probed = {p.page: p for p in probe_pages(path)}
+    if probed and not any(p.has_text_layer for p in probed.values()):
+        chars = sum(p.text_len for p in probed.values())
         raise ScannedPdfError(
             f"텍스트 레이어가 거의 없음 ({chars}자) — 스캔 PDF 로 보인다. "
             f"③-b VLM 파서가 처리해야 한다: {os.path.basename(path)}")
 
+    # 페이지 단위로 걸러내지는 않는다. `has_text_layer` 는 "VLM 이 필요한가" 의
+    # 기준(100자)이라, 글자가 적어도 라벨 몇 개는 읽히는 페이지를 버리게 된다.
     for pno in targets:
         page = doc[pno - 1]
         anchor: float | None = None         # 현재 유효한 Normal 열 x 좌표
