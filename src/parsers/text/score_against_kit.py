@@ -32,21 +32,7 @@ from src.parsers.text.units import UnitIndex                       # noqa: E402
 # 여기서 다시 만들면 채점기와 하네스가 서로 다른 답을 내놓는다.
 from eval.compare import same as _same                             # noqa: E402
 from src import schema as _schema                                  # noqa: E402
-
-
-def _numeric(field_key: str) -> bool | None:
-    """이 필드를 숫자로 대조할지. `rules.yaml` 이 말해주지 않으면 자동 판정.
-
-    `eval/harness.py` 의 같은 이름 함수와 같은 자리를 읽는다 (rules.yaml 의
-    `value_aliases[field].numeric`). 두 채점이 다른 답을 내지 않게 하려는 것이다.
-
-    왜 필요한가: 단위 어휘로는 못 잡는 표기가 있다 — 어휘에 없는 `5Nm3/h`,
-    글자가 깨진 `(m?h)`. 숫자 필드라고 알려주면 글자를 무시하고 숫자만 본다.
-    """
-    for m in _schema.value_aliases(field_key):
-        if m.get("numeric") is not None:
-            return bool(m["numeric"])
-    return None
+from src.parsers.text.crosscheck import numeric_flag as _numeric   # noqa: E402
 
 
 def _standardize(field_key: str, value: object) -> str:
