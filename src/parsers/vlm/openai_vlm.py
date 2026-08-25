@@ -39,6 +39,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import tempfile
 from typing import Any, Sequence
 
@@ -69,8 +70,15 @@ def _field_spec(fields: Sequence) -> str:
 
 
 def _maker_table() -> str:
-    """모델명 → 제조사. 제조사가 안 적힌 문서가 많아 함께 넣는다."""
-    rules = schema.manufacturer_rules()
+    """모델명 → 제조사. 제조사가 안 적힌 문서가 많아 함께 넣는다.
+
+    **포지셔너 규칙은 뺀다.** 포지셔너는 문서가 대개 모델번호만 주므로
+    모델명 판단이 보조가 아니라 주경로가 되고, 그러면 결과가 전부 문서에
+    없는 값이 된다(2026-08-25 실측 14건). 본체 제조사는 문서가 대개
+    말해 주므로 이 표가 예외 경로로만 돈다 — 그쪽은 유지한다.
+    """
+    rules = [r for r in schema.manufacturer_rules()
+             if r.get("kind") != "positioner"]
     if not rules:
         return ""
     out = ["", "■ 모델명으로 제조사를 아는 표 (문서에 제조사가 없을 때만 쓴다)"]
@@ -79,6 +87,43 @@ def _maker_table() -> str:
                    f" ({r.get('kind', '')})")
     out.append("이 표로 채운 값은 raw_label 에 \"(모델명으로 판단)\" 을 적어라.")
     return "\n".join(out)
+
+
+def upscale_factor() -> float:
+    """`D2S_UPSCALE` 배율. 1 이면 확대하지 않는다.
+
+    tif 는 1비트 Group 4 라 DPI 를 올려도 원본 해상도가 안 늘어난다. 확대는
+    **보간으로 획을 키우는 것**이고 명암 개선과는 다른 수단이다. 손글씨 숫자
+    오독이 최대 실패군이므로 표적이 맞는다.
+    """
+    try:
+        v = float(os.getenv("D2S_UPSCALE", "1"))
+    except ValueError:
+        return 1.0
+    return v if 1.0 < v <= 4.0 else 1.0
+
+
+def prep_steps() -> tuple[str, ...]:
+    """`D2S_PREP` 에 적힌 이미지 조정 단계. 쉼표로 구분한다."""
+    v = os.getenv("D2S_PREP", "")
+    return tuple(x.strip() for x in v.split(",") if x.strip())
+
+
+def _conditioned(png: str) -> str:
+    """모델에 보낼 이미지로 손질한다. 구현은 `src/imageprep` 에 있다.
+
+    순서가 중요하다 — **구멍 제거를 먼저, 확대를 나중에** 한다. 확대 후에
+    지우면 같은 일을 4배 넓이에서 하게 되고, 보간으로 번진 테두리 때문에
+    원형 판정도 흐려진다.
+    """
+    from src import imageprep
+    out = png
+    if "holes" in prep_steps():
+        out, _n = imageprep.remove_punch_holes(out)
+    k = upscale_factor()
+    if k > 1.0:
+        out = imageprep.upscale(out, k)
+    return out
 
 
 SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추론하지 말고 판독한다.
@@ -118,22 +163,119 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
 11. **제조사(manufacturer)는 밸브를 만든 회사다. 시공·정비 업체가 아니다.**
    개조·정비 문서는 하단 꼬리말·주소 블록에 **시공사** 이름이 찍혀 있다.
    그것을 제조사로 쓰면 틀린다. 판단 순서:
-     (1) 표 안에 Maker / Manufacturer 항목이 있으면 그 값
+     (1) 문서에 Maker / Manufacturer 라고 **명시된 칸**이 있으면 그 값.
+         **표 밖에 있어도 된다.** 1986년 양식은 이 표기가 표가 아니라
+         도면 우하단이나 서명란 근처에 도장처럼 찍혀 있다. 로고보다
+         **항상 우선한다** — 서식 발행처와 실제 제작사가 다를 수 있다.
+         (실측: 15FV037 · 19XV036 은 FISHER 서식인데 하단에
+          `MANUFACTURER : N/MASONEILAN` 이 찍혀 있다)
      (2) 없으면 모델명으로 판단한다 (아래 표)
      (3) Note / 비고 문장에 적혀 있을 수 있다 —
          예: 현재 Valve의 Body 사용 (Model : ED, FISHER)
      (4) 그래도 모르면 null 이다. **꼬리말 회사명으로 채우지 않는다.**
    raw_label 에 출처를 적어라 — (Maker 항목) / (모델명으로 판단) / (Note 문장)
+12. **positioner_manufacturer 는 문서가 명시할 때만 채운다.**
+   포지셔너 모델번호만 적혀 있고 제조사가 없으면 **null 이다.**
+   모델번호로 제조사를 추측하지 마라 — 그것은 문서에 없는 값이다.
+13. **체크박스로만 표시된 값도 값이다.** 오래된 양식은 항목 옆에 선택지를
+   늘어놓고 체크 표시만 해 둔다 — `Stem  ☒ Std.` · `Flowing Media ☒ LIQUID`.
+   **체크된 선택지의 문구를 그대로 raw_value 에 적는다.** 빈칸이 아니다.
+   ⚠ **반드시 그 항목의 행 안에서만 본다.** 위아래 다른 행의 선택지를
+   가져오지 마라. 그 행에 체크가 없으면 null 이다 — 옆 행에서 찾지 마라.
+   (실측 오류: `actuator_type` 에 포지셔너 행의 `3570` 을,
+    `characteristic` 에 Trim Form 행의 `SINGLE` 을 넣었다)
+14. **숫자와 단위를 고쳐 쓰지 마라.** 문서에 적힌 자릿수·표기 그대로다.
+   - 소수점을 늘리지 않는다:  `5` 를 `5.00000` 으로 쓰지 않는다
+   - 앞자리 0 을 빼지 않는다:  `0.9` 를 `.9` 로 쓰지 않는다
+   - 단위를 바꿔 쓰지 않는다:  `℃` 를 `deg C` 로, `m3/h` 를 `m³/h` 로
+   - **단위가 적혀 있으면 값에 포함한다.** `49 ℃` 이지 `49` 가 아니다
+   ⚠ **단위와 항목명은 다르다.** 값 앞뒤의 **항목명을 단위로 착각해 붙이지
+   마라.** 그리고 **원래 단위가 없는 값에는 아무것도 붙이지 않는다** —
+   Cv(용량계수)·비중·유량계수는 무차원이다.
+       옳음  `2.51`  `1.05`  `116`
+       틀림  `2.51 Cv`  `1.05 Sp. Gr.`  `Cv:116`
+15. **한 항목의 값만 낸다. 옆 칸 값을 이어 붙이지 마라.**
+   `LS AR / LIQUID` 처럼 나오면 두 항목을 합친 것이다 — 각자의 칸에 넣는다.
 
 출력은 JSON 하나다:
 {"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
             "bbox": [x0,y0,x1,y1], "confidence": 0.0}}}
 값이 없는 필드도 raw_value: null 로 포함한다."""
 
+# ── 최소 프롬프트 (과적합 검증용) ──────────────────────────────
+#
+# `D2S_PROMPT=minimal` 이면 이것을 쓰고, 덧붙인 안내(제조사표·태그힌트·
+# 보고서경고)도 전부 뺀다. 남는 것은 질문과 출력 계약뿐이다.
+#
+# 이 변형이 있는 이유 — **규칙을 늘리면 언제나 초기 문서의 정확도가 오른다.**
+# 그 규칙이 거기서 나왔으니까. 일반화되는지는 별개 질문이고, 그것을 물으려면
+# 규칙 없는 판이 있어야 한다.
+MINIMAL_SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는다.
+
+아래 항목들의 값을 문서에서 찾아 **적혀 있는 그대로** 옮겨라.
+문서에 없으면 raw_value 를 null 로 둔다. 만들어내지 마라.
+
+출력은 JSON 하나다:
+{"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
+            "bbox": [x0,y0,x1,y1], "confidence": 0.0}}}
+raw_label 은 그 값 옆에 적힌 항목명, bbox 는 위치(0.0~1.0, 좌상단 원점),
+confidence 는 판독 확신도다. 값이 없는 필드도 raw_value: null 로 포함한다."""
+
+
+def minimal_mode() -> bool:
+    """최소 프롬프트로 돌고 있나."""
+    return os.getenv("D2S_PROMPT") == "minimal"
+
+
+# 도메인 문맥 한 줄. `D2S_PROMPT=domain` 일 때만 앞에 붙인다.
+#
+# **한 줄만 바꾼다** — 변수가 하나여야 결과를 해석할 수 있다. 그리고
+# 채택 여부는 정확도만으로 정하지 않는다. 배경을 주면 모델이 "이런 문서엔
+# 보통 이런 값이 있다" 로 빈칸을 메울 수 있고, 그러면 정확도가 올라도
+# `근거없음오답` 이 늘어난다. **그때는 채택하지 않는다.**
+DOMAIN_LINE = ("이 문서들은 한국 석유화학 플랜트의 컨트롤밸브 사양서다. "
+               "1986년부터 현재까지 여러 벤더의 양식이 섞여 있고, "
+               "손으로 쓴 것과 인쇄된 것이 함께 있다.\n\n")
+
+
+def domain_mode() -> bool:
+    return os.getenv("D2S_PROMPT") == "domain"
+
+
+def nobbox_mode() -> bool:
+    """bbox 를 요구하지 않고 돌고 있나 — 판독 주의 가설 검증용."""
+    return os.getenv("D2S_PROMPT") == "nobbox"
+
+
+# bbox 를 뺀 출력 계약. 나머지 규칙은 그대로 쓴다 — 변수를 하나로 유지한다.
+_BBOX_ASK = """출력은 JSON 하나다:
+{"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
+            "bbox": [x0,y0,x1,y1], "confidence": 0.0}}}
+값이 없는 필드도 raw_value: null 로 포함한다."""
+
+_NOBBOX_ASK = """출력은 JSON 하나다:
+{"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
+            "confidence": 0.0}}}
+값이 없는 필드도 raw_value: null 로 포함한다.
+**위치(bbox)는 요구하지 않는다.** 값을 정확히 읽는 데만 집중하라."""
+
+
 REREAD_SYSTEM = """너는 문서의 한 영역을 판독한다.
 
 이 영역에 **문자 그대로 무엇이 적혀 있는지** 보고하라. 이전 판독과 같은
 값이면 같다고 답하라. 다르게 답해야 할 이유는 없다.
+
+규칙
+1. **왼쪽 항목명과 값이 같은 행에 있는지 확인하라.** 이 그림은 표의 몇 행을
+   잘라낸 것이고, 왼쪽에 항목명이 함께 들어 있다. 찾는 항목명을 먼저 찾고
+   **그 행의** 값을 읽어라. 행이 어긋나면 그 판독은 틀린 것이다.
+2. 찾는 항목명이 보이지 않으면 raw_value 를 null 로 두고 confidence 를 낮춰라.
+   추측해서 옆 행 값을 내지 마라.
+3. **값 하나만** 낸다. 괄호 안 부가정보·화살표 뒤 개조표기·슬래시 나열은
+   버리고 하나를 고른다.
+4. Min / Nor / Max 열이 보이면 Normal 열을 읽어라. 열 제목이 잘려 보이지
+   않으면 confidence 를 낮춰라.
+5. raw_label 에는 실제로 보인 항목명을 그대로 적어라.
 
 출력은 JSON 하나다:
 {"raw_value": "...", "raw_label": "...", "confidence": 0.0}
@@ -150,6 +292,7 @@ class VlmParser:
         self.only_mvp = only_mvp
         os.makedirs(self.render_dir, exist_ok=True)
         self.calls: list[dict[str, Any]] = []      # 비용 추적 — 로그에 남긴다
+        self.file_tag = ""                         # 크롭 재판독에 넘길 태그
 
     # ── 클라이언트 ──────────────────────────────────────────
     @property
@@ -160,7 +303,11 @@ class VlmParser:
             from src import env
             env.require_key()
             from openai import OpenAI
-            self._client = OpenAI()
+            # 6R 에서 11건 중 7건이 타임아웃으로 죽었다. 스캔 1장이
+            # 이미지 토큰으로 크기 때문에 기본 타임아웃이 빠듯하다.
+            # `max_retries` 는 **전송 실패에만** 걸린다 — 모델이 답을 낸
+            # 뒤에는 동작하지 않으므로 "다시 묻기" 가 아니다.
+            self._client = OpenAI(timeout=180.0, max_retries=4)
         return self._client
 
     def _ask(self, model: str, system: str, text: str, png: str) -> dict:
@@ -201,16 +348,30 @@ class VlmParser:
                     "하단 꼬리말의 회사명은 시공사일 수 있다. "
                     "제조사는 표·모델명·Note 에서 찾아라.\n\n")
         tag = getattr(triage, "file_tag", None) or ""
+        self.file_tag = tag
         hint = ""
         if tag:
             # 다중 태그 페이지에서 이 파일의 자산을 가리는 유일한 근거다
             hint = ("이 파일의 태그: " + str(tag) + "\n"
                     "페이지에 태그가 여러 개 적혀 있으면 이 태그만 "
                     "engineering_tag_no 에 넣는다.\n")
+        if minimal_mode():
+            # 덧붙인 안내를 전부 뺀다 — 질문과 필드 정의만 남긴다
+            note = hint = ""
         text = ("이 페이지에서 아래 필드를 판독하라.\n\n" + note + hint
-                + "\n■ 필드\n" + spec + "\n" + _maker_table())
+                + "\n■ 필드\n" + spec
+                + ("" if minimal_mode() else "\n" + _maker_table()))
         model = models.for_attempt(0).name
-        data = self._ask(model, SYSTEM, text, png)
+        sysmsg = MINIMAL_SYSTEM if minimal_mode() else SYSTEM
+        if domain_mode():
+            sysmsg = DOMAIN_LINE + sysmsg
+        if nobbox_mode():
+            # 규칙 4(bbox 설명)도 함께 뺀다 — 요구하지 않는 것을 설명하면
+            # 프롬프트가 자기모순이 된다
+            sysmsg = sysmsg.replace(_BBOX_ASK, _NOBBOX_ASK)
+            sysmsg = re.sub(r"^4\. bbox 는.*?\n(?=\d\. )", "", sysmsg,
+                            flags=re.S | re.M)
+        data = self._ask(model, sysmsg, text, png)
 
         got = data.get("fields") or {}
         out = []
@@ -246,10 +407,16 @@ class VlmParser:
             return None
         tier = models.for_attempt(attempt)
         al = " · ".join(f.aliases) if f.aliases else ""
-        text = (f"이 영역에서 「{f.name}」 에 해당하는 값을 판독하라."
-                + (f" 문서에서 이 항목은 {al} 로 적히기도 한다." if al else "")
-                + " Min/Nor/Max 열이 보이면 Normal 열을 읽어라."
-                  " 열 제목이 잘려 보이지 않으면 confidence 를 낮춰라.")
+        hint = ""
+        if f.key == "engineering_tag_no" and self.file_tag:
+            # 4R 에서 크롭이 태그 목록 전체를 다시 삼켰다 —
+            # 전체 프롬프트의 방어를 크롭에도 준다
+            hint = (" 이 파일의 태그는 " + str(self.file_tag) + " 다. "
+                    "여러 개가 나열되어 있으면 이 태그만 답하라.")
+        text = ("이 영역에서 「" + f.name + "」 에 해당하는 값을 판독하라."
+                + (" 문서에서 이 항목은 " + al + " 로 적히기도 한다." if al else "")
+                + hint
+                + " Min/Nor/Max 열이 보이면 Normal 열을 읽어라.")
         d = self._ask(tier.name, REREAD_SYSTEM, text, crop)
         v = d.get("raw_value")
         v = None if v in ("", None, "null") else str(v).strip()
@@ -278,7 +445,7 @@ class VlmParser:
         out = preprocess.render_pages(path, self.render_dir, pages=[page])
         if not out:
             raise RuntimeError(f"렌더 실패: {path} p{page}")
-        return out[0]
+        return _conditioned(out[0])
 
     @staticmethod
     def _bbox(v) -> tuple[float, float, float, float] | None:
@@ -294,16 +461,30 @@ class VlmParser:
         return b
 
     def _crop(self, path: str, page: int, bbox) -> str | None:
-        """bbox 주변을 여유 있게 잘라 낸다. 라벨이 값 왼쪽에 있으므로 좌측을 더 준다."""
+        """bbox 주변을 잘라 낸다. **라벨 칸을 반드시 포함한다.**
+
+        4R 실측에서 배운 것 — 라벨 없이 값만 잘라 보내면 상위 모델도 틀린다.
+        크롭 안에 손글씨 값이 여러 개 들어 있는데 어느 항목인지 알 방법이
+        없기 때문이다(`10-FV-002` 를 `10-FV-003` 으로 냈다).
+
+        그래서 **왼쪽을 x=0 까지 연다.** 표의 항목명은 행 왼쪽에 있으므로
+        이렇게 하면 라벨과 값이 같은 화면에 들어온다. 반대편 표까지 넣지는
+        않는다 — x1 에서 8% 만 더 준다.
+
+        세로는 3.5% — bbox 가 한 행(약 1%) 어긋나는 것을 실측했으므로
+        위아래로 두세 행이 함께 보여야 정렬을 확인할 수 있다.
+        """
         from PIL import Image
         png = self._png(path, page)
         try:
             with Image.open(png) as im:
                 w, h = im.size
                 x0, y0, x1, y1 = bbox
-                padx, pady = 0.10, 0.02
-                box = (max(0, int((x0 - padx) * w)), max(0, int((y0 - pady) * h)),
-                       min(w, int((x1 + 0.02) * w)), min(h, int((y1 + pady) * h)))
+                pady = 0.035
+                box = (0,                                   # 라벨 칸까지 왼쪽 전부
+                       max(0, int((y0 - pady) * h)),
+                       min(w, int((x1 + 0.08) * w)),
+                       min(h, int((y1 + pady) * h)))
                 if box[2] - box[0] < 8 or box[3] - box[1] < 8:
                     return None
                 out = os.path.join(self.render_dir,
