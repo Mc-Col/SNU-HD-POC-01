@@ -75,6 +75,7 @@ fields:
     mvp: true
     threshold: 0.90
     aliases:
+      - "Maker & Serial No."
       - "Maker"
 
   - key: model_no
@@ -135,6 +136,8 @@ fields:
     threshold: 0.90
     aliases:
       - "FLOW RATE"
+      - "Liq Flow Rate (kg/h)"
+      - "Volumetric Flow Rate Gas (Qg)"
       - "Flow Rate, Give Units"
       - "Liq Flow Rate"
       - "Flow Rate NOR"
@@ -153,6 +156,7 @@ fields:
     threshold: 0.90
     aliases:
       - "INLET PRESSURE NORMAL"
+      - "Inlet Pressure (P1)"
       - "Inlet Pressure"
       - "In.Press. NOR"
       - "Inlet Press"
@@ -173,6 +177,10 @@ fields:
     aliases:
       - "INLET TEMPERATURE, NORMAL"
       - "INLET TEMPERATURE"
+      - "Inlet Temp."
+      - "Inlet Temperature (T1)"
+      - "Inlet Temperature °C"
+      - "Temperature (°C)"
       - "Inlet Temperature, NOR."
       - "Temp. NOR"
       - "Temperature"
@@ -204,6 +212,8 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Dynamic Viscosity (Mu)"
+      - "Viscosity (cP)"
       - "Dynamic Viscosity"
 
   - key: rated_cv
@@ -217,6 +227,7 @@ fields:
     mvp: true
     threshold: 0.90
     aliases:
+      - "Maximum Valve Coefficient, Cv"
       - "VALVE COEFFICIENT"
       - "Body Rated Cv"
       - "Trim Cv"
@@ -237,6 +248,8 @@ fields:
       - "REQ'D FLOW COEFF., CV, NORMAL"
       - "REQ'D FLOW COEFF"
       - "REQUIRED FLOW COEFFICIENT"
+      - "Flow Coeff. (Cv)"
+      - "Sizing Coefficient (Cv)"
       - "Req'd Flow Coeff., Cv"
       - "Flow Coeff."
       - "Required Cv NOR."
@@ -257,6 +270,9 @@ fields:
     mvp: true
     threshold: 0.90
     aliases:
+      - "Flg. ANSI Class"
+      - "End Connections, ANSI Class"
+      - "Fig. ANSI class"
       - "End Connection/Flg. ANSI class"
       - "Rating"
       - "BODY Rating"
@@ -311,6 +327,7 @@ fields:
     mvp: true
     threshold: 0.90
     aliases:
+      - "Body Matl / Bonnet Matl"
       - "Material"
       - "Body Material"
       - "Body Matl"
@@ -348,6 +365,8 @@ fields:
     threshold: 0.90
     aliases:
       - "CHARACTERISTIC"
+      - "Trim # - Characteristic"
+      - "Flow Characteristic"
       - "Plug or Cage"
       - "Trim Plug or Cage"
       - "BODY Characteristic"
@@ -367,6 +386,7 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Plug Mtl/ Facing|Treatment / Stem Cvr"
       - "Trim Valve Plug Material"
       - "MATERIAL Plug"
       - "Plug Material"
@@ -387,6 +407,7 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Cage"
       - "Cage and/or Bushing Material"
       - "Trim Cage and/or Bushing Material"
       - "Cage Material"
@@ -408,6 +429,8 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Disk/Seat Material:"
+      - "Seat Ring Mtl/ Facing|Treatment"
       - "Seat Ring Material"
       - "Trim Seat Ring Material"
       - "MATERIAL Seat Ring"
@@ -428,6 +451,7 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Stem Mtl/ Facing|Treatment / Pilot Spr"
       - "Trim Stem"
       - "MATERIAL Stem"
       - "TRIM Stem Material"
@@ -493,6 +517,8 @@ fields:
     mvp: false
     threshold: 0.90
     aliases:
+      - "Positioner"
+      - "Positioner Model"
       - "Model"
       - "Model #"
       - "Model No."

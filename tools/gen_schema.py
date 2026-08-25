@@ -93,12 +93,21 @@ MERGE_ALIASES = {
     #
     # 구역을 못 읽는 문서에서는 후보가 여럿이라 그대로 미매핑이 된다.
     # 즉 되살려도 오답이 늘지 않는다 (`FieldIndex.lookup` 의 마지막 줄).
-    "MANUFACTURER": ["Maker"],
+    "MANUFACTURER": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Maker & Serial No.","Maker"],
     "POSITIONER MANUFACTURER": ["Maker"],
     # `Model No.` 는 MODEL NO. 의 표준명이지만 포지셔너 블록에서도 그 이름을
     # 쓴다 (44LV001 r43 `Model No. | YT-1200`). 표준명 소유 필드가 우선한다는
     # 규칙(`FieldIndex.lookup`)이 있어서 빌려 써도 이름 해석이 깨지지 않는다.
     "POSITIONER MODEL NO.": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        # ⚠️ "Positioner Type" 은 넣지 않는다. 킷 12건(Fisher 수기 tif)에서는 그 칸에
+        #    모델번호(3582G)가 적혀 있지만, 텍스트 PDF·엑셀 5건에서는 구분값
+        #    ("PNEUMATIC/PNEUMATIC" · "ELEC. PNEUMATIC")이 들어 있다.
+        #    넣고 측정하니 오답 1 → 6 이 되어 되돌렸다.
+        #    VLM 프롬프트에는 유효한 힌트일 수 있어 이종수·강민호 책임께 전달.
+        "Positioner", "Positioner Model",
         "Model", "Model #", "Model No.",
         # 구역 접두어가 떨어지면 포지셔너 묶음 한정 표기가 된다.
         # 값이 "모델, 제조사" 두 조각이면 위의 복합 라벨 규칙이 먼저 처리한다.
@@ -127,6 +136,8 @@ MERGE_ALIASES = {
     ],
     "ACTUATOR TYPE": ["Actuator Style", "Act. Type"],
     "CHARACTERISTIC (TRIM FORM)": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Trim # - Characteristic", "Flow Characteristic",
         "Plug or Cage", "Trim Plug or Cage", "BODY Characteristic", "Flow Char.",
         "Flow Character.", "TRIM Flow Char.", "Valve Body Assembly Characteristic",
     ],
@@ -139,25 +150,39 @@ MERGE_ALIASES = {
         "Model Number", "VALVE BODY/BONNET Model", "VALVE BODY/BONNET Model No.", "Valve Model",
     ],
     "NORMAL FLOW RATE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Liq Flow Rate (kg/h)", "Volumetric Flow Rate Gas (Qg)",
         "Flow Rate, Give Units", "Liq Flow Rate", "Flow Rate NOR", "Flow Rate Norm.",
         "Volumetric Flow Rate Gas",
     ],
     "NORMAL PRESSURE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Inlet Pressure (P1)",
         "Inlet Pressure", "In.Press. NOR", "Inlet Press", "Inlet Pressure, NOR.", "In.Press.",
         "Inlet Pressure Norm.",
     ],
     "NORMAL TEMPERATURE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Inlet Temp.", "Inlet Temperature (T1)", "Inlet Temperature °C", "Temperature (°C)",
         "Inlet Temperature, NOR.", "Temp. NOR", "Temperature", "Inlet Temperature Norm.",
         "Temp.",
     ],
-    "RATED CV": ["VALVE COEFFICIENT", "Body Rated Cv", "Trim Cv", "Trim Rated Cv", "VALVE TRIM Rated Cv"],
+    "RATED CV": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Maximum Valve Coefficient, Cv","VALVE COEFFICIENT", "Body Rated Cv", "Trim Cv", "Trim Rated Cv", "VALVE TRIM Rated Cv"],
     "REQUIRED CV": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Flow Coeff. (Cv)", "Sizing Coefficient (Cv)",
         "Req'd Flow Coeff., Cv", "Flow Coeff.", "Required Cv NOR.", "Calculated Cv",
         "Calculated Cv NOR", "Calculated Cv Normal", "Required Capacity", "Sizing Coefficient",
     ],
-    "VISCOSITY": ["Dynamic Viscosity"],
+    "VISCOSITY": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Dynamic Viscosity (Mu)", "Viscosity (cP)","Dynamic Viscosity"],
     "SPECIFIC GRAVITY": ["Density", "SG-MW"],
     "VALVE BODY MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Body Matl / Bonnet Matl",
         # "Material" 단독은 바디 재질로만 둔다. 트림 묶음의 "Material" 은 어느
         # 부품인지 문서가 말해주지 않아 구역으로도 갈리지 않는다
         "Material",
@@ -165,6 +190,8 @@ MERGE_ALIASES = {
         "Body Style Material", "MATERIAL Body/Bonnet",
     ],
     "VALVE BODY RATING": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Flg. ANSI Class", "End Connections, ANSI Class", "Fig. ANSI class",
         "End Connection/Flg. ANSI class", "Rating", "BODY Rating",
         "VALVE BODY / BONNET Rating", "Ebody Style End Connect", "Pressure Class",
         "VALVE BODY / BONNET Pr. Rating", "Valve Body Assembly Pressure Class",
@@ -175,6 +202,8 @@ MERGE_ALIASES = {
     ],
     "VALVE BODY TYPE": ["VALVE BODY / BONNET Type"],
     "VALVE CAGE MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Cage",
         "Cage and/or Bushing Material", "Trim Cage and/or Bushing Material", "Cage Material",
         "MATERIAL Cage/Retainer",
         "MATERIAL Retainer or Cage", "Retainer Matl", "Retainer or Cage", "Seat Retainer Mtl",
@@ -185,14 +214,20 @@ MERGE_ALIASES = {
         "VALVE BODY / BONNET Seat Leakage",
     ],
     "VALVE PLUG MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Plug Mtl/ Facing|Treatment / Stem Cvr",
         "Trim Valve Plug Material", "MATERIAL Plug", "Plug Material", "TRIM Plug Material",
         "MATERIAL Plug/Disc/Ball", "Plug", "Plug Matl", "Plug Mtl",
     ],
     "VALVE SEAT MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Disk/Seat Material:", "Seat Ring Mtl/ Facing|Treatment",
         "Seat Ring Material", "Trim Seat Ring Material", "MATERIAL Seat Ring", "Seat Ring",
         "Seat Ring Mtl", "Soft Seat Matl", "Soft Seat Material", "Trim Disk/Seat Material",
     ],
     "VALVE STEM MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Stem Mtl/ Facing|Treatment / Pilot Spr",
         "Trim Stem", "MATERIAL Stem", "TRIM Stem Material", "Stem", "Stem Matl", "Stem Mtl",
        
     ],
