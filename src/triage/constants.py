@@ -37,6 +37,30 @@ SPEC_HEADER_KEYWORDS: tuple[str, ...] = (
     "CONTROL VALVE ACTION TEST",        # 시험 보고서의 사양 블록
 )
 
+# 정비·시험 보고서의 머리글. **사양 항목이 함께 있을 때만** 사양표로 본다.
+#
+# 왜 따로 두는가 (2026-08-25 실측)
+#   엑셀 113건 중 29건이 "사양표 페이지 없음" 으로 out_of_scope 였고, 그중 25건은
+#   파일명에 DATA SHEET 가 있었다. 사양 블록이 실제로 있는데 머리글 표기가
+#   `TEST REPORT CONTROL VALVE` · `CONTROL VALVE REPAIR` 여서 못 걸린 것이다.
+#   CLAUDE.md 는 정비·개조 보고서 112건도 대상으로 정하고 있다(C030 철회).
+#
+#   그런데 이 표기는 **표지에도 있다.** 실물 `10PDV067` p1(556자) ·
+#   `12LV037` p1(387자) · `13PV004` p1(579자) 은 머리글만 있고 사양 항목이 없다.
+#   표지를 사양표로 고르면 파서·VLM 이 빈 장을 읽는다. 그래서 사양 항목이
+#   두 개 이상 함께 있을 때만 인정한다 — 표지는 항목이 0개다.
+REPORT_HEADER_KEYWORDS: tuple[str, ...] = (
+    "TEST REPORT CONTROL VALVE",         # 시험 보고서 (실측 27건)
+    "CONTROL VALVE REPAIR",              # 정비 보고서 (실측 2건)
+)
+
+# 사양 블록에 실제로 있는 항목명. 보고서 머리글의 뒷받침으로만 쓴다.
+SPEC_ITEM_KEYWORDS: tuple[str, ...] = (
+    "BODY MATERIAL", "RATED CV", "TRIM", "ACTUATOR TYPE",
+    "RATING", "LEAKAGE", "MODEL NO",
+)
+MIN_SPEC_ITEMS_FOR_REPORT: int = 2       # 표지(0개)와 사양 블록(3~5개)을 가른다
+
 
 # ══════════════════════════════════════════════════════════════════
 #  확신도 — `TriageResult.confidence` 에 넣는 표시값
@@ -90,6 +114,9 @@ YAML_MIGRATION_CANDIDATES: tuple[str, ...] = (
     # MIN_TEXT_FOR_SPEC_JUDGEMENT 는 제외한다 — 공용 preprocess.TEXT_LAYER_MIN
     # 을 참조하므로 이관 대상은 이 모듈이 아니라 공용 쪽이다.
     "SPEC_HEADER_KEYWORDS",          # 도메인 표기 — 실물에서 계속 수집된다
+    "REPORT_HEADER_KEYWORDS",        # 정비·시험 보고서 머리글
+    "SPEC_ITEM_KEYWORDS",            # 보고서 머리글의 뒷받침
+    "MIN_SPEC_ITEMS_FOR_REPORT",
     "CONFIDENCE_SPEC_SELECTED",      # 정책값
     "CONFIDENCE_FILENAME_ONLY",      # 동일
     "CONFIDENCE_AMBIGUOUS_SPEC",     # 동일

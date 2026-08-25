@@ -15,7 +15,8 @@ from __future__ import annotations                      # 타입 표기 일관�
 import pytest                                           # 테스트 프레임워크
 
 from src.contracts import DocumentClass, PageClass
-from src.triage import match_filename_pattern, probe_structure, triage
+from src.triage import (_looks_like_spec, match_filename_pattern,
+                        probe_structure, triage)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -251,3 +252,37 @@ def test_deterministic(tmp_path):
     assert [pg.page_class for pg in a.pages] == [pg.page_class for pg in b.pages]
     assert (a.selected_page.page if a.selected_page else None) == \
            (b.selected_page.page if b.selected_page else None)
+
+
+# ── 정비·시험 보고서 머리글 (2026-08-25 서경빈) ──────────────────
+#
+# 엑셀 113건 중 29건이 "사양표 페이지 없음" 으로 out_of_scope 였고, 그중 25건은
+# 파일명에 DATA SHEET 가 있었다. 사양 블록은 있는데 머리글 표기가
+# `TEST REPORT CONTROL VALVE` · `CONTROL VALVE REPAIR` 여서 못 걸린 것이다.
+# CLAUDE.md 는 정비·개조 보고서 112건도 대상으로 정하고 있다(C030 철회).
+#
+# 다만 그 표기는 **표지에도** 있어서(실물 10PDV067 p1 · 12LV037 p1 · 13PV004 p1),
+# 머리글만 보고 인정하면 빈 표지를 사양표로 고른다. 사양 항목을 함께 요구한다.
+
+_PAD = " 본문 채우기" * 20                                 # 최소 글자 수 통과용
+
+REPORT_COVER = "TEST REPORT CONTROL VALVE 회 사 명 HYUNDAI OILBANK TAG NO 11-FV-019" + _PAD
+REPORT_SPEC = ("TEST REPORT CONTROL VALVE BODY MATERIAL A216 Gr-WCB RATED CV 195 "
+               "TRIM CAGE RATING ANSI CLASS 300" + _PAD)
+REPAIR_SPEC = "CONTROL VALVE REPAIR BODY MATERIAL WCB RATING 300# TRIM SINGLE" + _PAD
+
+
+def test_보고서_머리글도_사양표로_본다():
+    """정비·시험 보고서 안의 사양 블록을 놓치면 문서가 통째로 버려진다."""
+    assert _looks_like_spec(REPORT_SPEC)
+    assert _looks_like_spec(REPAIR_SPEC)
+
+
+def test_보고서_표지는_사양표가_아니다():
+    """표지에도 같은 머리글이 찍혀 있다. 사양 항목이 없으면 인정하지 않는다."""
+    assert not _looks_like_spec(REPORT_COVER)
+
+
+def test_데이터시트_판정은_사양_항목을_요구하지_않는다():
+    """기존 경로는 그대로다 — 벤더마다 항목명이 달라 목록을 닫을 수 없다."""
+    assert _looks_like_spec("CONTROL VALVE SPECIFICATIONS Item No. 1 Customer" + _PAD)

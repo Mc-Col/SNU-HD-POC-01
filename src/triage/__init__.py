@@ -60,9 +60,12 @@ from .constants import (                                # 임계값·확신도
     CONFIDENCE_OUT_OF_SCOPE,
     CONFIDENCE_SPEC_SELECTED,
     CONFIDENCE_UNSUPPORTED,
+    MIN_SPEC_ITEMS_FOR_REPORT,
     MIN_TEXT_FOR_SPEC_JUDGEMENT,
     RENDER_SUBDIR,
+    REPORT_HEADER_KEYWORDS,
     SPEC_HEADER_KEYWORDS,
+    SPEC_ITEM_KEYWORDS,
 )
 
 logger = logging.getLogger(__name__)                    # 모듈 전용 로거
@@ -141,7 +144,16 @@ def _looks_like_spec(text: str) -> bool:
     if len(text.strip()) < MIN_TEXT_FOR_SPEC_JUDGEMENT:
         return False
     probe = re.sub(r"\s+", " ", text.upper())               # 줄바꿈·연속 공백 → 공백 1개
-    return any(keyword in probe for keyword in SPEC_HEADER_KEYWORDS)
+    if any(keyword in probe for keyword in SPEC_HEADER_KEYWORDS):
+        return True
+
+    # 정비·시험 보고서 머리글은 **사양 항목이 함께 있을 때만** 사양표로 본다.
+    # 이 표기는 표지에도 찍혀 있어서(실물 10PDV067 p1 · 12LV037 p1), 머리글만 보고
+    # 인정하면 빈 표지를 사양표로 고른다. 표지는 사양 항목이 0개다.
+    if any(keyword in probe for keyword in REPORT_HEADER_KEYWORDS):
+        items = sum(1 for item in SPEC_ITEM_KEYWORDS if item in probe)
+        return items >= MIN_SPEC_ITEMS_FOR_REPORT
+    return False
 
 
 def classify_pages(path: str, pages, render_dir: str | None = None) -> list[PageInfo]:
