@@ -62,6 +62,7 @@ class Cell:
     uncertain: bool              # 정답 앞에 '?' 가 붙어 있었다
     got: str | None = None
     verdict: str = "미추출"       # 정확 / 표기차이 / 정규화대기 / 오답 / 미추출
+    labeler: str = ""            # 이 정답을 만든 사람 — 집계를 나누기 위해
 
 
 @dataclass
@@ -70,11 +71,22 @@ class Score:
     docs: list[tuple[str, str, str]] = dc_field(default_factory=list)   # id, 파일, 상태
     unscorable_fields: list[str] = dc_field(default_factory=list)
 
-    def counts(self) -> dict[str, int]:
+    def counts(self, labeler: str | None = None) -> dict[str, int]:
+        """판정별 개수. labeler 를 주면 그 사람이 만든 정답만 센다."""
         out = {"정확": 0, "표기차이": 0, "정규화대기": 0, "오답": 0, "미추출": 0}
         for c in self.cells:
+            if labeler is not None and c.labeler != labeler:
+                continue
             out[c.verdict] += 1
         return out
+
+    def labelers(self) -> list[str]:
+        """등장 순서대로의 라벨러 목록 (같은 입력 → 같은 출력)."""
+        seen: list[str] = []
+        for c in self.cells:
+            if c.labeler not in seen:
+                seen.append(c.labeler)
+        return seen
 
 
 def _cell_text(v: object) -> str:
@@ -131,6 +143,7 @@ def read_kit(path: str, ix: FieldIndex) -> tuple[list[dict], list[tuple[int, str
             "doc_id": str(ws.cell(r, 1).value or ""),
             "file": str(fn).strip(),
             "fmt": str(ws.cell(r, 3).value or ""),
+            "labeler": str(ws.cell(r, 8).value or "").strip() or "미기재",
             "cls": str(ws.cell(r, 5).value or ""),
             "spec_page": ws.cell(r, 7).value,
             "truth": {key: (ws.cell(r, c).value, name) for c, key, name in cols},
@@ -188,7 +201,8 @@ def score(kit_path: str, root: str) -> Score:
             if _norm(t) in SKIP_VALUES:
                 continue
             g = got.get(key)
-            cell = Cell(row["doc_id"], key, name, t, uncertain, g)
+            cell = Cell(row["doc_id"], labeler=row["labeler"], field_key=key,
+                        field_name=name, truth=t, uncertain=uncertain, got=g)
             if g is None:
                 cell.verdict = "미추출"
             elif _norm(g) == _norm(t):
@@ -237,6 +251,34 @@ def render(sc: Score) -> str:
         mark = " ⚠" if c.uncertain else ""
         L.append(f"| {c.doc_id} | {c.field_name} | {c.truth}{mark} | "
                  f"{c.got if c.got is not None else '—'} | {c.verdict} |")
+
+    # ── 라벨러별 (2026-08-26) ────────────────────────────────────
+    #   골든셋에 AI 초안이 섞여 있다. AI 가 만든 정답으로 AI 를 채점하면 순환이라,
+    #   숫자를 하나로 합치면 발표에서 방어할 수 없다. 나눠서 낸다.
+    labelers = sc.labelers()
+    if len(labelers) > 1:
+        L += ["", "## 라벨러별", "",
+              "| 라벨러 | 칸 | 정확 | 표기차이 | 정규화대기 | 오답 | 미추출 | 성공률 |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|"]
+        for who in labelers:
+            m = sc.counts(who)
+            t = sum(m.values())
+            ok = m["정확"] + m["표기차이"] + m["정규화대기"]
+            L.append(f"| {who} | {t} | {m['정확']} | {m['표기차이']} | {m['정규화대기']} | "
+                     f"{m['오답']} | {m['미추출']} | {ok / t * 100:.0f}% |" if t else
+                     f"| {who} | 0 | | | | | | — |")
+        human = [w for w in labelers if "AI" not in w]
+        if human and len(human) < len(labelers):
+            hm = {k: sum(sc.counts(w)[k] for w in human) for k in
+                  ("정확", "표기차이", "정규화대기", "오답", "미추출")}
+            ht = sum(hm.values())
+            hok = hm["정확"] + hm["표기차이"] + hm["정규화대기"]
+            L += ["", f"**사람이 검증한 정답만**: {ht}칸 · 성공률 "
+                      f"**{hok / ht * 100:.0f}%** · 오답 {hm['오답']}건" if ht else ""]
+            L += ["", "> AI 초안은 사람 검증 전이다. 그 행을 기준으로 잰 숫자는 "
+                      "**AI 가 만든 정답으로 AI 를 채점**하는 부분이 섞이므로 참고로만 본다.",
+                  "> 텍스트 파서는 VLM 과 다른 방식이라 완전한 순환은 아니지만, "
+                  "AI 가 놓친 값은 정답지에서도 N/A 로 남아 미추출이 과소평가될 수 있다."]
     return "\n".join(L) + "\n"
 
 

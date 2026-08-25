@@ -70,3 +70,28 @@ def test_같은_입력이면_같은_출력이다():
     a, b = score(KIT, FIX), score(KIT, FIX)
     assert [(c.doc_id, c.field_key, c.verdict) for c in a.cells] == \
            [(c.doc_id, c.field_key, c.verdict) for c in b.cells]
+
+
+# ── 라벨러별 집계 (2026-08-26) ──────────────────────────────────
+
+
+def test_라벨러를_킷에서_읽는다(sc):
+    """골든셋에 사람 라벨과 AI 초안이 섞여 있다. 누가 만든 정답인지 알아야 나눠 셀 수 있다."""
+    assert set(sc.labelers()) == {"사람", "AI초안(Claude)"}
+    assert all(c.labeler for c in sc.cells)
+
+
+def test_라벨러별로_따로_센다(sc):
+    """합쳐서 세면 'AI 가 만든 정답으로 AI 를 채점' 한 부분이 숫자에 섞인다."""
+    total = sc.counts()
+    parts = [sc.counts(w) for w in sc.labelers()]
+    for key in total:
+        assert total[key] == sum(p[key] for p in parts)
+
+
+def test_리포트에_라벨러_표와_주의가_남는다(sc):
+    from src.parsers.text.score_against_kit import render
+    md = render(sc)
+    assert "## 라벨러별" in md
+    assert "사람이 검증한 정답만" in md
+    assert "AI 초안은 사람 검증 전이다" in md
