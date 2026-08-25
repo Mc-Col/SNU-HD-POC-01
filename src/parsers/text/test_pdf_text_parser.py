@@ -171,3 +171,40 @@ def test_Normal_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
     assert by["required_cv"].raw_value == "75.7"        # 블록 안에서는 Nor 열이 이긴다
     assert by["rated_cv"].raw_value == "110"            # 'Position' 이 아니다
     assert by["actuator_fail_action"].raw_value == "VALVE CLOSE"   # 'Body Color' 아님
+
+
+# ── Nor 열은 그 머리글이 선 구역 안에서만 쓴다 (실물 10PV081) ─────
+
+
+def _two_section_pdf(path):
+    """구역 둘 · 오른쪽 블록에만 Max/Nor/Min 머리글이 있는 배치.
+
+    실물 `10PV081` p2 의 구조다. 왼쪽 `POSITIONER` 묶음의 `Model No.` 행에는
+    자기 값이 바로 옆에 있는데, 오른쪽 블록의 Nor 열이 페이지 끝까지 유효하면
+    그쪽 숫자('10.5')를 값으로 집는다.
+    """
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    # 구역 이름표 — 왼쪽(x=42) · 오른쪽(x=312)
+    page.insert_text((50, 520), "POSITIONER", fontsize=7, rotate=90)
+    page.insert_text((320, 520), "SERVICE CONDITIONS", fontsize=7, rotate=90)
+    # 오른쪽 블록의 열 머리글
+    for x, t in [(449, "MAX"), (490, "NOR")]:
+        page.insert_text((x, 493), t, fontsize=8)
+    # 왼쪽 라벨 + 자기 값 | 오른쪽 블록의 값들
+    for x, t in [(56, "Model No."), (169, "4280E, MASOLEILAN"),
+                 (327, "Outlet Press."), (407, "kg/cm2"), (451, "11"), (488, "10.5")]:
+        page.insert_text((x, 505), t, fontsize=8)
+    for i, y in enumerate(range(540, 760, 12)):        # 스캔본 가드용 본문
+        page.insert_text((56, y), f"Remark {i}: text layer filler line", fontsize=8)
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def test_Nor_열은_다른_구역의_라벨에_쓰지_않는다(tmp_path):
+    by = parse_pdf_text(_two_section_pdf(tmp_path / "twosec.pdf")).by_key()
+    r = by.get("positioner_model_no")
+    assert r is not None and r.raw_value.startswith("4280E"), r and r.raw_value
+    assert r.raw_value != "10.5"          # 오른쪽 블록 Nor 값을 집으면 안 된다

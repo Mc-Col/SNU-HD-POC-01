@@ -134,10 +134,12 @@ def parse_pdf_text(
         page = doc[pno - 1]
         secmap = SectionMap.from_pdf(page, six)   # 회전 텍스트 = 구역 이름표
         anchor: float | None = None         # 현재 유효한 Normal 열 x 좌표
+        anchor_band: float | None = None    # 그 머리글이 선 열 밴드
         for ri, row in enumerate(_rows(page), start=1):
             found_anchor = _column_anchor(row)
             if found_anchor is not None:
                 anchor = found_anchor
+                anchor_band = secmap.band(row[0].y0, found_anchor) if secmap else None
                 continue                    # 머리글 행 자체는 값이 없다
             consumed: set[int] = set()
 
@@ -145,13 +147,25 @@ def parse_pdf_text(
                 if ci in consumed:
                     continue
 
-                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor, uix)
-                if label is None:
-                    continue
-
                 # 이 라벨이 속한 구역 (모르면 None)
                 sec = secmap.at(cell.y0, cell.x0) if secmap else None
                 allowed = six.allowed(sec)
+
+                # Max/Nor/Min 열은 **그 머리글이 선 열 블록 안에서만** 쓴다.
+                #   머리글 하나가 페이지 끝까지 유효하면 다른 블록의 값을 집는다 —
+                #   실물 10PV081 에서 왼쪽 포지셔너 묶음의 `Model No.`
+                #   (값 '4280E, MASOLEILAN')가 오른쪽 블록의 Nor 값 '10.5' 를 집었다.
+                #   비교는 **구역이 아니라 열 밴드**로 한다 — 오른쪽 블록 하나에
+                #   구역이 여럿 있어서(ACCESSORIES·OTHERS·SERVICE CONDITIONS)
+                #   구역으로 비교하면 정작 공정조건 행에서 Nor 열을 못 쓴다.
+                #   구역 이름표가 없는 문서에서는 종전처럼 그대로 쓴다.
+                band = secmap.band(cell.y0, cell.x0) if secmap else None
+                use_anchor = anchor if (not secmap or band == anchor_band) else None
+
+                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed,
+                                                   use_anchor, uix)
+                if label is None:
+                    continue
 
                 loc = f"p{pno}:L{ri}:c{(vidx if value else ci) + 1}"
 
@@ -190,7 +204,7 @@ def parse_pdf_text(
                 found = bool(value)
                 if not found:
                     note = "라벨은 찾았으나 값이 비어 있음"
-                elif anchor is not None and abs(vcell.x0 - anchor) <= COLUMN_TOL:
+                elif use_anchor is not None and abs(vcell.x0 - use_anchor) <= COLUMN_TOL:
                     note = "Max/Nor/Min 중 Normal 열 선택"
                 else:
                     note = ""
