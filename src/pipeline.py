@@ -196,7 +196,10 @@ class DefaultNormalize:
             trace.append("규칙 미적용 — 표기가 사전에 없고 라벨로도 방향을 알 수 없음")
 
         for m in schema.value_aliases(f.key):
-            if schema.norm_label(raw) in {schema.norm_label(c) for c in m.get("from", [])}:
+            # 치수는 구두점이 값이다 — norm_alias 가 필드별로 가른다.
+            # norm_label 이면 12" 가 1/2" 로 보정된다(24배 오류).
+            if schema.norm_alias(raw, f.key) in {
+                    schema.norm_alias(c, f.key) for c in m.get("from", [])}:
                 trace.append(f"표기 정규화 → {m['to']}")
                 return m["to"], trace
 
