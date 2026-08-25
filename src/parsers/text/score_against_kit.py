@@ -24,7 +24,29 @@ import openpyxl                                                    # noqa: E402
 from src.parsers.text.composite import CompositeIndex              # noqa: E402
 from src.parsers.text.excel import parse_excel                     # noqa: E402
 from src.parsers.text.field_index import FieldIndex, normalize_label  # noqa: E402
+from src.parsers.text.sections import SectionIndex                 # noqa: E402
 from src.parsers.text.pdf_text import parse_pdf_text               # noqa: E402
+from src.parsers.text.units import UnitIndex                       # noqa: E402
+
+# 값 대조는 팀의 평가 하네스 규칙을 그대로 쓴다 (단위 표기·로마자·대소문자).
+# 여기서 다시 만들면 채점기와 하네스가 서로 다른 답을 내놓는다.
+from eval.compare import same as _same                             # noqa: E402
+from src import schema as _schema                                  # noqa: E402
+from src.parsers.text.crosscheck import numeric_flag as _numeric   # noqa: E402
+
+
+def _standardize(field_key: str, value: object) -> str:
+    """schema/rules.yaml 의 표기 매핑을 적용한 값.
+
+    킷은 FAIL ACTION 만 표준값으로 적게 되어 있다(킷 기입 안내). 파서는 문서
+    원문(`VALVE CLOSE`)을 내므로, 사전을 적용하지 않으면 영원히 오답으로 잡힌다.
+    """
+    raw = str(value or "").strip()
+    probe = _schema.norm_label(raw)
+    for m in _schema.value_aliases(field_key):
+        if probe in {_schema.norm_label(c) for c in m.get("from", [])}:
+            return str(m["to"])
+    return raw
 
 SHEET = "라벨링"
 SKIP_VALUES = {"N/A", "NA", "판독불가", ""}      # 정답이 없는 칸 — 채점 제외
@@ -55,12 +77,31 @@ class Score:
         return out
 
 
+def _cell_text(v: object) -> str:
+    """킷 셀 값을 문자로. 엑셀 왕복으로 숫자가 된 값을 되살린다.
+
+    사람이 킷을 엑셀에서 열어 저장하면 텍스트 "195" 가 숫자 195 로 바뀌고
+    openpyxl 은 195.0 으로 읽는다. 그대로 대조하면 `195.0` vs 문서의
+    `195 (Cg=4040 → 7580)` 이 달라져 맞는 값이 오답으로 잡힌다
+    (2026-08-25 실제로 발생). 정수인 실수는 소수점을 떼고 본다.
+    """
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v or "").strip()
+
+
 def _norm(v: object) -> str:
     return re.sub(r"\s+", " ", str(v or "").strip()).upper()
 
 
 def _loose(v: object) -> str:
     return re.sub(r"[^0-9A-Z]", "", str(v or "").upper())
+
+
+def _contains(outer: object, inner: object) -> bool:
+    """한쪽이 다른 쪽을 통째로 담고 있는가 (공백·기호 무시)."""
+    a, b = _loose(outer), _loose(inner)
+    return bool(a) and bool(b) and b in a
 
 
 def read_kit(path: str, ix: FieldIndex) -> tuple[list[dict], list[tuple[int, str]], list[str]]:
@@ -105,7 +146,9 @@ def find_file(root: str, name: str) -> str | None:
 
 
 def score(kit_path: str, root: str) -> Score:
-    ix, cix = FieldIndex.load(), CompositeIndex.load()
+    six = SectionIndex.load()
+    # 구역 접두어를 뗀 표기까지 쓰는 인덱스로 채점한다 — 파서가 실제로 쓰는 것과 같게
+    ix, cix = FieldIndex.load(section_names=six.name_map()), CompositeIndex.load()
     rows, _, unresolved = read_kit(kit_path, ix)
     sc = Score(unscorable_fields=unresolved)
 
@@ -138,7 +181,7 @@ def score(kit_path: str, root: str) -> Score:
         sc.docs.append((row["doc_id"], row["file"], "채점"))
 
         for key, (truth, name) in row["truth"].items():
-            t = str(truth or "").strip()
+            t = _cell_text(truth)
             uncertain = t.startswith("?")
             if uncertain:
                 t = t[1:].strip()
@@ -150,11 +193,16 @@ def score(kit_path: str, root: str) -> Score:
                 cell.verdict = "미추출"
             elif _norm(g) == _norm(t):
                 cell.verdict = "정확"
-            elif _loose(g) == _loose(t):
+            elif _loose(g) == _loose(t) or _same(t, g, _numeric(key)):
+                # 단위 표기·로마자·대소문자 차이는 감점하지 않는다 (eval/compare 규칙).
+                #   예) 정답 "160 ℃" vs 파서 "160.0" → 같은 값이다
                 cell.verdict = "표기차이"
-            elif _loose(g) and _loose(g) in _loose(t):
+            elif (_same(t, _standardize(key, g), _numeric(key))
+                  or _contains(g, t) or _contains(t, g)):
+                # 표기 매핑 사전(rules.yaml)을 거쳐야 같아지는 것도 여기다.
                 # 파서는 문서 원문을 낸다. 표준값으로 바꾸는 것은 ④ Normalize 몫.
-                #   예) 문서 "Fail Position: OPEN" → 파서 "OPEN" → 표준값 "FAIL OPEN"
+                #   문서가 더 짧을 수도(원문 "OPEN" → 표준 "FAIL OPEN"),
+                #   더 길 수도 있다(원문 "195 (Cg=4040)" → 표준 "195").
                 cell.verdict = "정규화대기"
             else:
                 cell.verdict = "오답"

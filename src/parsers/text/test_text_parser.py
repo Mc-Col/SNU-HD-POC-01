@@ -51,7 +51,20 @@ def test_유사표현은_스키마에서만_읽는다():
     assert ix.field_count == len(_schema.all_fields())
     assert ix.lookup("Tag").key == "engineering_tag_no"
     assert ix.lookup("Fail Position").key == "actuator_fail_action"
-    assert ix.collisions == []
+
+
+def test_여러_필드에_걸린_표기는_구역_없이_매핑하지_않는다():
+    """`Maker` · `Model` 처럼 부품마다 되풀이되는 표기는 일부러 여러 필드에 등록한다.
+
+    구역(section)을 읽으면 갈라 쓰고, 못 읽으면 아무것도 만들지 않는다.
+    이름의 주인(표준명)만 예외로 이긴다 — `MODEL NO.` 는 MODEL NO. 의 이름이다.
+    """
+    ix = FieldIndex.load()
+    assert ix.collisions, "구역으로 갈리는 표기가 하나도 없다면 사전이 낡은 것이다"
+    for label, _, _ in ix.collisions:
+        hit = ix.lookup(label)
+        assert hit is None or hit.matched_on == "name", (
+            f"{label!r} 가 구역 없이 {hit and hit.key} 로 매핑된다")
 
 
 # ── 파서 출력 ──────────────────────────────────────────────────
@@ -243,3 +256,58 @@ def test_구형_xls_왕복(tmp_path):
 
     assert load_xls(str(path)).sheetnames == ["SPEC"]
     assert parse_excel(str(path)).by_key()["manufacturer"].raw_value == "FISHER"
+
+
+# ── 2단 양식에서 Max/Nor/Min 열이 새지 않는다 (실물 10FV079) ─────
+
+
+def _twocol_sheet(path):
+    """왼쪽 라벨·값 / 오른쪽 라벨·값 2단 양식 + 위쪽 서비스조건 블록.
+
+    실물 `10FV079` 의 배치다. 서비스조건 머리글(NOR. 54열)이 시트 끝까지
+    유효하면 아래쪽 행에서 오른쪽 단의 '라벨' 칸을 값으로 집는다.
+    """
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws.cell(1, 35).value, ws.cell(1, 44).value = "Units", "MIN."
+    ws.cell(1, 54).value, ws.cell(1, 64).value = "NOR.", "MAX."
+
+    ws.cell(2, 8).value = "Required Cv"                  # 블록 안 — Nor 열이 맞다
+    ws.merge_cells(start_row=2, start_column=8, end_row=2, end_column=34)
+    for col, v in [(35, "Cv"), (44, "1.16"), (54, "2.51"), (64, "12.2")]:
+        ws.cell(2, col).value = v
+    for a, b in [(44, 53), (54, 63), (64, 73)]:
+        ws.merge_cells(start_row=2, start_column=a, end_row=2, end_column=b)
+
+    ws.cell(9, 8).value = "Rated Cv"                     # 블록 밖 — 왼쪽 값이 맞다
+    ws.merge_cells(start_row=9, start_column=8, end_row=9, end_column=22)
+    ws.cell(9, 23).value = "26"
+    ws.merge_cells(start_row=9, start_column=23, end_row=9, end_column=45)
+    ws.cell(9, 53).value = "Body Color"                  # 오른쪽 단의 라벨
+    ws.merge_cells(start_row=9, start_column=53, end_row=9, end_column=69)
+    ws.cell(9, 70).value = "SILVER"
+    wb.save(path)
+    return path
+
+
+def test_Nor_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
+    by = parse_excel(_twocol_sheet(str(tmp_path / "twocol.xlsx"))).by_key()
+    assert by["rated_cv"].raw_value == "26"          # 'Body Color' 가 아니다
+    assert by["required_cv"].raw_value == "2.51"     # 블록 안에서는 Nor 열이 이긴다
+
+
+def test_가이드_부싱을_케이지_재질로_보지_않는다():
+    """가이드 부싱은 케이지와 다른 부품이다.
+
+    실물 10FV079 는 두 칸이 따로 있고 값도 다르며(`Guide Material` = SOLID
+    STELLITE vs 케이지 316 SST), 10PV081 은 `Cage` 에만 값이 있다.
+    킷은 갈린다 — d010·d011 은 Guide 행 값을 케이지 정답으로 적었다. 설계에 따라
+    케이지가 가이드를 겸하기도 해서 도메인 판단이 필요하고, 그때까지는
+    **미추출이 오답보다 낫다**는 원칙으로 빼 둔다.
+    """
+    ix = FieldIndex.load()
+    for label in ("Guide Material", "Guide Bushing", "MATERIAL Guide Bushing"):
+        hits = [h.key for h in ix.candidates(label)]
+        assert "valve_cage_material" not in hits, (label, hits)

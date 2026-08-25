@@ -58,11 +58,11 @@ def test_미매핑_라벨을_모으고_추천을_붙인다(ix):
     assert not rep.skipped
     texts = {s.text for s in rep.labels.values()}
     assert "Spring Range" in texts          # 스키마에 없는 항목
-    assert "Body Size" in texts             # 유사표현 미등록
+    # 'Body Size' 는 2026-08-25 유사표현으로 등록되어 더 이상 미매핑이 아니다
 
     md, tsv = render(rep, ix, cix, top=50)
     assert "추천 필드가 있는 라벨" in md
-    assert "VALVE BODY SIZE" in md          # Body Size 추천이 실려야 한다
+    assert "Spring Range" in md             # 남은 미매핑 라벨이 리포트에 실려야 한다
     assert tsv.splitlines()[0].endswith("채택(O/X)")
 
 

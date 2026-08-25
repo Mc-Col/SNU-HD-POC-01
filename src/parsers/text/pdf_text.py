@@ -6,6 +6,12 @@
   ② 같은 행에 라벨 · 값이 x 좌표로 분리    (좌우 2단 사양표)
 
 엑셀 파서와 같은 FieldIndex 를 쓴다. 유사표현은 코드가 아니라 스키마에만 있다.
+
+구역(section) 인식 — 2026-08-25
+    같은 항목명이 부품마다 되풀이되므로(`Model`=밸브 본체 / `Model No.`=액추에이터)
+    라벨이 **어느 묶음에 있는지**를 함께 본다. PDF 에서 묶음의 이름표는 여백에
+    90도 회전된 글자다. 자세한 것은 `sections.py` 의 머리말에 적어 두었다.
+    구역 구조가 없는 문서는 이 장치가 조용히 꺼진다 (지금까지와 같게 동작).
 """
 from __future__ import annotations
 
@@ -17,17 +23,20 @@ import fitz
 
 from src.contracts import ParserType, RawExtraction
 
+from src.preprocess import probe_pages
+
 from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
 from .field_index import FieldIndex
+from .sections import SectionIndex, SectionMap
 from .units import UnitIndex
 
 Y_TOL = 3.0                 # 이 이내면 같은 행으로 본다
 MAX_VALUE_CELLS = 6         # 한 행에서 값 후보를 몇 개까지 볼 것인가
-COLUMN_TOL = 24.0           # 열 머리글과 값의 x 오차 허용
-MIN_TEXT_CHARS = 200        # 이보다 적으면 텍스트 레이어가 없는 스캔본으로 본다
-TEXT_PROBE_PAGES = 5        # 문서 앞 몇 장으로 판정할 것인가
+COLUMN_TOL = 12.0           # 열 머리글과 값의 x 오차 허용
+                            # 실측(52PV014): 블록 안의 값은 머리글 ±6 안에 선다.
+                            # 24 로 두면 2단 양식 오른쪽 라벨 열(21 떨어짐)까지 삼킨다.
 
 
 class ScannedPdfError(RuntimeError):
@@ -58,6 +67,11 @@ def _rows(page) -> list[list[_Cell]]:
         if block["type"] != 0:
             continue
         for line in block["lines"]:
+            # 90도 회전된 글자는 구역 이름표다 (sections.py). 라벨도 값도 아니므로
+            # 여기서 뺀다. 남겨두면 `MATERIAL` 같은 이름표가 라벨로 읽혀 옆 글자를
+            # 값으로 집는다.
+            if line.get("dir", (1.0, 0.0)) != (1.0, 0.0):
+                continue
             for span in line["spans"]:
                 t = span["text"].strip()
                 if t:
@@ -87,12 +101,15 @@ def parse_pdf_text(
     pages: list[int] | None = None,
     composite: CompositeIndex | None = None,
     units: UnitIndex | None = None,
+    sections: SectionIndex | None = None,
 ) -> TextParseResult:
     """텍스트 레이어가 있는 PDF → RawExtraction[] + 미매핑 라벨.
 
     pages 는 1-based. None 이면 전체. Triage 가 사양표 페이지를 지정하면 그것만 본다.
     """
-    ix = index or FieldIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
+    # 구역 사전을 먼저 읽어 넘긴다 (excel.py 와 같은 이유)
+    ix = index or FieldIndex.load(section_names=six.name_map())
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
     doc = fitz.open(path)
@@ -102,21 +119,27 @@ def parse_pdf_text(
     targets = list(pages or range(1, doc.page_count + 1))
 
     # 실패를 삼키지 않는다 — 스캔본을 조용히 0건으로 돌려주면 원인을 알 수 없다.
-    # 판정은 문서 단위로 한다. 특정 페이지만 요청했다고 스캔본으로 몰면 안 된다.
-    chars = sum(len(doc[i].get_text().strip())
-                for i in range(min(doc.page_count, TEXT_PROBE_PAGES)))
-    if chars < MIN_TEXT_CHARS:
+    # 판정은 preprocess 가 한다 (CLAUDE.md — 전처리를 다시 만들지 않는다).
+    # 문서 단위로 본다: 특정 페이지만 요청했다고 멀쩡한 문서를 스캔본으로 몰면 안 된다.
+    probed = {p.page: p for p in probe_pages(path)}
+    if probed and not any(p.has_text_layer for p in probed.values()):
+        chars = sum(p.text_len for p in probed.values())
         raise ScannedPdfError(
             f"텍스트 레이어가 거의 없음 ({chars}자) — 스캔 PDF 로 보인다. "
             f"③-b VLM 파서가 처리해야 한다: {os.path.basename(path)}")
 
+    # 페이지 단위로 걸러내지는 않는다. `has_text_layer` 는 "VLM 이 필요한가" 의
+    # 기준(100자)이라, 글자가 적어도 라벨 몇 개는 읽히는 페이지를 버리게 된다.
     for pno in targets:
         page = doc[pno - 1]
+        secmap = SectionMap.from_pdf(page, six)   # 회전 텍스트 = 구역 이름표
         anchor: float | None = None         # 현재 유효한 Normal 열 x 좌표
+        anchor_band: float | None = None    # 그 머리글이 선 열 밴드
         for ri, row in enumerate(_rows(page), start=1):
             found_anchor = _column_anchor(row)
             if found_anchor is not None:
                 anchor = found_anchor
+                anchor_band = secmap.band(row[0].y0, found_anchor) if secmap else None
                 continue                    # 머리글 행 자체는 값이 없다
             consumed: set[int] = set()
 
@@ -124,7 +147,23 @@ def parse_pdf_text(
                 if ci in consumed:
                     continue
 
-                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed, anchor, uix)
+                # 이 라벨이 속한 구역 (모르면 None)
+                sec = secmap.at(cell.y0, cell.x0) if secmap else None
+                allowed = six.allowed(sec)
+
+                # Max/Nor/Min 열은 **그 머리글이 선 열 블록 안에서만** 쓴다.
+                #   머리글 하나가 페이지 끝까지 유효하면 다른 블록의 값을 집는다 —
+                #   실물 10PV081 에서 왼쪽 포지셔너 묶음의 `Model No.`
+                #   (값 '4280E, MASOLEILAN')가 오른쪽 블록의 Nor 값 '10.5' 를 집었다.
+                #   비교는 **구역이 아니라 열 밴드**로 한다 — 오른쪽 블록 하나에
+                #   구역이 여럿 있어서(ACCESSORIES·OTHERS·SERVICE CONDITIONS)
+                #   구역으로 비교하면 정작 공정조건 행에서 Nor 열을 못 쓴다.
+                #   구역 이름표가 없는 문서에서는 종전처럼 그대로 쓴다.
+                band = secmap.band(cell.y0, cell.x0) if secmap else None
+                use_anchor = anchor if (not secmap or band == anchor_band) else None
+
+                label, value, vcell, vidx = _split(cell, row, ci, ix, consumed,
+                                                   use_anchor, uix)
                 if label is None:
                     continue
 
@@ -152,7 +191,7 @@ def parse_pdf_text(
                         result.unmapped.append(UnmappedLabel(pc.label, loc, pc.value))
                     continue
 
-                hit = ix.lookup(label)
+                hit = ix.lookup(label, allowed, sec)
                 if hit is None:
                     if value:
                         result.unmapped.append(UnmappedLabel(
@@ -165,7 +204,7 @@ def parse_pdf_text(
                 found = bool(value)
                 if not found:
                     note = "라벨은 찾았으나 값이 비어 있음"
-                elif anchor is not None and abs(vcell.x0 - anchor) <= COLUMN_TOL:
+                elif use_anchor is not None and abs(vcell.x0 - use_anchor) <= COLUMN_TOL:
                     note = "Max/Nor/Min 중 Normal 열 선택"
                 else:
                     note = ""
@@ -212,6 +251,26 @@ def _split(cell: _Cell, row: list[_Cell], ci: int, ix: FieldIndex,
     return t, v, vc or cell, vi if vc else ci
 
 
+_NUMERIC = re.compile(r"^[\d.,/%\s+-]+$")
+
+
+def _is_label_with_value(row: list[_Cell], j: int, units: UnitIndex | None) -> bool:
+    """Normal 열 자리의 후보가 값이 아니라 라벨인가.
+
+    2단 양식에서는 오른쪽 단의 라벨 열이 Normal 열 근처를 지나간다
+    (실물 `52PV014`: `Body Color | GRAY`, `Air Connection | 1/4" NPT`).
+    숫자는 라벨이 아니므로 Max/Nor/Min 이 나란히 선 진짜 블록은 영향받지 않는다.
+    """
+    t = row[j].text.strip()
+    if _NUMERIC.match(t):
+        return False
+    for k in range(j + 1, min(len(row), j + 3)):
+        s = row[k].text.strip()
+        if s and _has_alnum(s) and not (units is not None and units.is_unit(s)):
+            return True
+    return False
+
+
 def _right_value(row: list[_Cell], ci: int, ix: FieldIndex, consumed: set[int],
                  anchor: float | None = None, units: UnitIndex | None = None):
     """같은 행 오른쪽 값. Normal 열을 알면 그 열을 우선한다."""
@@ -229,7 +288,9 @@ def _right_value(row: list[_Cell], ci: int, ix: FieldIndex, consumed: set[int],
         return "", None, ci
 
     if anchor is not None:
-        near = [(j, c) for j, c in cands if abs(c.x0 - anchor) <= COLUMN_TOL]
+        near = [(j, c) for j, c in cands
+                if abs(c.x0 - anchor) <= COLUMN_TOL
+                and not _is_label_with_value(row, j, units)]
         if near:
             j, c = near[0]
             consumed.add(j)

@@ -84,7 +84,154 @@ ADD = [
 # → RATED CV MAX / NORMAL 두 칼럼을 RATED CV 하나로 합친다.
 MERGE = {"RATED CV MAX": "RATED CV"}
 MERGE_DROP = {"RATED CV NORMAL"}
-MERGE_ALIASES = {"RATED CV": ["VALVE COEFFICIENT"]}
+MERGE_ALIASES = {
+    # ── 구역(section)으로 갈리는 표기 (2026-08-25) ─────────────────────
+    # 한 표기를 **여러 필드에 등록**한다. 예전에는 이런 표기를 아예 뺐다 —
+    # 한 필드가 이기고 나머지가 굶기 때문이다. 이제 파서가 문서의 구역
+    # 이름표를 읽으므로(`src/parsers/text/sections.py`), 밸브 본체 묶음의
+    # `Model` 과 포지셔너 묶음의 `Model` 을 갈라 쓸 수 있다.
+    #
+    # 구역을 못 읽는 문서에서는 후보가 여럿이라 그대로 미매핑이 된다.
+    # 즉 되살려도 오답이 늘지 않는다 (`FieldIndex.lookup` 의 마지막 줄).
+    "MANUFACTURER": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Maker & Serial No.","Maker"],
+    "POSITIONER MANUFACTURER": ["Maker"],
+    # `Model No.` 는 MODEL NO. 의 표준명이지만 포지셔너 블록에서도 그 이름을
+    # 쓴다 (44LV001 r43 `Model No. | YT-1200`). 표준명 소유 필드가 우선한다는
+    # 규칙(`FieldIndex.lookup`)이 있어서 빌려 써도 이름 해석이 깨지지 않는다.
+    "POSITIONER MODEL NO.": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        # ⚠️ "Positioner Type" 은 넣지 않는다. 킷 12건(Fisher 수기 tif)에서는 그 칸에
+        #    모델번호(3582G)가 적혀 있지만, 텍스트 PDF·엑셀 5건에서는 구분값
+        #    ("PNEUMATIC/PNEUMATIC" · "ELEC. PNEUMATIC")이 들어 있다.
+        #    넣고 측정하니 오답 1 → 6 이 되어 되돌렸다.
+        #    VLM 프롬프트에는 유효한 힌트일 수 있어 이종수·강민호 책임께 전달.
+        "Positioner", "Positioner Model",
+        "Model", "Model #", "Model No.",
+        # 구역 접두어가 떨어지면 포지셔너 묶음 한정 표기가 된다.
+        # 값이 "모델, 제조사" 두 조각이면 위의 복합 라벨 규칙이 먼저 처리한다.
+        "POSITIONER Model No. / Mfr.",
+    ],
+
+    # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
+    #   "Work Scope 2. 1)" · "Work Scope 2. 3)" : 각주 참조이지 항목명이 아니다
+    #                                            ("Note. 3)" 을 뺀 것과 같은 이유)
+    #   "Guide Material" · "MATERIAL Guide Bushing" → VALVE CAGE MATERIAL
+    #       가이드 부싱은 케이지와 다른 부품이다. 10FV079 는 두 칸이 따로 있고 값도
+    #       다르며("SOLID STELLITE" vs 케이지 "316 SST"), 10PV081 도 같다
+    #       (`Cage 630SST` / `Guide Bushing` 은 빈 칸).
+    #       ⚠️ 킷은 갈린다 — d010·d011 은 Guide 행 값을 케이지 정답으로 적었다.
+    #       설계에 따라 케이지가 가이드 역할을 겸하기도 해서 도메인 판단이 필요하다.
+    #       그때까지는 빼 둔다 — 미추출이 오답보다 낫다.
+    #   "End Connection" → VALVE BODY RATING   : 15LV015 에서 연결 형식을 담는다
+    #                                            ("RF FLANGED" vs 정답 "600#").
+    #                                            "End Connection/Flg. ANSI class" 는 남긴다
+    # 킷의 원문라벨에서 수집 (2026-08-25, 골든셋 21건). 사람이 상상해서 채울 수 없는
+    # 표기 변종을 실물에서 모은 것이다. 한 표기가 여러 필드에 걸리는 것,
+    # 다른 필드의 표준명과 겹치는 것, 복합 라벨 규칙이 이미 처리하는 것은 뺐다.
+    "ACTUATOR FAIL ACTION": [
+        "Air Fails Valve to", "ACT'N Fail Position", "ACTUATOR Fail Position",
+        "ACTUATOR Failure Mode", "Actuator Fail", "Fail",
+    ],
+    "ACTUATOR TYPE": ["Actuator Style", "Act. Type"],
+    "CHARACTERISTIC (TRIM FORM)": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Trim # - Characteristic", "Flow Characteristic",
+        "Plug or Cage", "Trim Plug or Cage", "BODY Characteristic", "Flow Char.",
+        "Flow Character.", "TRIM Flow Char.", "Valve Body Assembly Characteristic",
+    ],
+    "ENGINEERING TAG NO.": ["TAG NO", "Tag Number", "Valve Tag #", "Tags"],
+    "FLUID NAME": ["GENERAL Fluid", "SERVICE CONDITION Fluid"],
+    "FLUID STATE": ["GENERAL Fluid Type"],
+    "MODEL NO.": [
+        # "Model" · "Model #" 는 포지셔너에도 걸린다 — 구역이 가른다
+        "Model", "Model #",
+        "Model Number", "VALVE BODY/BONNET Model", "VALVE BODY/BONNET Model No.", "Valve Model",
+    ],
+    "NORMAL FLOW RATE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Liq Flow Rate (kg/h)", "Volumetric Flow Rate Gas (Qg)",
+        "Flow Rate, Give Units", "Liq Flow Rate", "Flow Rate NOR", "Flow Rate Norm.",
+        "Volumetric Flow Rate Gas",
+    ],
+    "NORMAL PRESSURE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Inlet Pressure (P1)",
+        "Inlet Pressure", "In.Press. NOR", "Inlet Press", "Inlet Pressure, NOR.", "In.Press.",
+        "Inlet Pressure Norm.",
+    ],
+    "NORMAL TEMPERATURE": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Inlet Temp.", "Inlet Temperature (T1)", "Inlet Temperature °C", "Temperature (°C)",
+        "Inlet Temperature, NOR.", "Temp. NOR", "Temperature", "Inlet Temperature Norm.",
+        "Temp.",
+    ],
+    "RATED CV": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Maximum Valve Coefficient, Cv","VALVE COEFFICIENT", "Body Rated Cv", "Trim Cv", "Trim Rated Cv", "VALVE TRIM Rated Cv"],
+    "REQUIRED CV": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Flow Coeff. (Cv)", "Sizing Coefficient (Cv)",
+        "Req'd Flow Coeff., Cv", "Flow Coeff.", "Required Cv NOR.", "Calculated Cv",
+        "Calculated Cv NOR", "Calculated Cv Normal", "Required Capacity", "Sizing Coefficient",
+    ],
+    "VISCOSITY": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Dynamic Viscosity (Mu)", "Viscosity (cP)","Dynamic Viscosity"],
+    "SPECIFIC GRAVITY": ["Density", "SG-MW"],
+    "VALVE BODY MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Body Matl / Bonnet Matl",
+        # "Material" 단독은 바디 재질로만 둔다. 트림 묶음의 "Material" 은 어느
+        # 부품인지 문서가 말해주지 않아 구역으로도 갈리지 않는다
+        "Material",
+        "Body Material", "Body Matl", "MATERIAL Body", "VALVE BODY / BONNET Material",
+        "Body Style Material", "MATERIAL Body/Bonnet",
+    ],
+    "VALVE BODY RATING": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Flg. ANSI Class", "End Connections, ANSI Class", "Fig. ANSI class",
+        "End Connection/Flg. ANSI class", "Rating", "BODY Rating",
+        "VALVE BODY / BONNET Rating", "Ebody Style End Connect", "Pressure Class",
+        "VALVE BODY / BONNET Pr. Rating", "Valve Body Assembly Pressure Class",
+    ],
+    "VALVE BODY SIZE": [
+        "Body Size", "VALVE BODY / BONNET Size", "BODY Trim Size", "Size",
+        "Valve Body Assembly Size",
+    ],
+    "VALVE BODY TYPE": ["VALVE BODY / BONNET Type"],
+    "VALVE CAGE MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Cage",
+        "Cage and/or Bushing Material", "Trim Cage and/or Bushing Material", "Cage Material",
+        "MATERIAL Cage/Retainer",
+        "MATERIAL Retainer or Cage", "Retainer Matl", "Retainer or Cage", "Seat Retainer Mtl",
+        "TRIM Retainer / Cage",
+    ],
+    "VALVE LEAKAGE CLASS": [
+        "Shutoff Class", "Leakage Spec.", "Seat Leakage", "BODY Leakage Spec.",
+        "VALVE BODY / BONNET Seat Leakage",
+    ],
+    "VALVE PLUG MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Plug Mtl/ Facing|Treatment / Stem Cvr",
+        "Trim Valve Plug Material", "MATERIAL Plug", "Plug Material", "TRIM Plug Material",
+        "MATERIAL Plug/Disc/Ball", "Plug", "Plug Matl", "Plug Mtl",
+    ],
+    "VALVE SEAT MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Disk/Seat Material:", "Seat Ring Mtl/ Facing|Treatment",
+        "Seat Ring Material", "Trim Seat Ring Material", "MATERIAL Seat Ring", "Seat Ring",
+        "Seat Ring Mtl", "Soft Seat Matl", "Soft Seat Material", "Trim Disk/Seat Material",
+    ],
+    "VALVE STEM MATERIAL": [
+        # 2026-08-25 2차 수집 (골든셋 31건)
+        "Stem Mtl/ Facing|Treatment / Pilot Spr",
+        "Trim Stem", "MATERIAL Stem", "TRIM Stem Material", "Stem", "Stem Matl", "Stem Mtl",
+       
+    ],
+}
 
 # 문서에 항목 라벨이 없어 다른 값에서 도출해야 하는 필드 (라벨링 3건에서 확인)
 # document 로 두면 VLM 이 없는 라벨을 찾다가 N/A 를 낸다.
@@ -131,7 +278,29 @@ def q(s):
     return f'"{s}"'
 
 
+def assert_no_duplicate_alias_keys() -> None:
+    """MERGE_ALIASES 에 같은 필드명이 두 번 나오면 멈춘다.
+
+    파이썬 딕셔너리 리터럴은 같은 키가 두 번 나오면 **뒤엣것이 앞엣것을 조용히
+    덮는다.** 2026-08-25 에 구역용 표기를 넣었다가 이걸로 잃었다 —
+    `"MODEL NO.": ["Model", "Model #"]` 를 위에 적었는데 아래에 이미 같은 키가
+    있어서 새로 넣은 표기가 사라졌고, 생성된 fields.yaml 만 봐서는 알 수 없었다.
+    """
+    import ast
+
+    tree = ast.parse(open(__file__, encoding="utf-8").read())
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "MERGE_ALIASES" for t in node.targets)):
+            continue
+        names = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+        dups = {n for n in names if names.count(n) > 1}
+        if dups:
+            raise SystemExit(f"MERGE_ALIASES 에 중복 키가 있다 (뒤엣것만 살아남는다): {sorted(dups)}")
+
+
 def main():
+    assert_no_duplicate_alias_keys()
     wb = openpyxl.load_workbook(SRC, data_only=True)
     ws = wb["Output"]
 
@@ -206,7 +375,9 @@ def main():
         entry = dict(
             key=key_of(spec["name"]), name=spec["name"], group=spec["group"],
             db_code=spec["db_code"], desc=spec["desc"], example="",
-            required=spec["required"], safety="normal", aliases=list(spec["aliases"]),
+            required=spec["required"], safety="normal",
+            aliases=list(spec["aliases"]) + [a for a in MERGE_ALIASES.get(spec["name"], [])
+                                             if a not in spec["aliases"]],
             mvp=(spec["name"] in MVP), threshold=THRESHOLD["normal"],
         )
         idx = next((i for i, f in enumerate(fields)

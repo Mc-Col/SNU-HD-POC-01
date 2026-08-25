@@ -14,12 +14,17 @@
     python -m src.pipeline --smoke          모듈 없이 합성 문서로 전 구간 확인
     python -m src.pipeline <파일...>         실제 파일 처리
 
-모듈 붙이는 방법:
+모듈 붙이는 방법 — 두 가지:
 
+    # ① 완성된 모듈을 전부 꽂은 것 (권장). CLI·화면이 같은 배선을 쓴다
+    from src.pipeline import build
+    p = build()
+
+    # ② 하나만 갈아끼우기
     from src.pipeline import Pipeline
-    from src.triage import MyTriage
+    from src.triage import Triage
+    p = Pipeline(triage=Triage())            # 나머지는 기본 구현 유지
 
-    p = Pipeline(triage=MyTriage())          # 나머지는 기본 구현 유지
     result = p.run_document("raw_file/19-FV-001.pdf")
 """
 from __future__ import annotations
@@ -487,20 +492,24 @@ def _decide(f: Field, ex: RawExtraction, value: str | None,
     if failure is FailureKind.NO_EVIDENCE:
         return FieldState.NA, _join(detail or "문서에 근거 없음", ex.note)
     if failure is FailureKind.CONSTRAINT:
-        return FieldState.REVIEW, _join("제약 위반 — 재시도하지 않고 확인 필요", detail)
+        return FieldState.REVIEW, _join("제약 위반 — 재시도하지 않고 확인 필요", detail, ex.note)
     if failure is FailureKind.FORMAT:
-        return FieldState.REVIEW, _join("형식·허용값 위반", detail)
+        return FieldState.REVIEW, _join("형식·허용값 위반", detail, ex.note)
     if failure is FailureKind.EXTRACTION:
         return FieldState.REVIEW, _join("추출 실패", detail, ex.note)
+    # ── 아래 분기들도 파서가 남긴 사유(ex.note)를 함께 싣는다 (2026-08-25)
+    #   그전에는 NO_EVIDENCE·EXTRACTION 만 이었고, 나머지는 버렸다. 그래서 파서가
+    #   "두 경로가 다름 — VLM '999' vs 텍스트 '110'" 를 남겨도 화면에는
+    #   "확신도 0.00 < 임계 0.90" 만 떴다. 검토자가 무엇을 비교해야 하는지 알 수 없다.
     if agent_ok is False:
-        return FieldState.REVIEW, agent_note or "평가 Agent 불일치"
+        return FieldState.REVIEW, _join(agent_note or "평가 Agent 불일치", ex.note)
     if agent_ok is True:
         # 확신도는 낮았으나 역방향 검증이 확인함 → 자동확정으로 승격
-        return FieldState.AUTO, ""
+        return FieldState.AUTO, ex.note
     if ex.confidence < f.threshold:
-        return FieldState.REVIEW, (
-            f"확신도 {ex.confidence:.2f} < 임계 {f.threshold:.2f}")
-    return FieldState.AUTO, ""
+        return FieldState.REVIEW, _join(
+            f"확신도 {ex.confidence:.2f} < 임계 {f.threshold:.2f}", ex.note)
+    return FieldState.AUTO, ex.note
 
 
 # ══════════════════════════════════════════════════════════════
@@ -542,7 +551,10 @@ class _SmokeParser:
         "valve_body_rating":    ("ANSI CLASS 300",    "RATING",         0.88),
         "valve_body_material":  ("WCB",               "BODY MATL",      0.72),
         "actuator_fail_action": ("Air-to-Open (ATO)", "FAIL POSITION",  0.91),
-        "rated_cv_normal":      (None,                None,             0.00),
+        # C027 에서 필드가 정리되며 `rated_cv_normal` 이 없어졌다. 이 자리는
+        # "근거 없는 필드가 N/A 로 가는가" 를 보는 칸이므로 현재 키로 맞춘다
+        # (2026-08-25 — 이 낡은 키 때문에 `--smoke` 가 StopIteration 으로 죽어 있었다).
+        "required_cv":          (None,                None,             0.00),
     }
 
     def extract(self, path, triage, fields):
@@ -594,7 +606,7 @@ def _smoke(echo: bool) -> int:
         print(f"\n[확인] 도메인 규칙 — {fa.raw_value} → {fa.value}")
         for t in fa.transform_trace:
             print(f"        {t}")
-    cv = next(x for x in r.records if x.field_key == "rated_cv_normal")
+    cv = next(x for x in r.records if x.field_key == "required_cv")
     if cv.state is not FieldState.NA:
         print(f"[실패] 근거 없는 필드가 N/A 가 아님: {cv.state}"); ok = False
     else:
@@ -612,6 +624,96 @@ def _smoke(echo: bool) -> int:
     return 0 if ok else 1
 
 
+# ══════════════════════════════════════════════════════════════
+#  조립 — 완성된 모듈을 꽂아 Pipeline 을 만든다
+# ══════════════════════════════════════════════════════════════
+#
+# 왜 팩토리인가 (2026-08-25)
+#   조립 지점이 둘이다 — CLI(`main()`)와 화면(`src/ui/source.py`).
+#   두 곳에 배선을 각각 적으면 한쪽만 갱신되어 "화면과 CLI 가 다른 결과를 낸다"
+#   가 된다. 조립 지식은 이 함수 하나에만 둔다.
+#
+# 무엇이 꽂히는가
+#   ① Triage        src.triage.Triage          강민호 책임
+#   ② Router        src.router.Router          강민호 책임
+#   ③-a 텍스트 파서   src.parsers.text.adapter.TextParser        서경빈 선임
+#   ③-b VLM 파서     src.parsers.vlm.VlmParser → DualParser 로 감싼다
+#   ⑤-a 형식 검증    src.validate.format.FormatValidator        서경빈 선임
+#
+# VLM 은 구성에 실패할 수 있다 (패키지·키 미비). 그때 조용히 넘기지 않고
+# 사유를 남기고 기본 구현을 유지한다 — 왜 값이 안 나오는지 알 수 있어야 한다.
+
+def build(only_mvp: bool = True, use_vlm: bool = True, max_retries: int = 2,
+          dual: bool = True, cache: bool = True,
+          notes: list[str] | None = None) -> "Pipeline":
+    """완성된 모듈을 꽂은 Pipeline.
+
+    cache
+        VLM 응답 캐시를 쓸지. **기본 켜짐.**
+        VLM API 는 완전한 결정론이 아니다 — 같은 페이지를 두 번 보내면 값이
+        달라질 수 있다(2026-08-25 실측: 같은 문서에서 두 경로 합의율이 71% 와
+        100% 로 갈렸다). 캐시가 없으면 개발 철학 6(같은 입력 → 같은 출력)이
+        깨지고, 개선을 측정할 수 없다. 비용도 재실행마다 다시 든다.
+
+    dual
+        VLM 이 꽂힐 때 텍스트 파서로 **한 번 더 읽어 대조**할지.
+        CLAUDE.md — "텍스트는 글자를 보증할 뿐이고 어느 값이 어느 필드인지는
+        VLM 이 정한다." 대조에서 값이 다르면 확신도가 0 이 되어 사람에게 간다.
+    notes
+        조립 중 생긴 관찰을 담을 리스트(선택). 호출부가 로그·화면에 쓴다.
+    """
+    log = notes if notes is not None else []
+    kw: dict[str, Any] = {}
+
+    from src.parsers.text.adapter import TextParser
+    from src.validate.format import FormatValidator
+    text_parser = TextParser()
+    kw["text_parser"] = text_parser
+    kw["format_validator"] = FormatValidator()
+
+    for name, mod, cls in (("triage", "src.triage", "Triage"),
+                           ("router", "src.router", "Router")):
+        try:
+            kw[name] = getattr(__import__(mod, fromlist=[cls]), cls)()
+        except Exception as e:                       # noqa: BLE001
+            log.append(f"{name} 기본 구현 유지 — {type(e).__name__}: {e}")
+
+    if use_vlm:
+        try:
+            # VlmParser 는 클라이언트를 늦게 만든다(첫 호출 때 `from openai import OpenAI`).
+            # 그래서 생성만으로는 사용 가능 여부를 알 수 없다 — 여기서 미리 확인한다.
+            # 확인하지 않으면 문서를 처리하다 중간에 터지고, 그 문서는 통째로 실패한다.
+            import importlib.util
+            if importlib.util.find_spec("openai") is None:
+                raise ModuleNotFoundError(
+                    "openai 패키지가 없다 (requirements.txt 에는 있다 — pip install 필요)")
+            from src.parsers.vlm import VlmParser
+            vlm_cache = None
+            if cache:
+                from pathlib import Path
+
+                from src.parsers.vlm import ResponseCache
+                from src.parsers.vlm.cache import DEFAULT_CACHE_DIR
+                # 경로를 명시해서 넘긴다. `ResponseCache()` 를 인자 없이 만들면
+                # 기본 경로가 str 로 들어가 `cache_dir / key` 가 TypeError 를 낸다
+                # (2026-08-25 실측 — cache.py 의 잠재 버그. 강민호 책임께 전달)
+                vlm_cache = ResponseCache(Path(DEFAULT_CACHE_DIR))
+            vlm: Any = VlmParser(only_mvp=only_mvp, cache=vlm_cache)
+            if dual:
+                from src.parsers.text.dual import DualParser
+                vlm = DualParser(vlm=vlm, text=text_parser)
+            kw["vlm_parser"] = vlm
+        except Exception as e:                       # noqa: BLE001
+            # 실패를 삼키지 않는다(철학 5). VLM 슬롯은 NullParser 로 남고
+            # 그 경로(PDF·tif)는 전 필드 N/A 가 된다 — 사유가 여기 남는다.
+            log.append(f"VLM 파서 미구성 — {type(e).__name__}: {e}. "
+                       f"PDF·이미지 경로는 값이 나오지 않는다 "
+                       f"(텍스트 경로만 보려면 --no-vlm)")
+
+    return Pipeline(only_mvp=only_mvp, use_vlm=use_vlm,
+                    max_retries=max_retries, **kw)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="D2S 파이프라인")
     ap.add_argument("paths", nargs="*", help="처리할 파일")
@@ -626,8 +728,11 @@ def main() -> int:
         return _smoke(a.echo)
 
     sys.stdout.reconfigure(encoding="utf-8")
-    p = Pipeline(only_mvp=not a.all_fields, use_vlm=not a.no_vlm,
-                 max_retries=a.max_retries)
+    notes: list[str] = []
+    p = build(only_mvp=not a.all_fields, use_vlm=not a.no_vlm,
+              max_retries=a.max_retries, notes=notes)
+    for n in notes:                                  # 조립 중 관찰을 먼저 알린다
+        print(f"[조립] {n}")
     res = p.run_batch(a.paths, echo=a.echo)
     s = p.last_summary
     print(f"문서 {s['docs_ok']}/{s['docs_total']} 처리   "

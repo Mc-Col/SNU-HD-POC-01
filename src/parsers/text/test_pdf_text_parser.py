@@ -94,11 +94,18 @@ def test_같은_입력이면_같은_출력이다():
 
 
 def test_복합_라벨을_쪼갠다(parsed):
-    """'Size/Pressure Class/Body Form' = '4 / 300 / Globe' → 세 필드로."""
+    """'Size/Pressure Class/Body Form' = '4 / 300 / Cast' → 앞 두 조각만.
+
+    세 번째 Body Form(Cast)은 주조·단조 구분이라 대응 필드가 없다.
+    밸브 형식은 'Valve Model / Body Type' = 'Mark One / Globe / Standard' 에서 온다.
+    (2026-08-25 실물 19FV077 에서 확인 — 두 칸이 따로 있다)
+    """
     by = parsed.by_key()
-    assert (by["valve_body_size"].raw_value, by["valve_body_size"].raw_label) == ("4", "Size")
     assert (by["valve_body_rating"].raw_value, by["valve_body_rating"].raw_label) == ("300", "Pressure Class")
-    assert all("복합 라벨" in by[k].note for k in ("valve_body_size", "valve_body_rating"))
+    assert (by["valve_body_type"].raw_value, by["model_no"].raw_value) == ("Globe", "667-ED")
+    assert all("복합 라벨" in by[k].note for k in ("valve_body_rating", "valve_body_type"))
+    # 'Cast' 는 어느 필드에도 들어가지 않는다
+    assert all(r.raw_value != "Cast" for r in parsed.records)
 
 
 def test_FailAirTo_는_Fail_조각을_쓴다(parsed):
@@ -127,3 +134,77 @@ def test_스캔본은_조용히_0건을_돌려주지_않는다(tmp_path):
     with pytest.raises(ScannedPdfError) as e:
         parse_pdf_text(str(blank))
     assert "VLM" in str(e.value)
+
+
+# ── 2단 양식에서 Normal 열이 새지 않는다 (실물 52PV014) ─────────
+
+
+def _twocol_pdf(path):
+    """왼쪽 라벨·값 / 오른쪽 라벨·값 2단 + 위쪽 서비스조건 블록.
+
+    실물 `52PV014` 의 x 좌표를 그대로 옮겼다. 오른쪽 단의 라벨 열(327)이
+    Normal 열(348)에서 21 밖에 안 떨어져 있어, 허용 오차가 넓으면 라벨을
+    값으로 집는다.
+    """
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page()
+    for x, t in [(246, "Units"), (296, "MAX."), (348, "NOR."), (403, "MIN.")]:
+        page.insert_text((x, 100), t, fontsize=8)
+    for x, t in [(90, "Required Cv"), (250, "Cv"), (351, "75.7")]:
+        page.insert_text((x, 112), t, fontsize=8)       # 블록 안 — Nor 열이 맞다
+    for x, t in [(90, "Rated Cv"), (169, "110"), (327, "Position")]:
+        page.insert_text((x, 130), t, fontsize=8)       # 블록 밖 — 왼쪽 값이 맞다
+    for x, t in [(90, "Fail Position"), (169, "VALVE CLOSE"),
+                 (327, "Body Color"), (417, "GRAY")]:
+        page.insert_text((x, 142), t, fontsize=8)
+    # 스캔본 가드(문서 단위 글자 수)에 걸리지 않도록 실물만큼 본문을 채운다
+    for i, y in enumerate(range(160, 400, 12)):
+        page.insert_text((90, y), f"Remark {i}: text layer filler line", fontsize=8)
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def test_Normal_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
+    by = parse_pdf_text(_twocol_pdf(tmp_path / "twocol.pdf")).by_key()
+    assert by["required_cv"].raw_value == "75.7"        # 블록 안에서는 Nor 열이 이긴다
+    assert by["rated_cv"].raw_value == "110"            # 'Position' 이 아니다
+    assert by["actuator_fail_action"].raw_value == "VALVE CLOSE"   # 'Body Color' 아님
+
+
+# ── Nor 열은 그 머리글이 선 구역 안에서만 쓴다 (실물 10PV081) ─────
+
+
+def _two_section_pdf(path):
+    """구역 둘 · 오른쪽 블록에만 Max/Nor/Min 머리글이 있는 배치.
+
+    실물 `10PV081` p2 의 구조다. 왼쪽 `POSITIONER` 묶음의 `Model No.` 행에는
+    자기 값이 바로 옆에 있는데, 오른쪽 블록의 Nor 열이 페이지 끝까지 유효하면
+    그쪽 숫자('10.5')를 값으로 집는다.
+    """
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    # 구역 이름표 — 왼쪽(x=42) · 오른쪽(x=312)
+    page.insert_text((50, 520), "POSITIONER", fontsize=7, rotate=90)
+    page.insert_text((320, 520), "SERVICE CONDITIONS", fontsize=7, rotate=90)
+    # 오른쪽 블록의 열 머리글
+    for x, t in [(449, "MAX"), (490, "NOR")]:
+        page.insert_text((x, 493), t, fontsize=8)
+    # 왼쪽 라벨 + 자기 값 | 오른쪽 블록의 값들
+    for x, t in [(56, "Model No."), (169, "4280E, MASOLEILAN"),
+                 (327, "Outlet Press."), (407, "kg/cm2"), (451, "11"), (488, "10.5")]:
+        page.insert_text((x, 505), t, fontsize=8)
+    for i, y in enumerate(range(540, 760, 12)):        # 스캔본 가드용 본문
+        page.insert_text((56, y), f"Remark {i}: text layer filler line", fontsize=8)
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def test_Nor_열은_다른_구역의_라벨에_쓰지_않는다(tmp_path):
+    by = parse_pdf_text(_two_section_pdf(tmp_path / "twosec.pdf")).by_key()
+    r = by.get("positioner_model_no")
+    assert r is not None and r.raw_value.startswith("4280E"), r and r.raw_value
+    assert r.raw_value != "10.5"          # 오른쪽 블록 Nor 값을 집으면 안 된다
