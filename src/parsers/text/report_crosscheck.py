@@ -143,7 +143,9 @@ def run(doc_ids: list[str] | None = None, use_vlm: bool = True,
         ok, no = agreement(getattr(dual, "last_agreements", []) if via_vlm else [])
         tot["맞음"] += hit; tot["틀림"] += miss
         tot["합의"] += ok; tot["불일치"] += no
-        out.append({"doc": did, "file": row["file"], "state": "채점",
+        who = row.get("labeler", "미기재")
+        tot[f"맞음:{who}"] += hit; tot[f"틀림:{who}"] += miss
+        out.append({"doc": did, "file": row["file"], "state": "채점", "labeler": who,
                     "path": "VLM+텍스트" if via_vlm else "텍스트 단독",
                     "hit": hit, "miss": miss, "agree": ok, "conflict": no, "bad": bad})
     return out, tot
@@ -162,15 +164,36 @@ def render(results: list[dict], tot: Counter, use_vlm: bool) -> str:
         L.append("- 두 경로 대조 없음 (VLM 경로를 타지 않았다)")
     if tot["실패"]:
         L.append(f"- ⚠️ 처리 실패 **{tot['실패']}건** — 아래 표에서 사유를 본다")
+    # ── 라벨러별 (2026-08-26) ────────────────────────────────────
+    #   골든셋에 AI 초안이 섞여 있다. 합쳐서 내면 "AI 가 만든 정답으로 AI 를 채점"
+    #   한 부분이 숫자에 섞이므로 나눠 낸다. 발표에는 사람 검증분을 쓴다.
+    whos = []
+    for r in results:
+        if r.get("labeler") and r["labeler"] not in whos:
+            whos.append(r["labeler"])
+    if len(whos) > 1:
+        L += ["", "## 라벨러별", "", "| 라벨러 | 정답 대조 | |", "|---|---|---|"]
+        for who in whos:
+            h, m = tot[f"맞음:{who}"], tot[f"틀림:{who}"]
+            L.append(f"| {who} | {h}/{h + m} | {h / (h + m) * 100:.0f}% |" if h + m
+                     else f"| {who} | 0 | — |")
+        human = [w for w in whos if "AI" not in w]
+        if human and len(human) < len(whos):
+            h = sum(tot[f"맞음:{w}"] for w in human)
+            m = sum(tot[f"틀림:{w}"] for w in human)
+            if h + m:
+                L += ["", f"**사람이 검증한 정답만**: {h}/{h + m} ({h / (h + m) * 100:.0f}%)",
+                      "", "> AI 초안은 사람 검증 전이다. 참고로만 본다."]
+
     L += ["", "## 문서별", "",
-          "| 문서 | 파일 | 경로 | 정답 대조 | 합의 | 불일치 |",
-          "|---|---|---|---|---|---|"]
+          "| 문서 | 파일 | 라벨러 | 경로 | 정답 대조 | 합의 | 불일치 |",
+          "|---|---|---|---|---|---|---|"]
     for r in results:
         if r["state"] != "채점":
-            L.append(f"| {r['doc']} | {r['file']} | — | **{r['state']}** | | "
+            L.append(f"| {r['doc']} | {r['file']} | | — | **{r['state']}** | | "
                      f"{r.get('why', '')} |")
             continue
-        L.append(f"| {r['doc']} | {r['file']} | {r['path']} | "
+        L.append(f"| {r['doc']} | {r['file']} | {r.get('labeler','')} | {r['path']} | "
                  f"{r['hit']}/{r['hit'] + r['miss']} | {r['agree']} | {r['conflict']} |")
     wrong = [(r["doc"], *b) for r in results if r["state"] == "채점" for b in r["bad"]]
     if wrong:

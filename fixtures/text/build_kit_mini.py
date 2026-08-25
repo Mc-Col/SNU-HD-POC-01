@@ -30,22 +30,25 @@ for j, name in enumerate(FIELDS):
     ws.cell(2, c).value = "정답값"
     ws.cell(2, c + 1).value = "원문라벨"
 
+# 라벨러를 넣는다 — 골든셋에 사람 라벨과 AI 초안이 섞여 있어 채점을 나눠 세야 한다
+# (2026-08-26). 사람이 만든 정답만으로 잰 숫자가 발표에 쓰는 값이다.
 ROWS = [
-    # 파일명, 문서분류, 사양표 시트, [(정답값, 원문라벨)]
-    ("excel_layouts.xlsx", "datasheet", 1, [
+    # 파일명, 문서분류, 사양표 시트, 라벨러, [(정답값, 원문라벨)]
+    ("excel_layouts.xlsx", "datasheet", 1, "사람", [
         ("44-LV-999", "Tag No."), ("FISHER", "(하단 꼬리말)"),
         ("880-2221", "Model No."), ("FAIL CLOSE", "Fail Position"), ("N/A", "")]),
-    ("pdf_basic.pdf", "datasheet", 1, [
+    ("pdf_basic.pdf", "datasheet", 1, "AI초안(Claude)", [
         ("11-FV-999", "Tag"), ("FISHER", "Manufacturer"),
         ("667-ED", "Model No."), ("FAIL CLOSE", "Fail/Air-To"), ("N/A", "")]),
-    ("excel_basic.xlsx", "out_of_scope", None, [("", "")] * 5),
+    ("excel_basic.xlsx", "out_of_scope", None, "사람", [("", "")] * 5),
 ]
-for i, (fn, cls, page, pairs) in enumerate(ROWS):
+for i, (fn, cls, page, who, pairs) in enumerate(ROWS):
     r = 3 + i
     ws.cell(r, 1).value = f"d{i + 1:03d}"
     ws.cell(r, 2).value = fn
     ws.cell(r, 5).value = cls
     ws.cell(r, 7).value = page
+    ws.cell(r, 8).value = who
     for j, (val, lab) in enumerate(pairs):
         ws.cell(r, 10 + j * 2).value = val or None
         ws.cell(r, 11 + j * 2).value = lab or None
