@@ -197,6 +197,21 @@ def render(results: list[dict], tot: Counter, use_vlm: bool) -> str:
                  f"{r['hit']}/{r['hit'] + r['miss']} | {r['agree']} | {r['conflict']} |")
     wrong = [(r["doc"], *b) for r in results if r["state"] == "채점" for b in r["bad"]]
     if wrong:
+        # ── 틀린 칸을 필드별로 분해한다 (2026-08-26) ──────────────
+        #   "73%" 만 보면 무엇을 고쳐야 할지 알 수 없다. 실제로 61칸을 갈라 보니
+        #   절반 가까이가 **값은 같고 표기만 다른 것**이었다
+        #   (`600#` vs `ANSI CLASS 600` · `FISHER` vs `Fisher Controls`).
+        #   표준형을 정하면 사라지는 것과 판독을 고쳐야 하는 것은 다른 일이다.
+        per = Counter(f for _d, f, _w, _g in wrong)
+        first = {}
+        for _d, f, w, g in wrong:
+            first.setdefault(f, (w, g))
+        L += ["", "## 틀린 칸 — 필드별", "",
+              "| 필드 | 건수 | 예 (정답 → 파이프라인) |", "|---|---:|---|"]
+        for f, n in per.most_common():
+            w, g = first[f]
+            L.append(f"| `{f}` | {n} | `{w}` → `{g}` |")
+
         L += ["", "## 정답과 다른 칸", "", "| 문서 | 필드 | 정답 | 파이프라인 |", "|---|---|---|---|"]
         for d, k, want, got in wrong:
             L.append(f"| {d} | {k} | `{want}` | `{got}` |")
