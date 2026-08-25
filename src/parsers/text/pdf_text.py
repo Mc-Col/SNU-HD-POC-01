@@ -25,7 +25,9 @@ from .units import UnitIndex
 
 Y_TOL = 3.0                 # 이 이내면 같은 행으로 본다
 MAX_VALUE_CELLS = 6         # 한 행에서 값 후보를 몇 개까지 볼 것인가
-COLUMN_TOL = 24.0           # 열 머리글과 값의 x 오차 허용
+COLUMN_TOL = 12.0           # 열 머리글과 값의 x 오차 허용
+                            # 실측(52PV014): 블록 안의 값은 머리글 ±6 안에 선다.
+                            # 24 로 두면 2단 양식 오른쪽 라벨 열(21 떨어짐)까지 삼킨다.
 MIN_TEXT_CHARS = 200        # 이보다 적으면 텍스트 레이어가 없는 스캔본으로 본다
 TEXT_PROBE_PAGES = 5        # 문서 앞 몇 장으로 판정할 것인가
 
@@ -212,6 +214,26 @@ def _split(cell: _Cell, row: list[_Cell], ci: int, ix: FieldIndex,
     return t, v, vc or cell, vi if vc else ci
 
 
+_NUMERIC = re.compile(r"^[\d.,/%\s+-]+$")
+
+
+def _is_label_with_value(row: list[_Cell], j: int, units: UnitIndex | None) -> bool:
+    """Normal 열 자리의 후보가 값이 아니라 라벨인가.
+
+    2단 양식에서는 오른쪽 단의 라벨 열이 Normal 열 근처를 지나간다
+    (실물 `52PV014`: `Body Color | GRAY`, `Air Connection | 1/4" NPT`).
+    숫자는 라벨이 아니므로 Max/Nor/Min 이 나란히 선 진짜 블록은 영향받지 않는다.
+    """
+    t = row[j].text.strip()
+    if _NUMERIC.match(t):
+        return False
+    for k in range(j + 1, min(len(row), j + 3)):
+        s = row[k].text.strip()
+        if s and _has_alnum(s) and not (units is not None and units.is_unit(s)):
+            return True
+    return False
+
+
 def _right_value(row: list[_Cell], ci: int, ix: FieldIndex, consumed: set[int],
                  anchor: float | None = None, units: UnitIndex | None = None):
     """같은 행 오른쪽 값. Normal 열을 알면 그 열을 우선한다."""
@@ -229,7 +251,9 @@ def _right_value(row: list[_Cell], ci: int, ix: FieldIndex, consumed: set[int],
         return "", None, ci
 
     if anchor is not None:
-        near = [(j, c) for j, c in cands if abs(c.x0 - anchor) <= COLUMN_TOL]
+        near = [(j, c) for j, c in cands
+                if abs(c.x0 - anchor) <= COLUMN_TOL
+                and not _is_label_with_value(row, j, units)]
         if near:
             j, c = near[0]
             consumed.add(j)

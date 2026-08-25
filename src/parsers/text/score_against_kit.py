@@ -25,6 +25,11 @@ from src.parsers.text.composite import CompositeIndex              # noqa: E402
 from src.parsers.text.excel import parse_excel                     # noqa: E402
 from src.parsers.text.field_index import FieldIndex, normalize_label  # noqa: E402
 from src.parsers.text.pdf_text import parse_pdf_text               # noqa: E402
+from src.parsers.text.units import UnitIndex                       # noqa: E402
+
+# 값 대조는 팀의 평가 하네스 규칙을 그대로 쓴다 (단위 표기·로마자·대소문자).
+# 여기서 다시 만들면 채점기와 하네스가 서로 다른 답을 내놓는다.
+from eval.compare import same as _same                             # noqa: E402
 
 SHEET = "라벨링"
 SKIP_VALUES = {"N/A", "NA", "판독불가", ""}      # 정답이 없는 칸 — 채점 제외
@@ -61,6 +66,12 @@ def _norm(v: object) -> str:
 
 def _loose(v: object) -> str:
     return re.sub(r"[^0-9A-Z]", "", str(v or "").upper())
+
+
+def _contains(outer: object, inner: object) -> bool:
+    """한쪽이 다른 쪽을 통째로 담고 있는가 (공백·기호 무시)."""
+    a, b = _loose(outer), _loose(inner)
+    return bool(a) and bool(b) and b in a
 
 
 def read_kit(path: str, ix: FieldIndex) -> tuple[list[dict], list[tuple[int, str]], list[str]]:
@@ -150,11 +161,14 @@ def score(kit_path: str, root: str) -> Score:
                 cell.verdict = "미추출"
             elif _norm(g) == _norm(t):
                 cell.verdict = "정확"
-            elif _loose(g) == _loose(t):
+            elif _loose(g) == _loose(t) or _same(t, g):
+                # 단위 표기·로마자·대소문자 차이는 감점하지 않는다 (eval/compare 규칙).
+                #   예) 정답 "160 ℃" vs 파서 "160.0" → 같은 값이다
                 cell.verdict = "표기차이"
-            elif _loose(g) and _loose(g) in _loose(t):
+            elif _contains(g, t) or _contains(t, g):
                 # 파서는 문서 원문을 낸다. 표준값으로 바꾸는 것은 ④ Normalize 몫.
-                #   예) 문서 "Fail Position: OPEN" → 파서 "OPEN" → 표준값 "FAIL OPEN"
+                #   문서가 더 짧을 수도(원문 "OPEN" → 표준 "FAIL OPEN"),
+                #   더 길 수도 있다(원문 "195 (Cg=4040)" → 표준 "195").
                 cell.verdict = "정규화대기"
             else:
                 cell.verdict = "오답"

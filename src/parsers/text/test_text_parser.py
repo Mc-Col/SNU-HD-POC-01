@@ -243,3 +243,43 @@ def test_구형_xls_왕복(tmp_path):
 
     assert load_xls(str(path)).sheetnames == ["SPEC"]
     assert parse_excel(str(path)).by_key()["manufacturer"].raw_value == "FISHER"
+
+
+# ── 2단 양식에서 Max/Nor/Min 열이 새지 않는다 (실물 10FV079) ─────
+
+
+def _twocol_sheet(path):
+    """왼쪽 라벨·값 / 오른쪽 라벨·값 2단 양식 + 위쪽 서비스조건 블록.
+
+    실물 `10FV079` 의 배치다. 서비스조건 머리글(NOR. 54열)이 시트 끝까지
+    유효하면 아래쪽 행에서 오른쪽 단의 '라벨' 칸을 값으로 집는다.
+    """
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws.cell(1, 35).value, ws.cell(1, 44).value = "Units", "MIN."
+    ws.cell(1, 54).value, ws.cell(1, 64).value = "NOR.", "MAX."
+
+    ws.cell(2, 8).value = "Required Cv"                  # 블록 안 — Nor 열이 맞다
+    ws.merge_cells(start_row=2, start_column=8, end_row=2, end_column=34)
+    for col, v in [(35, "Cv"), (44, "1.16"), (54, "2.51"), (64, "12.2")]:
+        ws.cell(2, col).value = v
+    for a, b in [(44, 53), (54, 63), (64, 73)]:
+        ws.merge_cells(start_row=2, start_column=a, end_row=2, end_column=b)
+
+    ws.cell(9, 8).value = "Rated Cv"                     # 블록 밖 — 왼쪽 값이 맞다
+    ws.merge_cells(start_row=9, start_column=8, end_row=9, end_column=22)
+    ws.cell(9, 23).value = "26"
+    ws.merge_cells(start_row=9, start_column=23, end_row=9, end_column=45)
+    ws.cell(9, 53).value = "Body Color"                  # 오른쪽 단의 라벨
+    ws.merge_cells(start_row=9, start_column=53, end_row=9, end_column=69)
+    ws.cell(9, 70).value = "SILVER"
+    wb.save(path)
+    return path
+
+
+def test_Nor_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
+    by = parse_excel(_twocol_sheet(str(tmp_path / "twocol.xlsx"))).by_key()
+    assert by["rated_cv"].raw_value == "26"          # 'Body Color' 가 아니다
+    assert by["required_cv"].raw_value == "2.51"     # 블록 안에서는 Nor 열이 이긴다

@@ -127,3 +127,40 @@ def test_스캔본은_조용히_0건을_돌려주지_않는다(tmp_path):
     with pytest.raises(ScannedPdfError) as e:
         parse_pdf_text(str(blank))
     assert "VLM" in str(e.value)
+
+
+# ── 2단 양식에서 Normal 열이 새지 않는다 (실물 52PV014) ─────────
+
+
+def _twocol_pdf(path):
+    """왼쪽 라벨·값 / 오른쪽 라벨·값 2단 + 위쪽 서비스조건 블록.
+
+    실물 `52PV014` 의 x 좌표를 그대로 옮겼다. 오른쪽 단의 라벨 열(327)이
+    Normal 열(348)에서 21 밖에 안 떨어져 있어, 허용 오차가 넓으면 라벨을
+    값으로 집는다.
+    """
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page()
+    for x, t in [(246, "Units"), (296, "MAX."), (348, "NOR."), (403, "MIN.")]:
+        page.insert_text((x, 100), t, fontsize=8)
+    for x, t in [(90, "Required Cv"), (250, "Cv"), (351, "75.7")]:
+        page.insert_text((x, 112), t, fontsize=8)       # 블록 안 — Nor 열이 맞다
+    for x, t in [(90, "Rated Cv"), (169, "110"), (327, "Position")]:
+        page.insert_text((x, 130), t, fontsize=8)       # 블록 밖 — 왼쪽 값이 맞다
+    for x, t in [(90, "Fail Position"), (169, "VALVE CLOSE"),
+                 (327, "Body Color"), (417, "GRAY")]:
+        page.insert_text((x, 142), t, fontsize=8)
+    # 스캔본 가드(문서 단위 글자 수)에 걸리지 않도록 실물만큼 본문을 채운다
+    for i, y in enumerate(range(160, 400, 12)):
+        page.insert_text((90, y), f"Remark {i}: text layer filler line", fontsize=8)
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def test_Normal_열은_블록_밖_행까지_따라가지_않는다(tmp_path):
+    by = parse_pdf_text(_twocol_pdf(tmp_path / "twocol.pdf")).by_key()
+    assert by["required_cv"].raw_value == "75.7"        # 블록 안에서는 Nor 열이 이긴다
+    assert by["rated_cv"].raw_value == "110"            # 'Position' 이 아니다
+    assert by["actuator_fail_action"].raw_value == "VALVE CLOSE"   # 'Body Color' 아님

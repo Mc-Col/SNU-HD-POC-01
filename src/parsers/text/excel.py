@@ -203,7 +203,7 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
     right_from = rng.max_col if rng else c
     down_from = rng.max_row if rng else r
 
-    if nor_col is not None and nor_col > right_from:
+    if nor_col is not None and nor_col > right_from and _nor_applies(merged, r, nor_col):
         pos = (r, nor_col)
         v = _text(cell_value(*pos))
         if v and pos not in taken and not (uix and uix.is_unit(v)) \
@@ -239,6 +239,20 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
         return v, pos
 
     return "", (r, c)
+
+
+def _nor_applies(merged, r: int, nor_col: int) -> bool:
+    """이 행이 Max/Nor/Min 블록 안에 있는가.
+
+    머리글은 한 번 나오면 그 아래 모든 행에 붙어 버린다. 2단 양식(왼쪽 라벨·값,
+    오른쪽 라벨·값)에서는 Nor 열이 아래로 내려가다 오른쪽 블록의 라벨 칸을
+    관통하고, 그 라벨 텍스트가 값으로 잡힌다 — 실물 `10FV079` 에서 4건.
+
+    판별자는 칸 경계다. 블록 안의 행은 Nor 열에서 칸이 시작하지만,
+    블록 밖의 행은 다른 열에서 시작한 병합칸이 그 자리를 지나갈 뿐이다.
+    """
+    span = merged.get((r, nor_col))
+    return span is None or span[0][1] == nor_col
 
 
 def _has_own_value(cell_value, pos: tuple[int, int], uix,
