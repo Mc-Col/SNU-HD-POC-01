@@ -98,7 +98,12 @@ MERGE_ALIASES = {
     # `Model No.` 는 MODEL NO. 의 표준명이지만 포지셔너 블록에서도 그 이름을
     # 쓴다 (44LV001 r43 `Model No. | YT-1200`). 표준명 소유 필드가 우선한다는
     # 규칙(`FieldIndex.lookup`)이 있어서 빌려 써도 이름 해석이 깨지지 않는다.
-    "POSITIONER MODEL NO.": ["Model", "Model #", "Model No."],
+    "POSITIONER MODEL NO.": [
+        "Model", "Model #", "Model No.",
+        # 구역 접두어가 떨어지면 포지셔너 묶음 한정 표기가 된다.
+        # 값이 "모델, 제조사" 두 조각이면 위의 복합 라벨 규칙이 먼저 처리한다.
+        "POSITIONER Model No. / Mfr.",
+    ],
 
     # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
     #   "Guide Material" → VALVE CAGE MATERIAL : 10FV079 에서 가이드는 케이지와 다른 부품
@@ -143,6 +148,7 @@ MERGE_ALIASES = {
         "Req'd Flow Coeff., Cv", "Flow Coeff.", "Required Cv NOR.", "Calculated Cv",
         "Calculated Cv NOR", "Calculated Cv Normal", "Required Capacity", "Sizing Coefficient",
     ],
+    "VISCOSITY": ["Dynamic Viscosity"],
     "SPECIFIC GRAVITY": ["Density", "SG-MW"],
     "VALVE BODY MATERIAL": [
         # "Material" 단독은 바디 재질로만 둔다. 트림 묶음의 "Material" 은 어느
@@ -177,7 +183,7 @@ MERGE_ALIASES = {
     ],
     "VALVE SEAT MATERIAL": [
         "Seat Ring Material", "Trim Seat Ring Material", "MATERIAL Seat Ring", "Seat Ring",
-        "Seat Ring Mtl", "Soft Seat Matl", "Trim Disk/Seat Material",
+        "Seat Ring Mtl", "Soft Seat Matl", "Soft Seat Material", "Trim Disk/Seat Material",
     ],
     "VALVE STEM MATERIAL": [
         "Trim Stem", "MATERIAL Stem", "TRIM Stem Material", "Stem", "Stem Matl", "Stem Mtl",

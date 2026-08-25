@@ -203,7 +203,8 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Dynamic Viscosity"
 
   - key: rated_cv
     name: "RATED CV"
@@ -415,6 +416,7 @@ fields:
       - "Seat Ring"
       - "Seat Ring Mtl"
       - "Soft Seat Matl"
+      - "Soft Seat Material"
       - "Trim Disk/Seat Material"
 
   - key: valve_stem_material
@@ -497,3 +499,4 @@ fields:
       - "Model"
       - "Model #"
       - "Model No."
+      - "POSITIONER Model No. / Mfr."

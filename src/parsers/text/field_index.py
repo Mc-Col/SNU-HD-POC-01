@@ -42,6 +42,11 @@ CONF_ALIAS = 0.95
 
 _NON_ALNUM = re.compile(r"[^0-9A-Z]+")
 
+# 라벨 뒤에 붙는 기호 주석 — `Inlet Pressure (P1)` · `Dynamic Viscosity (Mu)`.
+# 항목명이 아니라 계산식에서 쓰는 기호다 (실물 22PCV013 에서 8칸이 이것 때문에
+# 미추출이었다). 앞뒤 어디에 붙든 떼고 한 번 더 찾아본다.
+_PAREN = re.compile(r"\([^()]*\)")
+
 
 def normalize_label(text: object) -> str:
     """라벨 표기 흔들림을 흡수한다.
@@ -145,6 +150,12 @@ class FieldIndex:
                   (LIMIT SW · ACCESSORIES 같은 우리 스키마 밖 묶음)
         """
         hits = self._by_label.get(normalize_label(label))
+        if not hits:
+            # 괄호 주석을 떼고 다시 본다. 예외 경로이므로 정확히 일치하는
+            # 표기가 있으면 그쪽이 언제나 이긴다.
+            bare = _PAREN.sub(" ", str(label or ""))
+            if normalize_label(bare) != normalize_label(label):
+                hits = self._by_label.get(normalize_label(bare))
         if not hits:
             return None
 
