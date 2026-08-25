@@ -46,11 +46,37 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# 리포트는 한글이다. Windows 에서 출력을 리다이렉트하면 콘솔 코드페이지
+# (cp949)가 쓰여 `—` 같은 문자에서 죽는다. 리포트·이력을 다 쓴 뒤 마지막
+# 출력에서 죽으므로 **성공한 실행이 실패로 보인다.**
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 from dataclasses import replace                     # noqa: E402
 
 from eval import compare, escalate, groups, history  # noqa: E402
+from eval.store import RawStore                      # noqa: E402
+from src.contracts import FailureKind                # noqa: E402
+from src.validate import domain                      # noqa: E402
+from src.validate.domain import vocabulary           # noqa: E402
 from eval.kit import KitRow, locate, read_kit       # noqa: E402
 from src import schema                              # noqa: E402
+
+def _show(raw, normed) -> str:
+    """표에 쓸 표기. 정규화로 값이 바뀌었으면 둘 다 보인다.
+
+    원문만 보이면 "왜 이게 오답이지" 를 알 수 없고, 정규화값만
+    보이면 모델이 실제로 무엇을 읽었는지를 알 수 없다.
+    """
+    if raw is None and normed is None:
+        return "—"
+    if normed is None or str(raw) == str(normed):
+        return str(raw)
+    return f"{raw} → {normed}"
+
 
 def _join(*parts) -> str:
     """비고를 이어 붙인다. 빈 것은 버린다."""
@@ -84,6 +110,9 @@ class Result:
     page_calls: list[tuple[str, int | None, int | None]] = dc_field(default_factory=list)
     holdout: tuple[str, ...] = ()
     skipped_fields: list[str] = dc_field(default_factory=list)
+    # 확인필요 표시 — (문서, 필드, 사유, **표시원**).
+    # 표시원을 사유 문자열에서 되짚지 않는다 — 문구를 고치면 조용히 깨진다.
+    flags: list[tuple[str, str, str, str]] = dc_field(default_factory=list)
 
     def counts(self, cells=None) -> dict[str, int]:
         c = Counter(x.verdict for x in (self.cells if cells is None else cells))
@@ -111,6 +140,20 @@ def judge(truth: str, got: str | None, raw: str | None, numeric: bool | None) ->
     if compare.norm_text(got) and compare.norm_text(got) in compare.norm_text(truth):
         return "정규화대기", f"{got!r} 은 정답 {truth!r} 의 일부 — 표준값 변환 대기"
     return "오답", compare.why(truth, got, numeric)
+
+
+def _permanent(e: Exception) -> bool:
+    """다시 시도해도 같은 결과인가 — 크레딧·인증·권한.
+
+    일시 오류(타임아웃·연결 끊김·혼잡)와 구분한다. 일시 오류는 다음 문서에서
+    성공할 수 있으므로 계속 간다. 영구 오류는 남은 문서를 전부 같은 이유로
+    죽이므로 멈추는 편이 낫다 — 사유는 첫 건에서 이미 다 나왔다.
+    """
+    txt = f"{type(e).__name__} {e}".lower()
+    keys = ("insufficient_quota", "credit_balance_exhausted",
+            "no credits remaining", "authenticationerror", "permissiondenied",
+            "invalid_api_key", "account is not active")
+    return any(k in txt for k in keys)
 
 
 def _numeric(field_key: str) -> bool | None:
@@ -144,9 +187,22 @@ def score(rows: list[KitRow], extract, holdout: tuple[str, ...] = (),
             res.docs.append((row.doc_id, row.file, "파일 없음"))
             continue
         try:
-            values, raws, spec_page = extract(row)
+            got_ = extract(row)
+            # 3-튜플(기존)과 4-튜플(부가정보 포함)을 모두 받는다
+            values, raws, spec_page = got_[:3]
+            extra = got_[3] if len(got_) > 3 else {}
         except Exception as e:
             res.docs.append((row.doc_id, row.file, f"처리 실패: {type(e).__name__} {e}"))
+            if _permanent(e):
+                # 다음 문서에서도 똑같이 실패한다. 11번 반복하면 시간만 쓰고
+                # (전송 재시도 횟수가 곱해진다) 사유는 하나도 더 알 수 없다.
+                # 일시 오류(타임아웃)는 여기 걸리지 않는다 — 한 건이 죽어도
+                # 나머지는 측정 가치가 있으므로 계속 진행한다.
+                for rest in rows[rows.index(row) + 1:]:
+                    if rest.doc_id not in holdout:
+                        res.docs.append((rest.doc_id, rest.file,
+                                         "중단 — 앞선 영구 오류로 실행을 멈췄다"))
+                break
             continue
 
         cls = groups.equipment_class(row.truth)
@@ -167,6 +223,21 @@ def score(rows: list[KitRow], extract, holdout: tuple[str, ...] = (),
                 v, w = "페이지오선택", f"정답 p{row.spec_page} 대신 p{spec_page} 를 읽었다"
             else:
                 v, w = judge(truth, values.get(key), (raws or {}).get(key), _numeric(key))
+
+            # 확인필요 표시 — **조립은 `src/validate/domain` 한 곳에서만** 한다.
+            # 화면도 같은 함수를 부른다. 두 곳에서 각자 조립하면 갈리고,
+            # 그러면 "화면에서 본 것과 채점된 숫자가 다르다" 가 된다.
+            got = values.get(key)
+            if got is not None and not compare.is_na(str(got)):
+                ctx_ = extra.get("extraction") or {}
+                fl = domain.check_all(
+                    schema.get(key), got, ctx_.get(key), ctx_,
+                    confidence=(extra.get("confidence") or {}).get(key))
+                for x in fl:
+                    res.flags.append((row.doc_id, key, x.why, x.source))
+                if any(x.source == "어휘" for x in fl):
+                    domain.observe_all(schema.get(key), got, row.doc_id,
+                                       label=(row.raw_label or {}).get(key, ""))
             res.cells.append(Cell(row.doc_id, key, truth, values.get(key), v,
                                   cls, row.fmt, row.vintage, unc, w))
     return res
@@ -189,15 +260,49 @@ def render(res: Result, by: str = "", escalations=None) -> str:
         L += [f"> 홀드아웃 {', '.join(res.holdout)} — 채점에서 제외했다. "
               f"개봉하면 그 사실을 여기 남긴다.", ""]
     if not tot:
-        return "\n".join(L + ["채점된 칸이 없다. `--stage` 와 파일 경로를 확인할 것.", ""])
+        # 사유가 가장 필요한 순간이다. 예전엔 여기서 미채점 목록을 버리고
+        # "경로를 확인할 것" 만 남겨 **틀린 곳을 보게 만들었다**(7R: 원인은
+        # 경로가 아니라 API 크레딧 소진이었다).
+        L += ["채점된 칸이 없다.", ""]
+        if res.docs:
+            L += ["| 문서 | 파일 | 사유 |", "|---|---|---|"]
+            L += [f"| {d} | {f} | {st} |" for d, f, st in res.docs]
+            L += [""]
+        else:
+            L += ["문서가 하나도 읽히지 않았다 — 킷 경로와 `--root` 를 확인할 것.",
+                  ""]
+        return "\n".join(L)
 
     scored = [d for d, _f, st in res.docs if st == "채점"]
     unscored = [(d, st) for d, _f, st in res.docs if st != "채점"]
 
+    # 관대·엄격을 **함께** 낸다. 한 숫자로 줄이면 반드시 무언가가 가려진다 —
+    # 단위를 값에 포함시킨 개선이 관대 기준에서는 전혀 안 보였고 부작용만
+    # 보였다(2026-08-25). 하마터면 개선을 되돌릴 뻔했다.
+    val = [c for c in res.cells if not compare.is_na(str(c.truth))]
+    na_ok = [c for c in res.cells
+             if c.verdict in GOOD and compare.is_na(str(c.truth))]
+    strict = [c for c in val
+              if c.verdict in GOOD and c.got is not None
+              and compare.norm_text(c.truth) == compare.norm_text(c.got)]
     L += [f"- 문서 **{len(scored)}/{len(res.docs)}건 채점** · 칸 **{tot}개**",
           f"- **최종 정확도 {_rate(res.cells, GOOD)}** — 표준값까지 맞은 비율",
           f"- 칸 적중률 {_rate(res.cells, GRABBED)} — 맞는 칸을 집었는가 (파서 책임 범위)",
           ""]
+    if val:
+        L += ["| 기준 | 값 | 무엇을 세나 |", "|---|---|---|",
+              f"| 관대 (헤드라인) | **{_rate(res.cells, GOOD)}** | "
+              f"N/A 끼리 맞은 것 포함 · 단위 표기 차이 통과 |",
+              f"| 값만 | {len(val) - sum(1 for c in val if c.verdict not in GOOD)}"
+              f"/{len(val)} = **{(len(val) - sum(1 for c in val if c.verdict not in GOOD)) / len(val) * 100:.0f}%** | "
+              f"정답이 N/A 인 칸을 뺀다 |",
+              f"| **엄격** | {len(strict)}/{len(val)} = "
+              f"**{len(strict) / len(val) * 100:.0f}%** | 정규화 후 **문자열이 정확히 같아야** |",
+              f"| N/A 일치 | {len(na_ok)}칸 | 정확도가 아니라 **정직함**의 지표 |",
+              "",
+              "> 세 숫자를 함께 본다. **한 숫자로 줄이면 무언가가 가려진다** — "
+              "단위를 값에 포함시킨 개선이 관대 기준에서는 보이지 않고 "
+              "부작용만 보였던 사례가 있다.", ""]
 
     # 조용한 미측정을 헤드라인에 올린다 — 안 잰 것이 성공처럼 보이면 안 된다
     if unscored:
@@ -289,28 +394,110 @@ def render(res: Result, by: str = "", escalations=None) -> str:
         L += [f"> 라벨러가 확신하지 못한 칸 {len(unc)}개(`?` 표시) 포함. "
               f"이 칸의 정확도는 참고치다.", ""]
 
+    # 확인필요 표시의 품질 — 표시원이 둘이므로 **합쳐서** 센다
+    #   ① 확신도 미달        코드 · 0원 · 임계는 fields.yaml
+    #   ② 어휘 밖 값        코드 · 0원
+    #   ③ 상위 모델 승격     유료
+    # 하나만 세면 재현율이 실제보다 낮게 나온다.
+    src_of: dict[tuple[str, str], set[str]] = {}
+    for d, k, _why, src in res.flags:
+        src_of.setdefault((d, k), set()).add(src)
+    for e in (escalations or []):
+        src_of.setdefault((e[0], e[1]), set()).add("승격")
+
+    scored = {(c.doc_id, c.field_key) for c in res.cells}
+    # 재현율의 분모는 **틀린 값이 실제로 들어간 칸**이다.
+    #   미추출     값이 없다 → 3-상태에서 `근거없음` 이 되어 사람이 이미 본다
+    #   페이지오선택 문서 단위 문제이지 값의 문제가 아니다
+    # 이 둘을 넣으면 "표시 없이 마스터DB 로 간다" 는 말이 사실이 아니게 된다.
+    DANGEROUS = ("근거없음오답", "오답", "정규화대기")
+    bad = {(c.doc_id, c.field_key) for c in res.cells
+           if c.verdict in DANGEROUS}
+    flagged = set(src_of) & scored
+    hit = flagged & bad
+    if flagged or bad:
+        L += ["## 확인필요 표시의 품질", "",
+              "표시의 산출물은 값이 아니라 **사람에게 보낸다는 사실**이다. "
+              "최종 정확도만 보면 이 효과가 안 잡힌다.", ""]
+        if flagged:
+            L += [f"- 표시가 붙은 채점 칸 **{len(flagged)}칸** 중 실제로 틀린 것 "
+                  f"**{len(hit)}칸** — 정밀도 **{len(hit) / len(flagged) * 100:.0f}%**",
+                  f"  (나머지 {len(flagged) - len(hit)}칸은 맞는데 검토를 부른다 "
+                  f"— 사람 시간의 낭비다)"]
+        if bad:
+            L += [f"- 틀린 칸 **{len(bad)}칸** 중 표시가 붙은 것 **{len(hit)}칸** "
+                  f"— 재현율 **{len(hit) / len(bad) * 100:.0f}%**",
+                  f"  (표시 없이 틀린 {len(bad) - len(hit)}칸이 **그대로 "
+                  f"마스터DB 로 간다** — 이쪽이 더 나쁘다)"]
+        by_src = Counter(s2 for v in src_of.values() for s2 in v)
+        if by_src:
+            L += ["", "표시원별 — " + " · ".join(
+                f"{k} {v}칸" for k, v in sorted(by_src.items()))]
+        # 놓친 칸은 **필드 단위로 묶어서** 낸다. 칸을 전부 늘어놓으면
+        # 수백 줄이 되고, 무엇을 고쳐야 하는지는 오히려 안 보인다.
+        miss = sorted(bad - hit)
+        if miss:
+            per = Counter(k for _d, k in miss)
+            L += ["", f"**표시를 놓친 {len(miss)}칸** — 조건을 넓힐 후보"
+                  f"(필드별, 많은 순):", "",
+                  "| 필드 | 놓친 칸 | 어휘가 있나 |", "|---|---|---|"]
+            for k, n in per.most_common(12):
+                has = "있음" if schema.allowed_values(k) else "**없음**"
+                L.append(f"| `{k}` | {n} | {has} |")
+            if len(per) > 12:
+                L.append(f"| … 그 밖 {len(per) - 12}개 필드 | "
+                         f"{sum(n for _k, n in per.most_common()[12:])} | |")
+            L += ["", "> `어휘가 있나` 가 **없음**인 필드는 지금 표시를 만들 "
+                  "수단이 아예 없다 — 어휘를 넓히는 것보다 그쪽이 먼저다.", ""]
+        L += [""]
+
+    # 사전 후보 — Loop C 의 입구
+    cand = vocabulary.as_rows()
+    if cand:
+        L += ["## 사전 후보 — 사람 승인 대기", "",
+              "허용 어휘 밖에서 관측된 값이다. **값을 바꾸지 않았다.** "
+              "오기일 수도, 어휘가 아직 좁은 것일 수도 있다 — "
+              "승인하면 어휘가 자라고 다음 실행부터 통과한다.", "",
+              "| 필드 | 값 | 건수 | 문서 | 원문 항목명 | 가장 가까운 허용값 |",
+              "|---|---|---|---|---|---|"]
+        for r in cand:
+            L.append(f"| `{r['field_key']}` | **{r['value']}** | {r['count']} | "
+                     f"{r['docs']} | {r['labels']} | {r['nearest'] or '—'} |")
+        L += ["", "> 가장 가까운 허용값은 **보여주기만** 한다. "
+              "자동으로 고치지 않는다 — `C5`(Cr-Mo 합금강)와 `CS`(탄소강)는 "
+              "한 글자 차이지만 다른 재질이다.", ""]
+
     # 승격 효과 — 상위 모델이 비용을 정당화하는가
     if escalations:
         by_verdict = Counter(e[4] for e in escalations)
         truth = {(c.doc_id, c.field_key): c.truth for c in res.cells}
         better = worse = same_wrong = 0
         rows_e = []
-        for doc, key, first, second, verdict, note, why in escalations:
+        for e in escalations:
+            doc, key, first, second, verdict, note, why = e[:7]
+            n1, n2 = (e[7], e[8]) if len(e) > 8 else (first, second)
             t = truth.get((doc, key))
             if t is None or verdict != "changed":
                 continue
-            ok1 = compare.same(t, first)
-            ok2 = compare.same(t, second)
-            if ok2 and not ok1:
+            # 헤드라인을 만드는 `judge()` 를 그대로 쓴다 — 두 숫자가 어긋날
+            # 수 없다. 그리고 `정규화대기 → 오답` 도 악화로 잡힌다.
+            # (5R d008: `Open`=정규화대기 → `Close`=오답. 최종 정확도로는
+            #  둘 다 오답이지만 하나는 규칙 한 줄로 고쳐지고 하나는 아니다)
+            num = _numeric(key)
+            v1 = judge(t, n1, first, num)[0]
+            v2 = judge(t, n2, second, num)[0]
+            r1, r2 = VERDICTS.index(v1), VERDICTS.index(v2)   # 클수록 좋다
+            if r2 > r1:
                 better += 1
-                mark = "개선"
-            elif ok1 and not ok2:
+                mark = f"개선 ({v1}→{v2})"
+            elif r2 < r1:
                 worse += 1
-                mark = "**악화**"
+                mark = f"**악화** ({v1}→{v2})"
             else:
                 same_wrong += 1
-                mark = "변화없음"
-            rows_e.append((doc, key, first, second, t, mark, why))
+                mark = f"변화없음 ({v1})"
+            rows_e.append((doc, key, _show(first, n1), _show(second, n2),
+                           t, mark, why))
 
         L += ["## 승격 효과 — 상위 모델이 비용을 정당화하는가", "",
               f"- 승격 대상 **{len(escalations)}칸** "
@@ -319,7 +506,8 @@ def render(res: Result, by: str = "", escalations=None) -> str:
               f"2차 실패 {by_verdict.get('kept', 0)} · "
               f"오류 {by_verdict.get('error', 0)})",
               f"- 값이 바뀐 것 중 — **개선 {better} · 악화 {worse} · "
-              f"변화없음 {same_wrong}**", ""]
+              f"변화없음 {same_wrong}** (판정 등급 기준 — 헤드라인과 같은 "
+              f"`judge()` 로 잰다)", ""]
         if better or worse:
             net = better - worse
             L += [f"> 순효과 **{net:+d}칸**. "
@@ -330,6 +518,7 @@ def render(res: Result, by: str = "", escalations=None) -> str:
             L += [f"> 일치 {by_verdict['agree']}칸 — 두 모델이 같은 값을 읽었다. "
                   f"확신을 높이는 근거이지만 **비용은 그대로 들었다.** "
                   f"승격 조건을 좁힐 여지가 여기 있다.", ""]
+
         if rows_e:
             L += ["| 문서 | 필드 | 1차(luna) | 2차(terra) | 정답 | 판정 | 승격 사유 |",
                   "|---|---|---|---|---|---|---|"]
@@ -390,7 +579,8 @@ def _file_tag(row) -> str:
     return info.tag_raw or ""
 
 
-def make_vlm_extractor(only_mvp: bool = False, do_escalate: bool = False):
+def make_vlm_extractor(only_mvp: bool = False, do_escalate: bool = False,
+                       store=None):
     """VLM 으로 추출하고 ④ Normalize 까지 적용한다.
 
     파서는 문서 원문(`Close`)을 내고 표준값(`FAIL CLOSE`)은 Normalize 몫이다.
@@ -430,16 +620,27 @@ def make_vlm_extractor(only_mvp: bool = False, do_escalate: bool = False):
                 except Exception as e:
                     extract.escalations.append(
                         (row.doc_id, f.key, r.raw_value, None, "error",
-                         f"{type(e).__name__}: {e}", "; ".join(why)))
+                         f"{type(e).__name__}: {e}", "; ".join(why),
+                         None, None))
                     continue
                 value, verdict, note = escalate.settle(f, r, second)
+                # 채점은 정규화 후 값으로 한다 — 승격 효과도 같은 잣대로 재야
+                # 한다. 원문끼리 비교하면 `Open` vs `Fail Open` 이 오답으로
+                # 잡혀 승격의 피해가 작게 보고된다 (4R 에서 실측).
+                n1 = norm.run(r, f)[0]
+                n2 = norm.run(second, f)[0] if second else None
                 extract.escalations.append(
                     (row.doc_id, f.key, r.raw_value,
                      second.raw_value if second else None,
-                     verdict, note, "; ".join(why)))
+                     verdict, note, "; ".join(why), n1, n2))
                 if verdict == "changed":
                     recs[idx] = replace(r, raw_value=value,
                                         note=_join(r.note, note))
+
+        # 원문을 먼저 남긴다 — 규칙이 바뀌면 여기서부터 다시 계산한다.
+        # 실행이 뒤에서 죽어도 여기까지는 보관된다.
+        if store is not None:
+            store.write(row.doc_id, recs, page, file=row.file)
 
         raws = {r.field_key: r.raw_value for r in recs if r.found}
         values = {}
@@ -447,10 +648,44 @@ def make_vlm_extractor(only_mvp: bool = False, do_escalate: bool = False):
             f = schema.get(r.field_key)
             v, _trace = norm.run(r, f)
             values[r.field_key] = v
-        return values, raws, page
+        conf = {r.field_key: r.confidence for r in recs}
+        return values, raws, page, {"confidence": conf,
+                                    "extraction": {r.field_key: r for r in recs}}
 
     extract.parser = parser        # 비용 요약을 리포트에 쓴다
     extract.escalations = []       # 승격 효과를 리포트에 쓴다
+    return extract
+
+
+def make_replay_extractor(path: str, only_mvp: bool = False):
+    """보관된 원문으로 다시 채점한다. **모델을 부르지 않는다.**
+
+    정규화와 검증은 **지금 규칙으로** 다시 돈다 — 그것이 이 기능의 목적이다.
+    표기 사전을 넓히고 이 함수로 돌리면 비용 없이 효과를 잴 수 있다.
+    """
+    from src.pipeline import DefaultNormalize
+
+    st = RawStore(path)
+    data = st.read()
+    norm = DefaultNormalize()
+    keys = {f.key for f in (schema.mvp_fields() if only_mvp
+                            else schema.all_fields())}
+
+    def extract(row: KitRow):
+        got = data.get(row.doc_id)
+        if got is None:
+            raise KeyError(f"보관에 {row.doc_id} 가 없다 — 다른 실행의 보관인가")
+        recs, page = got
+        recs = [r for r in recs if r.field_key in keys]
+        raws = {r.field_key: r.raw_value for r in recs if r.found}
+        values = {}
+        for r in recs:
+            values[r.field_key] = norm.run(r, schema.get(r.field_key))[0]
+        conf = {r.field_key: r.confidence for r in recs}
+        return values, raws, page, {"confidence": conf,
+                                    "extraction": {r.field_key: r for r in recs}}
+
+    extract.store = st
     return extract
 
 
@@ -468,6 +703,12 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default="runs/eval_report.md")
     ap.add_argument("--escalate", action="store_true",
                     help="확신도 미달·규칙 불일치·안전필드를 상위 모델로 2차 판독한다")
+    ap.add_argument("--rules", default="",
+                    help="다른 규칙 파일로 채점한다 (규칙 효과 비교용)")
+    ap.add_argument("--emit", default="",
+                    help="추출 원문을 이 폴더에 남긴다 (규칙 변경 후 재채점용)")
+    ap.add_argument("--replay", default="",
+                    help="보관된 원문으로 다시 채점한다 — 모델을 부르지 않는다")
     ap.add_argument("--note", default="",
                     help="이 실행에서 무엇을 바꿨는지. 이력 표에 남는다")
     a = ap.parse_args(argv)
@@ -489,16 +730,48 @@ def main(argv=None) -> int:
 
     if a.stage == "vlm":
         from src import env
-        env.require_key()
-        extract = make_vlm_extractor(only_mvp=a.only_mvp,
-                                     do_escalate=a.escalate)
+        if a.replay:
+            extract = make_replay_extractor(a.replay, only_mvp=a.only_mvp)
+            print(f"재생: {a.replay} — {extract.store.summary()}",
+                  file=sys.stderr)
+        else:
+            env.require_key()
+            store = None
+            if a.emit:
+                import time
+                # 모델 목록은 실행이 끝나야 안다 — 여기서는 조건만 남기고
+                # 비용 요약이 나온 뒤에 덧붙인다.
+                store = RawStore(a.emit).open({
+                    "stamp": time.strftime("%Y%m%d-%H%M%S"),
+                    "stage": a.stage, "only_mvp": a.only_mvp,
+                    "escalate": a.escalate, "kit": a.kit,
+                })
+            extract = make_vlm_extractor(only_mvp=a.only_mvp,
+                                         do_escalate=a.escalate, store=store)
     else:
         extract = make_text_extractor()
+    if a.rules:
+        schema.use_rules(a.rules)
+        print(f"규칙: {a.rules}", file=sys.stderr)
+    vocabulary.reset()      # 후보 큐는 실행 단위로 모은다
     holdout = tuple(x.strip() for x in a.holdout.split(",") if x.strip())
     res = score(rows, extract, holdout, only_mvp=a.only_mvp)
     report = render(res, a.by,
                     escalations=getattr(extract, "escalations", None))
     parser = getattr(extract, "parser", None)
+    store = getattr(extract, "store", None) if not a.emit else store
+    if a.emit and store is not None:
+        # 후보 큐를 파일로 남긴다 — 화면(다른 프로세스)이 승인하려면 필요하다.
+        # 보관 폴더에 두어 어느 실행의 후보인지 묶어 둔다.
+        import json
+        with open(os.path.join(a.emit, "vocab_candidates.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            json.dump({"summary": vocabulary.summary(),
+                       "rows": vocabulary.as_rows()},
+                      f, ensure_ascii=False, indent=2)
+        store.finish(parser)          # 모델·비용을 메타에 덧붙이고 닫는다
+        print(f"원문 보관: {store.path} — {store.summary()}", file=sys.stderr)
+
     if parser is not None and parser.calls:
         cost = parser.cost_summary()
         rows_md = ["", "## 비용", "",

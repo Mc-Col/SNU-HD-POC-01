@@ -41,8 +41,8 @@ HEADER = """# 평가 실행 이력
 
 리포트 전문은 `runs/eval/<시각>-<stage>.md` 에 있다(Git 제외).
 
-| 시각 | 단계 | 모델 | 문서 | 칸 | 정확도 | 근거없음오답 | 오답 | 미추출 | 정규화대기 | 페이지 | 비용(in/out) | 변경 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 시각 | 단계 | 모델 | 문서 | 칸 | 정확도 | 엄격 | 근거없음오답 | 오답 | 미추출 | 정규화대기 | 페이지 | 비용(in/out) | 변경 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 """
 
 
@@ -78,13 +78,32 @@ def archive(res, report: str, stage: str, note: str = "",
     good = n.get("정확", 0)
     acc = f"{good / tot * 100:.0f}%" if tot else "—"
 
+    # 엄격 기준을 함께 남긴다 — 관대한 자만 남기면 개선이 가려진다
+    from eval import compare as _cmp
+    val = [c for c in res.cells if not _cmp.is_na(str(c.truth))]
+    hit = [c for c in val if c.verdict == "정확" and c.got is not None
+           and _cmp.norm_text(c.truth) == _cmp.norm_text(c.got)]
+    strict = f"{len(hit) / len(val) * 100:.0f}%" if val else "—"
+
     calls = [(d, g, p) for d, g, p in res.page_calls
              if g is not None and p is not None]
     page = (f"{sum(1 for _, g, p in calls if int(g) == int(p))}/{len(calls)}"
             if calls else "—")
 
+    # 처리 실패는 조용히 넘기지 않는다 — 실패율도 측정 대상이다(철학 5).
+    # 6R 은 7건이 API 타임아웃으로 죽었고 정확도는 남은 4건의 것이었다.
+    failed = [d for d, _f, st in res.docs if st.startswith("처리 실패")]
+    if failed:
+        # 전부 실패했는데 "나머지 문서의 것" 이라고 쓰면 말이 되지 않는다.
+        tail = ("**채점된 문서가 없다 — 이 행에 정확도는 없다.**"
+                if not docs else "이 정확도는 나머지 문서의 것이다.")
+        who = (', '.join(failed) if len(failed) <= 4
+               else f"{failed[0]}~{failed[-1]} 등 {len(failed)}건")
+        note = (f"⚠ **처리 실패 {len(failed)}건** ({who}) — {tail} "
+                + (note or ""))
+
     row = (f"| {stamp} | {stage} | {_models(parser)} | "
-           f"{len(docs)}/{len(res.docs)} | {tot} | **{acc}** | "
+           f"{len(docs)}/{len(res.docs)} | {tot} | **{acc}** | {strict} | "
            f"{n.get('근거없음오답', 0)} | {n.get('오답', 0)} | "
            f"{n.get('미추출', 0)} | {n.get('정규화대기', 0)} | {page} | "
            f"{_cost_str(parser)} | {note or '—'} |\n")
@@ -93,6 +112,31 @@ def archive(res, report: str, stage: str, note: str = "",
     if not os.path.exists(HISTORY):
         with open(HISTORY, "w", encoding="utf-8", newline="\n") as f:
             f.write(HEADER)
-    with open(HISTORY, "a", encoding="utf-8", newline="\n") as f:
-        f.write(row)
+    with open(HISTORY, encoding="utf-8") as f:
+        cur = f.read()
+    with open(HISTORY, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_insert(cur, row))
     return path
+
+
+def _insert(text: str, row: str) -> str:
+    """이력 표의 **마지막 행 뒤**에 넣는다. 표가 파일 끝이 아닐 수 있다.
+
+    표 아래에 해석·판단을 쓰면 표는 파일 중간에 놓인다. 파일 끝에 덧붙이면
+    새 행이 표 밖으로 떨어져 마크다운에서 그냥 한 줄 텍스트가 된다 —
+    **이력에서 사라진 것처럼 보인다.** 6R 에서 실제로 그랬다.
+
+    아래쪽 해석 절에도 표가 있으므로 **머리글로 이력 표를 특정하고 그
+    표에서만** 찾는다. "파일에서 마지막 `|` 줄" 을 쓰면 남의 표에 들어간다.
+
+    표를 못 찾으면 파일 끝에 붙인다(빈 이력·형식 변경에 대한 안전판).
+    """
+    lines = text.split("\n")
+    head = next((k for k, L in enumerate(lines) if L.startswith("| 시각 |")), -1)
+    if head < 0:
+        return text + row
+    k = head + 1
+    while k < len(lines) and lines[k].startswith("|"):
+        k += 1
+    lines.insert(k, row.rstrip("\n"))
+    return "\n".join(lines)
