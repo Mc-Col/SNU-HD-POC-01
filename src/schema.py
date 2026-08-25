@@ -65,6 +65,18 @@ def _fields_doc() -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def use_rules(path: str) -> None:
+    """규칙 파일을 갈아끼운다. 캐시를 비우므로 이후 조회부터 적용된다.
+
+    원문 보관과 짝이다 — 같은 추출에 다른 규칙을 씌워 **규칙 효과만**
+    분리해서 잴 수 있다. 모델을 다시 부르지 않으므로 실행 간 편차가
+    끼어들지 않는다.
+    """
+    global RULES_PATH
+    RULES_PATH = os.path.abspath(path)
+    _rules_doc.cache_clear()
+
+
 @lru_cache(maxsize=1)
 def _rules_doc() -> dict[str, Any]:
     with open(RULES_PATH, encoding="utf-8") as f:
@@ -165,7 +177,76 @@ def domain_rule(field_key: str) -> dict[str, Any] | None:
 
 
 def value_aliases(field_key: str) -> list[dict[str, Any]]:
-    return (_rules_doc().get("value_aliases") or {}).get(field_key) or []
+    """이 필드의 표기 매핑. **표준값 자체를 from 에 항상 넣어 돌려준다.**
+
+    벤더 자체 표기가 소문자인 경우가 있다(`metso` · `Masoneilan`). 그것을
+    그대로 두면 마스터 열에 대소문자가 섞인다. 표준값을 from 에 포함시키면
+    `Masoneilan` → `MASONEILAN` 이 자동으로 성립한다.
+
+    규칙 파일에 같은 값을 두 번 적지 않기 위해 여기서 건다 — 새 표를 추가할
+    때 빠뜨릴 수 없다.
+    """
+    out = []
+    for m in (_rules_doc().get("value_aliases") or {}).get(field_key) or []:
+        to = m.get("to")
+        frm = list(m.get("from") or [])
+        if to and norm_label(to) not in {norm_label(x) for x in frm}:
+            frm = frm + [to]
+        out.append({**m, "from": frm})
+    return out
+
+
+# ── 허용 어휘 ─────────────────────────────────────────────────
+#
+# 표준화와 검증은 같은 표의 앞뒷면이다.
+#     표에 있으면 → 표준값으로 바꾼다
+#     표에 없으면 → 확인필요로 표시하고 후보 큐에 쌓는다
+#
+# 두 층으로 나눈 이유는 어휘가 불완전하기 때문이다. 19건만 보고 만든 어휘로
+# 값을 바꾸면 오염된다. `correct` 는 어휘가 좁고 이웃이 먼 필드에만 쓰고,
+# 나머지는 `flag_only` 로 표시만 한다.
+
+def _enum_doc() -> dict[str, Any]:
+    d = _rules_doc().get("enum_allowed_values") or {}
+    return d if d.get("enabled") else {}
+
+
+def enum_correct_fields() -> tuple[str, ...]:
+    """값을 표준값으로 바꿀 필드."""
+    return tuple(_enum_doc().get("correct") or ())
+
+
+def enum_flag_fields() -> tuple[str, ...]:
+    """값을 바꾸지 않고 어휘 밖이면 표시만 할 필드."""
+    return tuple((_enum_doc().get("flag_only") or {}).keys())
+
+
+def allowed_values(field_key: str) -> tuple[str, ...]:
+    """이 필드에 허용된 값. 어휘가 정의되지 않았으면 빈 튜플.
+
+    보정 필드는 `value_aliases` 의 `to` 값이 허용값이다 — 한 곳에만 적어야
+    어긋나지 않는다. 검증 전용 필드는 `flag_only` 에 적힌 목록이다.
+    """
+    e = _enum_doc()
+    if not e:
+        return ()
+    if field_key in (e.get("correct") or ()):
+        return tuple(dict.fromkeys(
+            m["to"] for m in value_aliases(field_key) if m.get("to")))
+    vals = (e.get("flag_only") or {}).get(field_key)
+    return tuple(vals) if vals else ()
+
+
+def in_vocabulary(field_key: str, value: str) -> bool | None:
+    """값이 어휘 안에 있나. 어휘가 없는 필드면 `None`(판정하지 않음).
+
+    비교는 `norm_label` 로 한다 — 대소문자·공백·구두점 차이로 어휘 밖이라고
+    하면 표시가 잡음이 된다.
+    """
+    vocab = allowed_values(field_key)
+    if not vocab:
+        return None
+    return norm_label(value) in {norm_label(v) for v in vocab}
 
 
 # ── 모델명 → 제조사 ───────────────────────────────────────────

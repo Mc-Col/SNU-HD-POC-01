@@ -170,9 +170,20 @@ class DefaultNormalize:
             # ② 라벨이 직접 기재인 경우 — 값에는 방향만 적혀 있다
             #    "Air Fails Valve to : Close" → FAIL CLOSE
             #    값만 보면 역전 표기와 구분이 불가능하므로 **라벨을 본다**.
-            labels = [schema.norm_label(x) for x in rule.get("direct_labels") or []]
+            #    라벨을 **문자열 목록으로 맞추지 않는다.** 실측에서
+            #    `Air fail Valve to` · `Air failure valve to` 가 목록의
+            #    `AIR FAILS VALVE TO` 와 한 글자씩 달라 전부 빗나갔다.
+            #    목록을 늘리면 변종이 끝없이 나온다(인사이트 50) — 대신
+            #    규칙의 원래 의도인 **"FAIL 어간이 있으면 직접 기재"** 를 쓴다.
             got = schema.norm_label(ex.raw_label or "")
-            if got and any(got.startswith(L) or L in got for L in labels if L):
+            direct = bool(got) and "FAIL" in got
+            #    단, `Fail/Air-To` 처럼 직접·역전 표기가 한 라벨에 같이 있으면
+            #    방향을 정할 수 없다. **안전 필드이므로 변환하지 않고 넘긴다.**
+            if direct and re.search(r"AIRTO|ATO\b|ATC\b", got):
+                trace.append(f"원문라벨 {ex.raw_label!r} 에 직접·역전 표기가 "
+                             f"함께 있어 방향을 정할 수 없다 — 사람 확인")
+                direct = False
+            if direct:
                 for m in rule.get("direct_map") or []:
                     if probe in {schema.norm_label(c) for c in m.get("from", [])}:
                         trace.append(f"원문라벨 {ex.raw_label!r} 은 직접 기재")

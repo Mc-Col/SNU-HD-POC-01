@@ -117,26 +117,28 @@ value_aliases:
     - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL"]
       to: "AZBIL"
 
-  # 누설등급 — 로마자·아라비아가 섞인다. 대조는 eval/compare 가 로마자를
-  # 정규화하지만, 마스터DB 에 넣는 값은 하나여야 한다.
+  # 누설등급 — 로마자·아라비아가 섞인다. **표준값은 아라비아**다
+  # (2026-08-25 결정: 조회하는 사람이 숫자 4를 먼저 떠올린다).
+  # 표준(ANSI/FCI 70-2)의 표기법은 로마자이지만, 그것은 문서의 표기법이고
+  # DB 열의 표기법은 쓰는 사람 기준으로 정한다. 원문은 감사 시트에 남는다.
   valve_leakage_class:
     - from: ["ANSI CLASS II", "ANSI CLASS 2", "CLASS II", "CLASS 2", "ANSI II"]
-      to: "CLASS II"
+      to: "CLASS 2"
     - from: ["ANSI CLASS III", "ANSI CLASS 3", "CLASS III", "CLASS 3"]
-      to: "CLASS III"
+      to: "CLASS 3"
     - from: ["ANSI CLASS IV", "ANSI CLASS 4", "CLASS IV", "CLASS 4", "ANSI IV"]
-      to: "CLASS IV"
+      to: "CLASS 4"
       seen: "d004 · d006 CLASS 4 / d005 · d007 CLASS IV / d008 Class IV"
     - from: ["ANSI CLASS V", "ANSI CLASS 5", "CLASS V", "CLASS 5"]
-      to: "CLASS V"
+      to: "CLASS 5"
     - from: ["ANSI CLASS VI", "ANSI CLASS 6", "CLASS VI", "CLASS 6"]
-      to: "CLASS VI"
+      to: "CLASS 6"
 
   # 유량 특성
   characteristic:
     - from: ["EQ%", "EQ %", "EQUAL PERCENT", "EQUAL %", "EQUAL PERCENTAGE",
              "%EQ", "EQUAL-PERCENT"]
-      to: "EQUAL PERCENT"
+      to: "EQUAL PERCENTAGE"
       seen: "d001~d003 Equal Percent / d005 · d010 · d011 EQ%"
     - from: ["MODIFIED PERCENTAGE", "MODIFIED EQUAL PERCENT", "MOD. EQ%",
              "MODIFIED %"]
@@ -181,6 +183,57 @@ value_aliases:
       to: "BALL"
     - from: ["BUTTERFLY", "BTFY"]
       to: "BUTTERFLY"
+
+  # 구동부 형식 — 1986년 Fisher 양식은 체크박스 문구가 "Diaph." 다.
+  # 공압/역작동 같은 수식어는 표준값에서 뗀다. `actuator_type` 은 **구동 방식**을
+  # 담는 항목이고, 역작동(RA)은 별개 속성이며 이 30필드에 자리가 없다.
+  # 원문은 감사 시트에 남으므로 정보가 사라지지 않는다.
+  actuator_type:
+    - from: ["DIAPHRAGM", "DIAPH.", "DIAPH", "PNEUMATIC DIAPHRAGM",
+             "DIAPHRAGM RA", "DIAPHRAGM (RA)", "SPRING DIAPHRAGM",
+             "PNEUMATIC DIAPH."]
+      to: "DIAPHRAGM"
+      seen: "d001~d003 Diaph. / d005 · d010 PNEUMATIC DIAPHRAGM / d007 DIAPHRAGM RA"
+    - from: ["CYLINDER", "VL CYLINDER", "PNEUMATIC CYLINDER", "PISTON",
+             "PISTON CYLINDER"]
+      to: "CYLINDER"
+      seen: "d008 · d014 VL Cylinder (FLOWSERVE 양식)"
+    - from: ["ELECTRIC", "MOTOR", "ELECTRIC MOTOR"]
+      to: "ELECTRIC"
+
+  # 포지셔너 제조사 — 본체 제조사와 다를 수 있다(본체 FISHER + 포지셔너 SMC).
+  # 문서에 제조사가 없고 모델명만 있는 경우가 많아 model_to_manufacturer 가
+  # 함께 동작한다.
+  positioner_manufacturer:
+    - from: ["FISHER CONTROLS", "FISHER CONTROLS INTERNATIONAL", "NIPPON FISHER"]
+      to: "FISHER"
+      seen: "3582G · 3582 → FISHER (모델명 판단 11건)"
+    - from: ["FLOWSERVE CORPORATION", "FLOWSERVE KOREA", "VALTEK"]
+      to: "FLOWSERVE"
+      seen: "d014 Logix 3800 Series"
+    - from: ["SMC CORPORATION", "SMC KOREA"]
+      to: "SMC"
+      seen: "d0xx SMC 2건"
+    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN"]
+      to: "MASONEILAN"
+      seen: "d0xx Masoneilan"
+    - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL"]
+      to: "AZBIL"
+      seen: "d0xx Azbil"
+    - from: ["YOUNG TECH", "YOUNG TECH CO.", "YTC"]
+      to: "YTC"
+      seen: "d013 YT-1200 (모델명 판단)"
+
+  # 유체 상태 — 닫힌 어휘이고 이웃이 멀어 안전하다.
+  fluid_state:
+    - from: ["LIQUID", "LIQ.", "LIQ"]
+      to: "LIQUID"
+    - from: ["GAS", "GASEOUS"]
+      to: "GAS"
+    - from: ["VAPOR", "VAPOUR"]
+      to: "VAPOR"
+    - from: ["STEAM"]
+      to: "STEAM"
 
 # ── 모델명 → 제조사 ───────────────────────────────────────────
 #
@@ -383,6 +436,74 @@ unit_conversion:
   enabled: false
   note: "MVP 는 원문 표기 보존. 향후 분류별 단위를 고정하고 변환까지 구현"
 
+# ── 허용 어휘 ─────────────────────────────────────────────────
+#
+# 표준화와 검증은 **같은 표의 앞뒷면**이다.
+#   표에 있으면  → 표준값으로 매핑한다        (value_aliases)
+#   표에 없으면  → 확인필요로 표시하고 후보 큐에 쌓는다
+#
+# 어휘가 **불완전한 상태에서 유사 보정을 켜면 오염된다.** 그래서 두 층으로
+# 나눈다 — correct 는 값을 바꾸고, flag_only 는 표시만 한다.
+#
+# 제외한 것과 이유
+#   actuator_fail_action  안전 필드. Fail Open/Close 가 어휘 안에서 이웃이라
+#                         유사 보정이 가장 잘 걸리고 틀리면 가장 비싸다
+#   engineering_tag_no    식별 필드. 10-FV-002 와 10-FV-003 은 거리 1이다
+#   model_no · fluid_name · equipment_full_description   열린 값
+#   수치 필드             어휘가 아니라 단위 문제다
 enum_allowed_values:
-  enabled: false
-  note: "범주형 허용값 리스트. MVP 범위 외"
+  enabled: true
+
+  # 값을 표준값으로 바꾼다. 허용값은 value_aliases 의 to 값이 곧 그것이다
+  # (한 곳에만 적어 어긋나지 않게 한다).
+  correct:
+    - manufacturer
+    - positioner_manufacturer
+    - valve_body_rating
+    - valve_body_type
+    - valve_leakage_class
+    - characteristic
+    - actuator_type
+    - valve_body_size
+    - fluid_state
+
+  # 값을 바꾸지 않는다. 어휘 밖이면 확인필요로 표시만 한다.
+  #
+  # 재질을 여기 두는 이유 — 골든셋 19건에 본체 재질만 13종이고, 한두 글자
+  # 차이로 서로 다른 등급이 공존한다.
+  #     C5   ASTM A217 Cr-Mo      CS   탄소강      WC5  A217 다른 등급
+  # 보정하면 다른 재질로 바꿔치기한다. 표시만 하면 위험이 0이고, 사람이
+  # 승인하면 어휘가 자란다(Loop C).
+  flag_only:
+    # 안전 필드 — **보정 대상이 아니다.** 값을 바꾸는 것은 금지이고,
+    # 어휘 밖이면 사람에게 보내기만 한다. 검증은 값을 건드리지 않으므로
+    # 안전 필드에서도 위험이 없다. 실측에서 이 필드가 "표시를 놓친 칸" 의
+    # 최대 항목이었다(17칸 중 7칸) — 표시할 수단이 아예 없었기 때문이다.
+    actuator_fail_action: ["FAIL OPEN", "FAIL CLOSE"]
+
+    valve_body_material:
+      ["A105", "A216 WCB", "A216 GR WCB", "A216 GR-WCB", "ASTM A216 GR-WCB",
+       "WCB", "WCB STEEL", "WCC", "WCC STEEL", "CARBON STEEL(WCB)",
+       "C5", "WC5", "CR-MO C5; F5A", "A217 C5", "A217 WC5",
+       "A351 CF8M", "CF8M", "A352 LCB", "LCB"]
+    valve_plug_material:
+      ["316 SS", "316 SST", "316L SST", "SUS316", "SUS316L", "SUS403",
+       "410 SS HT", "316 SST/COCR-A", "316 SST / COCR-A", "316 SST W/COCR-A",
+       "316 SST + STELLITE", "316 SS + STF", "SUS316 + STELL.", "COCR-A",
+       "SUS 316/COCR-A"]      # d023 — 시트 어휘에 있던 표기가 플러그에도 나왔다
+    valve_cage_material:
+      ["17-4PH SST", "316 SS", "316 SST", "SUS316", "SUS403", "SUS440B",
+       "440 SST", "416 SS HT", "316 SST / ENC", "COCR-A"]
+    valve_seat_material:
+      ["316 SS", "316 SST", "SUS403", "SCS14A", "SCS14A + STELLITE",
+       "CAST COCR-A", "COCR-A", "316 SST + STELLITE", "316 SST / COCR-A",
+       "316 SST W/COCR-A", "SUS 316/COCR-A", "316 SS + STF", "410 SS HT",
+       "NBR"]
+    valve_stem_material:
+      ["316 SS", "316 SST", "SUS316", "SUS316L", "INCONEL",
+       "316SST + CR PLATE", "ALLOY 6, LGA", "17-4PH SST",
+       # 1986 Fisher 양식은 재질 행에 "Std." 체크박스를 둔다. 벤더 기본
+       # 사양이라는 뜻이고, **비어 있는 것과 다르다** — 문서가 명시적으로
+       # 표준품이라고 말한 것이다. 다만 마스터에서 조회할 때는 재질명이
+       # 아니므로 카탈로그 조회가 따로 필요하다.
+       "STD.", "STD", "STANDARD"]
