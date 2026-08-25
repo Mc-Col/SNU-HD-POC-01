@@ -21,6 +21,9 @@ from .xls_compat import load_xls
 
 SCAN_RIGHT = 4          # 라벨 오른쪽으로 몇 칸까지 값을 찾는가
 SCAN_DOWN = 2           # 오른쪽에 없으면 아래로 몇 칸까지
+RIGHT_PROBE = 15        # "이 셀이 라벨인가" 를 볼 때만 쓰는 넓은 탐침.
+                        # 값 탐색(SCAN_RIGHT)을 넓히면 노이즈가 늘지만, 라벨 판별은
+                        # 넓게 봐야 한다 — 44LV001 은 라벨 B열·값 S열로 11칸 떨어져 있다
 MAX_LABEL_LEN = 60      # 이보다 긴 문자열은 라벨이 아니라 본문으로 본다
 
 
@@ -259,7 +262,7 @@ def _has_own_value(cell_value, pos: tuple[int, int], uix,
                    nor_col: int | None = None) -> bool:
     """이 셀이 오른쪽에 자기 값을 달고 있는가 (= 다음 행의 라벨이다)."""
     r, c = pos
-    cols = list(range(c + 1, c + 1 + SCAN_RIGHT))
+    cols = list(range(c + 1, c + 1 + RIGHT_PROBE))
     if nor_col is not None and nor_col > c:
         cols.append(nor_col)
     for cc in cols:

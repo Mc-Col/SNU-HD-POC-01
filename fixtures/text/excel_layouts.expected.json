@@ -29,6 +29,15 @@
       "note": ""
     },
     {
+      "field_key": "engineering_tag_no",
+      "raw_value": "44-LV-999",
+      "raw_label": "Tag No.",
+      "source_locator": "SPEC!C6",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
       "field_key": "model_no",
       "raw_value": "880-2221",
       "raw_label": "Model No.",
@@ -38,11 +47,29 @@
       "note": ""
     },
     {
+      "field_key": "valve_body_rating",
+      "raw_value": "ANSI CLASS 300",
+      "raw_label": "Rating",
+      "source_locator": "SPEC!E11",
+      "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
       "field_key": "valve_body_type",
       "raw_value": "GLOBE",
       "raw_label": "Body Type",
       "source_locator": "SPEC!E10",
       "page": 1,
+      "confidence": 0.95,
+      "note": ""
+    },
+    {
+      "field_key": "valve_leakage_class",
+      "raw_value": "CLASS 2",
+      "raw_label": "Leakage Spec.",
+      "source_locator": "TEST!I9",
+      "page": 2,
       "confidence": 0.95,
       "note": ""
     }
@@ -54,16 +81,6 @@
       "neighbor_value": "Body"
     },
     {
-      "text": "Tag No.",
-      "source_locator": "SPEC!A6",
-      "neighbor_value": "44-LV-999"
-    },
-    {
-      "text": "Rating",
-      "source_locator": "SPEC!B11",
-      "neighbor_value": "ANSI CLASS 300"
-    },
-    {
       "text": "Positioner Type",
       "source_locator": "SPEC!B42",
       "neighbor_value": "PNEUMATIC"
@@ -72,16 +89,6 @@
       "text": "Trim Form",
       "source_locator": "TEST!B17",
       "neighbor_value": "CAGE-BALANCED"
-    },
-    {
-      "text": "TAG NO",
-      "source_locator": "TEST!B5",
-      "neighbor_value": "11-FV-999"
-    },
-    {
-      "text": "Leakage Spec.",
-      "source_locator": "TEST!B9",
-      "neighbor_value": "CLASS 2"
     },
     {
       "text": "Maker",
