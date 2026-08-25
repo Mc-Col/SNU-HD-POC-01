@@ -38,9 +38,8 @@ def test_원문라벨_정제(raw, clean):
 # ── 수집 ───────────────────────────────────────────────────────
 def test_새_표기만_모은다(res):
     assert {k: [c.text for c in v] for k, v in res.by_field.items()} == {
-        "ENGINEERING TAG NO.": ["Tag No."],
         "ACTUATOR FAIL ACTION": ["Fail/Air-To"],
-    }
+    }   # 'Tag No.' 는 2026-08-25 스키마에 등록되어 더 이상 '새 표기' 가 아니다
 
 
 def test_이미_등록된_표기는_후보에서_뺀다(res):

@@ -30,12 +30,16 @@ ROWS = [
           [(380, "Spring Range"),  (448, "0.4 - 2.0 bar")]),           # 미매핑
     (124, [(67, "Body Size"),   (172, "4 IN")],                        # 유사표현 미등록
           [(330, "Max Shutoff / Shutoff Class"), (480, "120 psi / ANSI IV")]),
-    (172, [(67, "Size/Pressure Class/Body Form"), (250, "4 / 300 / Globe")],
-          []),                                                          # 복합 라벨
+    (172, [(67, "Size/Pressure Class/Body Form"), (250, "4 / 300 / Cast")],
+          []),                                                          # 복합 라벨 — 3번째는 대응 필드 없음
+    (184, [(67, "Valve Model / Body Type"), (250, "Mark One / Globe / Standard")],
+          []),                                                          # 복합 라벨 — 밸브 형식은 여기서 온다
 ]
 for y, left, right in ROWS:
     for x, t in left + right:
         p1.insert_text((x, y), t, fontsize=8)
+
+# 실물 19FV077 에서 확인: Body Form(Cast) 과 Body Type(Globe) 은 다른 칸이다.
 
 # Max / Nor / Min 열 머리글 + 값 행 — 표준은 Normal 값을 쓴다
 p1.insert_text((67, 136), "Driving Cond.", fontsize=8)

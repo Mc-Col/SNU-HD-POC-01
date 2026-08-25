@@ -30,6 +30,21 @@ from src.parsers.text.units import UnitIndex                       # noqa: E402
 # 값 대조는 팀의 평가 하네스 규칙을 그대로 쓴다 (단위 표기·로마자·대소문자).
 # 여기서 다시 만들면 채점기와 하네스가 서로 다른 답을 내놓는다.
 from eval.compare import same as _same                             # noqa: E402
+from src import schema as _schema                                  # noqa: E402
+
+
+def _standardize(field_key: str, value: object) -> str:
+    """schema/rules.yaml 의 표기 매핑을 적용한 값.
+
+    킷은 FAIL ACTION 만 표준값으로 적게 되어 있다(킷 기입 안내). 파서는 문서
+    원문(`VALVE CLOSE`)을 내므로, 사전을 적용하지 않으면 영원히 오답으로 잡힌다.
+    """
+    raw = str(value or "").strip()
+    probe = _schema.norm_label(raw)
+    for m in _schema.value_aliases(field_key):
+        if probe in {_schema.norm_label(c) for c in m.get("from", [])}:
+            return str(m["to"])
+    return raw
 
 SHEET = "라벨링"
 SKIP_VALUES = {"N/A", "NA", "판독불가", ""}      # 정답이 없는 칸 — 채점 제외
@@ -165,7 +180,9 @@ def score(kit_path: str, root: str) -> Score:
                 # 단위 표기·로마자·대소문자 차이는 감점하지 않는다 (eval/compare 규칙).
                 #   예) 정답 "160 ℃" vs 파서 "160.0" → 같은 값이다
                 cell.verdict = "표기차이"
-            elif _contains(g, t) or _contains(t, g):
+            elif (_same(t, _standardize(key, g))
+                  or _contains(g, t) or _contains(t, g)):
+                # 표기 매핑 사전(rules.yaml)을 거쳐야 같아지는 것도 여기다.
                 # 파서는 문서 원문을 낸다. 표준값으로 바꾸는 것은 ④ Normalize 몫.
                 #   문서가 더 짧을 수도(원문 "OPEN" → 표준 "FAIL OPEN"),
                 #   더 길 수도 있다(원문 "195 (Cg=4040)" → 표준 "195").

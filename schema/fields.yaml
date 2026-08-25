@@ -44,6 +44,10 @@ fields:
     threshold: 0.95
     aliases:
       - "TAG"
+      - "TAG NO"
+      - "Tag Number"
+      - "Valve Tag #"
+      - "Tags"
 
   - key: equipment_full_description
     name: "EQUIPMENT FULL DESCRIPTION"
@@ -82,7 +86,11 @@ fields:
     source: document
     mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Model Number"
+      - "VALVE BODY/BONNET Model"
+      - "VALVE BODY/BONNET Model No."
+      - "Valve Model"
 
   - key: fluid_name
     name: "FLUID NAME"
@@ -96,6 +104,8 @@ fields:
     threshold: 0.90
     aliases:
       - "FLOWING MEDIA"
+      - "GENERAL Fluid"
+      - "SERVICE CONDITION Fluid"
 
   - key: fluid_state
     name: "FLUID STATE"
@@ -107,7 +117,8 @@ fields:
     source: derived
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "GENERAL Fluid Type"
 
   - key: normal_flow_rate
     name: "NORMAL FLOW RATE"
@@ -121,6 +132,11 @@ fields:
     threshold: 0.90
     aliases:
       - "FLOW RATE"
+      - "Flow Rate, Give Units"
+      - "Liq Flow Rate"
+      - "Flow Rate NOR"
+      - "Flow Rate Norm."
+      - "Volumetric Flow Rate Gas"
 
   - key: normal_pressure
     name: "NORMAL PRESSURE"
@@ -134,6 +150,12 @@ fields:
     threshold: 0.90
     aliases:
       - "INLET PRESSURE NORMAL"
+      - "Inlet Pressure"
+      - "In.Press. NOR"
+      - "Inlet Press"
+      - "Inlet Pressure, NOR."
+      - "In.Press."
+      - "Inlet Pressure Norm."
 
   - key: normal_temperature
     name: "NORMAL TEMPERATURE"
@@ -148,6 +170,11 @@ fields:
     aliases:
       - "INLET TEMPERATURE, NORMAL"
       - "INLET TEMPERATURE"
+      - "Inlet Temperature, NOR."
+      - "Temp. NOR"
+      - "Temperature"
+      - "Inlet Temperature Norm."
+      - "Temp."
 
   - key: specific_gravity
     name: "SPECIFIC GRAVITY"
@@ -159,7 +186,9 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Density"
+      - "SG-MW"
 
   - key: viscosity
     name: "VISCOSITY"
@@ -185,6 +214,10 @@ fields:
     threshold: 0.90
     aliases:
       - "VALVE COEFFICIENT"
+      - "Body Rated Cv"
+      - "Trim Cv"
+      - "Trim Rated Cv"
+      - "VALVE TRIM Rated Cv"
 
   - key: required_cv
     name: "REQUIRED CV"
@@ -200,6 +233,14 @@ fields:
       - "REQ'D FLOW COEFF., CV, NORMAL"
       - "REQ'D FLOW COEFF"
       - "REQUIRED FLOW COEFFICIENT"
+      - "Req'd Flow Coeff., Cv"
+      - "Flow Coeff."
+      - "Required Cv NOR."
+      - "Calculated Cv"
+      - "Calculated Cv NOR"
+      - "Calculated Cv Normal"
+      - "Required Capacity"
+      - "Sizing Coefficient"
 
   - key: valve_body_rating
     name: "VALVE BODY RATING"
@@ -211,7 +252,15 @@ fields:
     source: document
     mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "End Connection/Flg. ANSI class"
+      - "Rating"
+      - "BODY Rating"
+      - "VALVE BODY / BONNET Rating"
+      - "Ebody Style End Connect"
+      - "Pressure Class"
+      - "VALVE BODY / BONNET Pr. Rating"
+      - "Valve Body Assembly Pressure Class"
 
   - key: valve_body_type
     name: "VALVE BODY TYPE"
@@ -228,6 +277,7 @@ fields:
       - "VALVE STYLE"
       - "BODY TYPE"
       - "BODY STYLE"
+      - "VALVE BODY / BONNET Type"
 
   - key: valve_body_size
     name: "VALVE BODY SIZE"
@@ -239,7 +289,12 @@ fields:
     source: document
     mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Body Size"
+      - "VALVE BODY / BONNET Size"
+      - "BODY Trim Size"
+      - "Size"
+      - "Valve Body Assembly Size"
 
   - key: valve_body_material
     name: "VALVE BODY MATERIAL"
@@ -251,7 +306,13 @@ fields:
     source: document
     mvp: true
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Body Material"
+      - "Body Matl"
+      - "MATERIAL Body"
+      - "VALVE BODY / BONNET Material"
+      - "Body Style Material"
+      - "MATERIAL Body/Bonnet"
 
   - key: valve_leakage_class
     name: "VALVE LEAKAGE CLASS"
@@ -263,7 +324,12 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Shutoff Class"
+      - "Leakage Spec."
+      - "Seat Leakage"
+      - "BODY Leakage Spec."
+      - "VALVE BODY / BONNET Seat Leakage"
 
   - key: characteristic
     name: "CHARACTERISTIC (TRIM FORM)"
@@ -277,6 +343,13 @@ fields:
     threshold: 0.90
     aliases:
       - "CHARACTERISTIC"
+      - "Plug or Cage"
+      - "Trim Plug or Cage"
+      - "BODY Characteristic"
+      - "Flow Char."
+      - "Flow Character."
+      - "TRIM Flow Char."
+      - "Valve Body Assembly Characteristic"
 
   - key: valve_plug_material
     name: "VALVE PLUG MATERIAL"
@@ -288,7 +361,15 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Trim Valve Plug Material"
+      - "MATERIAL Plug"
+      - "Plug Material"
+      - "TRIM Plug Material"
+      - "MATERIAL Plug/Disc/Ball"
+      - "Plug"
+      - "Plug Matl"
+      - "Plug Mtl"
 
   - key: valve_cage_material
     name: "VALVE CAGE MATERIAL"
@@ -300,7 +381,18 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Cage and/or Bushing Material"
+      - "Trim Cage and/or Bushing Material"
+      - "Cage Material"
+      - "MATERIAL Cage/Retainer"
+      - "MATERIAL Guide Bushing"
+      - "MATERIAL Retainer or Cage"
+      - "Retainer Matl"
+      - "Retainer or Cage"
+      - "Seat Retainer Mtl"
+      - "TRIM Retainer / Cage"
+      - "Work Scope 2. 3)"
 
   - key: valve_seat_material
     name: "VALVE SEAT MATERIAL"
@@ -312,7 +404,14 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Seat Ring Material"
+      - "Trim Seat Ring Material"
+      - "MATERIAL Seat Ring"
+      - "Seat Ring"
+      - "Seat Ring Mtl"
+      - "Soft Seat Matl"
+      - "Trim Disk/Seat Material"
 
   - key: valve_stem_material
     name: "VALVE STEM MATERIAL"
@@ -324,7 +423,14 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Trim Stem"
+      - "MATERIAL Stem"
+      - "TRIM Stem Material"
+      - "Stem"
+      - "Stem Matl"
+      - "Stem Mtl"
+      - "Work Scope 2. 1)"
 
   - key: actuator_type
     name: "ACTUATOR TYPE"
@@ -336,7 +442,9 @@ fields:
     source: document
     mvp: false
     threshold: 0.90
-    aliases: []          # 라벨링 중 raw_label 로 수집 예정
+    aliases:
+      - "Actuator Style"
+      - "Act. Type"
 
   - key: actuator_fail_action
     name: "ACTUATOR FAIL ACTION"
@@ -351,6 +459,12 @@ fields:
     aliases:
       - "FAIL POSITION"
       - "FAIL ACTION"
+      - "Air Fails Valve to"
+      - "ACT'N Fail Position"
+      - "ACTUATOR Fail Position"
+      - "ACTUATOR Failure Mode"
+      - "Actuator Fail"
+      - "Fail"
 
   - key: positioner_manufacturer
     name: "POSITIONER MANUFACTURER"

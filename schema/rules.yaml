@@ -30,11 +30,18 @@ domain_rules:
 
 # ── 표기 매핑 ──────────────────────────────────────────────────
 # 같은 값의 다른 표기. 라벨링 중 raw_label 로 수집되는 것을 여기에 누적한다.
-value_aliases: {}
+value_aliases:
   # 예:
   # valve_body_material:
   #   - from: ["CS", "C.S.", "CARBON STEEL"]
   #     to: "CARBON STEEL"
+  actuator_fail_action:
+    # 52PV014 의 "Fail Position" 칸 값이 "VALVE CLOSE" 다. 파서는 맞는 칸을 읽었고
+    # 표준값으로 바꾸는 것은 ④ Normalize 몫이다 (2026-08-25).
+    - from: ["VALVE CLOSE", "VALVE CLOSED", "CLOSE", "CLOSED"]
+      to: "FAIL CLOSE"
+    - from: ["VALVE OPEN", "VALVE OPENED", "OPEN", "OPENED"]
+      to: "FAIL OPEN"
 
 # ── 모델명 → 제조사 ───────────────────────────────────────────
 #
@@ -158,6 +165,14 @@ unit_tokens:
   - "(°C)"
   - "(kg/h)"
   - "(Sp.Gr.)"
+  # 2026-08-25 골든셋 21건 대조에서 값으로 잘못 집힌 표기
+  - Deg C          # 15LV015 "Inlet Temperature | Deg C | 41"
+  - Deg.C
+  - deg C
+  - SG             # 15LV015 "Specific Gravity | SG | 0.993"
+  - Sp. Gr.        # 괄호 없는 표기가 빠져 있었다
+  - Kg/cm2A
+  - Cv             # 52PV014 "Required Cv | Cv | 75.7" — 유량계수의 단위 칸
 
 # ── 복합 라벨 분해 ─────────────────────────────────────────────
 # 라벨 하나가 표준 필드 여러 개를 덮는 칸. 벤더 양식에서 흔하다.
@@ -175,8 +190,20 @@ composite_labels:
 
   - label: "Size/Pressure Class/Body Form"
     separator: "/"
-    fields: [valve_body_size, valve_body_rating, valve_body_type]
-    note: "Fisher·Samwoo 계열 텍스트 PDF"
+    fields: [valve_body_size, valve_body_rating, null]
+    note: |
+      Fisher·Samwoo 계열 텍스트 PDF.
+      세 번째 조각은 대응 필드 없음 — Body Form 은 주조·단조 구분(Cast/Forged)이지
+      밸브 형식이 아니다. 19FV077 값이 "2.00 / CL 1500 / Cast" 인데 골든셋 정답은
+      Globe 이고, 그 값은 같은 문서의 "Valve Model / Body Type" 줄에 있다.
+      2026-08-25 골든셋 대조에서 정정.
+
+  - label: "Valve Model / Body Type"
+    separator: "/"
+    fields: [model_no, valve_body_type, null]
+    note: |
+      19FV077 — 라벨은 두 조각인데 값은 "Mark One / Globe / Standard" 로 세 조각이다.
+      세 번째는 트림 구조라 대응 필드가 없다.
 
   - label: "Model / Body Type / Trim Type"
     separator: "/"

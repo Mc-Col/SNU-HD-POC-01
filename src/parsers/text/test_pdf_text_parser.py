@@ -94,11 +94,18 @@ def test_같은_입력이면_같은_출력이다():
 
 
 def test_복합_라벨을_쪼갠다(parsed):
-    """'Size/Pressure Class/Body Form' = '4 / 300 / Globe' → 세 필드로."""
+    """'Size/Pressure Class/Body Form' = '4 / 300 / Cast' → 앞 두 조각만.
+
+    세 번째 Body Form(Cast)은 주조·단조 구분이라 대응 필드가 없다.
+    밸브 형식은 'Valve Model / Body Type' = 'Mark One / Globe / Standard' 에서 온다.
+    (2026-08-25 실물 19FV077 에서 확인 — 두 칸이 따로 있다)
+    """
     by = parsed.by_key()
-    assert (by["valve_body_size"].raw_value, by["valve_body_size"].raw_label) == ("4", "Size")
     assert (by["valve_body_rating"].raw_value, by["valve_body_rating"].raw_label) == ("300", "Pressure Class")
-    assert all("복합 라벨" in by[k].note for k in ("valve_body_size", "valve_body_rating"))
+    assert (by["valve_body_type"].raw_value, by["model_no"].raw_value) == ("Globe", "667-ED")
+    assert all("복합 라벨" in by[k].note for k in ("valve_body_rating", "valve_body_type"))
+    # 'Cast' 는 어느 필드에도 들어가지 않는다
+    assert all(r.raw_value != "Cast" for r in parsed.records)
 
 
 def test_FailAirTo_는_Fail_조각을_쓴다(parsed):

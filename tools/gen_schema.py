@@ -84,7 +84,87 @@ ADD = [
 # → RATED CV MAX / NORMAL 두 칼럼을 RATED CV 하나로 합친다.
 MERGE = {"RATED CV MAX": "RATED CV"}
 MERGE_DROP = {"RATED CV NORMAL"}
-MERGE_ALIASES = {"RATED CV": ["VALVE COEFFICIENT"]}
+MERGE_ALIASES = {
+    # 뺀 것 (2026-08-25 골든셋 대조에서 틀린 값을 만들었다)
+    #   "Guide Material" → VALVE CAGE MATERIAL : 10FV079 에서 가이드는 케이지와 다른 부품
+    #                                            ("SOLID STELLITE" vs 정답 "316 SST")
+    #   "End Connection" → VALVE BODY RATING   : 15LV015 에서 연결 형식을 담는다
+    #                                            ("RF FLANGED" vs 정답 "600#").
+    #                                            "End Connection/Flg. ANSI class" 는 남긴다
+    # 킷의 원문라벨에서 수집 (2026-08-25, 골든셋 21건). 사람이 상상해서 채울 수 없는
+    # 표기 변종을 실물에서 모은 것이다. 한 표기가 여러 필드에 걸리는 것,
+    # 다른 필드의 표준명과 겹치는 것, 복합 라벨 규칙이 이미 처리하는 것은 뺐다.
+    "RATED CV": ["VALVE COEFFICIENT"],
+    "ACTUATOR FAIL ACTION": [
+        "Air Fails Valve to", "ACT'N Fail Position", "ACTUATOR Fail Position",
+        "ACTUATOR Failure Mode", "Actuator Fail", "Fail",
+    ],
+    "ACTUATOR TYPE": ["Actuator Style", "Act. Type"],
+    "CHARACTERISTIC (TRIM FORM)": [
+        "Plug or Cage", "Trim Plug or Cage", "BODY Characteristic", "Flow Char.",
+        "Flow Character.", "TRIM Flow Char.", "Valve Body Assembly Characteristic",
+    ],
+    "ENGINEERING TAG NO.": ["TAG NO", "Tag Number", "Valve Tag #", "Tags"],
+    "FLUID NAME": ["GENERAL Fluid", "SERVICE CONDITION Fluid"],
+    "FLUID STATE": ["GENERAL Fluid Type"],
+    "MODEL NO.": [
+        "Model Number", "VALVE BODY/BONNET Model", "VALVE BODY/BONNET Model No.", "Valve Model",
+    ],
+    "NORMAL FLOW RATE": [
+        "Flow Rate, Give Units", "Liq Flow Rate", "Flow Rate NOR", "Flow Rate Norm.",
+        "Volumetric Flow Rate Gas",
+    ],
+    "NORMAL PRESSURE": [
+        "Inlet Pressure", "In.Press. NOR", "Inlet Press", "Inlet Pressure, NOR.", "In.Press.",
+        "Inlet Pressure Norm.",
+    ],
+    "NORMAL TEMPERATURE": [
+        "Inlet Temperature, NOR.", "Temp. NOR", "Temperature", "Inlet Temperature Norm.",
+        "Temp.",
+    ],
+    "RATED CV": ["VALVE COEFFICIENT", "Body Rated Cv", "Trim Cv", "Trim Rated Cv", "VALVE TRIM Rated Cv"],
+    "REQUIRED CV": [
+        "Req'd Flow Coeff., Cv", "Flow Coeff.", "Required Cv NOR.", "Calculated Cv",
+        "Calculated Cv NOR", "Calculated Cv Normal", "Required Capacity", "Sizing Coefficient",
+    ],
+    "SPECIFIC GRAVITY": ["Density", "SG-MW"],
+    "VALVE BODY MATERIAL": [
+        "Body Material", "Body Matl", "MATERIAL Body", "VALVE BODY / BONNET Material",
+        "Body Style Material", "MATERIAL Body/Bonnet",
+    ],
+    "VALVE BODY RATING": [
+        "End Connection/Flg. ANSI class", "Rating", "BODY Rating",
+        "VALVE BODY / BONNET Rating", "Ebody Style End Connect", "Pressure Class",
+        "VALVE BODY / BONNET Pr. Rating", "Valve Body Assembly Pressure Class",
+    ],
+    "VALVE BODY SIZE": [
+        "Body Size", "VALVE BODY / BONNET Size", "BODY Trim Size", "Size",
+        "Valve Body Assembly Size",
+    ],
+    "VALVE BODY TYPE": ["VALVE BODY / BONNET Type"],
+    "VALVE CAGE MATERIAL": [
+        "Cage and/or Bushing Material", "Trim Cage and/or Bushing Material", "Cage Material",
+        "MATERIAL Cage/Retainer", "MATERIAL Guide Bushing",
+        "MATERIAL Retainer or Cage", "Retainer Matl", "Retainer or Cage", "Seat Retainer Mtl",
+        "TRIM Retainer / Cage", "Work Scope 2. 3)",
+    ],
+    "VALVE LEAKAGE CLASS": [
+        "Shutoff Class", "Leakage Spec.", "Seat Leakage", "BODY Leakage Spec.",
+        "VALVE BODY / BONNET Seat Leakage",
+    ],
+    "VALVE PLUG MATERIAL": [
+        "Trim Valve Plug Material", "MATERIAL Plug", "Plug Material", "TRIM Plug Material",
+        "MATERIAL Plug/Disc/Ball", "Plug", "Plug Matl", "Plug Mtl",
+    ],
+    "VALVE SEAT MATERIAL": [
+        "Seat Ring Material", "Trim Seat Ring Material", "MATERIAL Seat Ring", "Seat Ring",
+        "Seat Ring Mtl", "Soft Seat Matl", "Trim Disk/Seat Material",
+    ],
+    "VALVE STEM MATERIAL": [
+        "Trim Stem", "MATERIAL Stem", "TRIM Stem Material", "Stem", "Stem Matl", "Stem Mtl",
+        "Work Scope 2. 1)",
+    ],
+}
 
 # 문서에 항목 라벨이 없어 다른 값에서 도출해야 하는 필드 (라벨링 3건에서 확인)
 # document 로 두면 VLM 이 없는 라벨을 찾다가 N/A 를 낸다.
@@ -206,7 +286,9 @@ def main():
         entry = dict(
             key=key_of(spec["name"]), name=spec["name"], group=spec["group"],
             db_code=spec["db_code"], desc=spec["desc"], example="",
-            required=spec["required"], safety="normal", aliases=list(spec["aliases"]),
+            required=spec["required"], safety="normal",
+            aliases=list(spec["aliases"]) + [a for a in MERGE_ALIASES.get(spec["name"], [])
+                                             if a not in spec["aliases"]],
             mvp=(spec["name"] in MVP), threshold=THRESHOLD["normal"],
         )
         idx = next((i for i, f in enumerate(fields)

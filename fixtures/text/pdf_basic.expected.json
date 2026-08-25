@@ -75,21 +75,21 @@
     },
     {
       "field_key": "valve_body_size",
-      "raw_value": "4",
-      "raw_label": "Size",
-      "source_locator": "p1:L10:c2",
+      "raw_value": "4 IN",
+      "raw_label": "Body Size",
+      "source_locator": "p1:L6:c2",
       "page": 1,
       "confidence": 0.95,
-      "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
+      "note": ""
     },
     {
       "field_key": "valve_body_type",
       "raw_value": "Globe",
-      "raw_label": "Body Form",
-      "source_locator": "p1:L10:c2",
+      "raw_label": "Valve Model / Body Type",
+      "source_locator": "p1:L11:c2",
       "page": 1,
       "confidence": 0.95,
-      "note": "복합 라벨 'Size/Pressure Class/Body Form' 분해"
+      "note": "복합 라벨 'Valve Model / Body Type' 분해"
     },
     {
       "field_key": "valve_leakage_class",
@@ -115,11 +115,6 @@
       "text": "Spring Range",
       "source_locator": "p1:L5:c3",
       "neighbor_value": "0.4 - 2.0 bar"
-    },
-    {
-      "text": "Body Size",
-      "source_locator": "p1:L6:c1",
-      "neighbor_value": "4 IN"
     }
   ]
 }
