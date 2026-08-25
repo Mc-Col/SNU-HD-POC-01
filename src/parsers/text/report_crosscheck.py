@@ -48,7 +48,7 @@ if ROOT not in sys.path:
 
 from eval.compare import same as _same                                 # noqa: E402
 from src.parsers.text.crosscheck import (AGREE, CONFLICT, NOTATION,    # noqa: E402
-                                         numeric_flag)
+                                         numeric_flag, standardize)
 from src.parsers.text.field_index import FieldIndex                    # noqa: E402
 from src.parsers.text.score_against_kit import find_file, read_kit     # noqa: E402
 from src.parsers.text.sections import SectionIndex                     # noqa: E402
@@ -90,7 +90,11 @@ def compare(truth: dict[str, str], records) -> tuple[int, int, list[tuple[str, s
         want = truth.get(r.field_key)
         if not want or r.value is None:
             continue
-        if _same(want, r.value, numeric_flag(r.field_key)):
+        # 표기 매핑 사전을 **양쪽에** 적용한 뒤 비교한다. 정답지도 표기가 갈린다
+        # (`600#` · `ANSI CLASS 300` · `300` 이 정답 안에 섞여 있다).
+        if (_same(want, r.value, numeric_flag(r.field_key))
+                or _same(standardize(r.field_key, want), standardize(r.field_key, r.value),
+                         numeric_flag(r.field_key))):
             hit += 1
         else:
             miss += 1

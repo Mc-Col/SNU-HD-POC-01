@@ -211,9 +211,11 @@ def score(kit_path: str, root: str) -> Score:
                 # 단위 표기·로마자·대소문자 차이는 감점하지 않는다 (eval/compare 규칙).
                 #   예) 정답 "160 ℃" vs 파서 "160.0" → 같은 값이다
                 cell.verdict = "표기차이"
-            elif (_same(t, _standardize(key, g), _numeric(key))
+            elif (_same(_standardize(key, t), _standardize(key, g), _numeric(key))
                   or _contains(g, t) or _contains(t, g)):
                 # 표기 매핑 사전(rules.yaml)을 거쳐야 같아지는 것도 여기다.
+                # **양쪽 모두** 접어서 비교한다 — 정답지도 표기가 갈리기 때문이다
+                # (`600#` · `ANSI CLASS 300` · `300` 이 정답 안에 섞여 있다).
                 # 파서는 문서 원문을 낸다. 표준값으로 바꾸는 것은 ④ Normalize 몫.
                 #   문서가 더 짧을 수도(원문 "OPEN" → 표준 "FAIL OPEN"),
                 #   더 길 수도 있다(원문 "195 (Cg=4040)" → 표준 "195").
