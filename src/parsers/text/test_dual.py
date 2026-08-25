@@ -79,9 +79,13 @@ def test_일치했다고_확신도를_올리지_않는다():
 
 
 def test_표기차이는_사람을_부르지_않는다():
-    """`300#` 과 `ANSI CLASS 300` 은 같은 등급이다."""
-    dual = DualParser(vlm=_Stub({"valve_body_rating": "300#"}, confidence=0.9),
-                      text=_Stub({"valve_body_rating": "ANSI CLASS 300"}))
+    """숫자가 같고 표기만 다르면 사람을 부르지 않는다.
+
+    `300#` vs `ANSI CLASS 300` 은 표기 매핑이 들어와 이제 **일치**다(2026-08-26).
+    여기서는 사전에 없는 등급으로 이 판정 자체를 확인한다.
+    """
+    dual = DualParser(vlm=_Stub({"valve_body_rating": "750#"}, confidence=0.9),
+                      text=_Stub({"valve_body_rating": "CL 750"}))
     r = _by_key(dual.extract("x.pdf", None, FIELDS))["valve_body_rating"]
     assert r.confidence == 0.9
     assert "표준형 미정" in r.note
