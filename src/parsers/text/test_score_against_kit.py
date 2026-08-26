@@ -95,3 +95,51 @@ def test_리포트에_라벨러_표와_주의가_남는다(sc):
     assert "## 라벨러별" in md
     assert "사람이 검증한 정답만" in md
     assert "AI 초안은 사람 검증 전이다" in md
+
+
+# ── 규칙 축 — 규칙해소 / 규칙공백 (2026-08-26) ──────────────────
+#
+# 왜 축을 나눴나  정규화대기 52칸을 실측하니 46칸은 이미 규칙이 처리하고
+# 6칸만 남았다. 나누지 않으면 끝난 일이 할 일처럼 보인다.
+
+
+def test_규칙_축은_판정과_따로_매겨진다(sc):
+    """파서 판정에 규칙을 섞으면 파서 결함이 규칙에 가려진다."""
+    for c in sc.cells:
+        if c.verdict in ("정규화대기", "오답"):
+            assert c.rule_state in ("규칙해소", "규칙공백"), c
+        else:
+            assert c.rule_state == "", c        # 이미 맞았거나 아예 못 집은 칸
+
+
+def test_규칙_축_합계가_판정_합계와_맞는다(sc):
+    r = sc.rule_counts()
+    n = sc.counts()
+    assert r["규칙해소"] + r["규칙공백"] == n["정규화대기"] + n["오답"]
+
+
+def test_규칙공백만_다음_작업_목록에_남는다(sc):
+    assert all(c.rule_state == "규칙공백" for c in sc.gaps())
+    assert len(sc.gaps()) == sc.rule_counts()["규칙공백"]
+
+
+def test_라벨을_넘겨야_FAIL_어간_규칙이_걸린다():
+    """값만 넘기면 방향을 못 읽는다 — RawExtraction 통째로 줘야 한다."""
+    from src.contracts import RawExtraction
+    from src.parsers.text.score_against_kit import _normalized
+
+    with_label = RawExtraction(field_key="actuator_fail_action", raw_value="CLOSE",
+                               raw_label="Air Fails Valve to : Close", confidence=0.9)
+    without = RawExtraction(field_key="actuator_fail_action", raw_value="CLOSE",
+                            raw_label=None, confidence=0.9)
+    assert _normalized("actuator_fail_action", with_label) == "FAIL CLOSE"
+    assert _normalized("actuator_fail_action", without) != "FAIL CLOSE"
+
+
+def test_리포트에_세_숫자와_규칙공백_절이_남는다(sc):
+    md = render(sc)
+    assert "파서 관점 성공률" in md
+    assert "완전 일치율" in md
+    assert "정규화 후 일치율" in md
+    if sc.gaps():
+        assert "규칙공백 — 다음에 손볼 칸" in md
