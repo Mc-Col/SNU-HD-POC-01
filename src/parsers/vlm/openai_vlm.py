@@ -134,6 +134,36 @@ def upscale_factor() -> float:
     return v if 1.0 < v <= 4.0 else 1.0
 
 
+def target_long_edge() -> int:
+    """`D2S_LONG_EDGE` 목표 장변(px). 0 · 미설정이면 끈다.
+
+    왜 배율(`D2S_UPSCALE`) 로는 부족한가 (2026-08-26 실측)
+    ─────────────────────────────────────────────────────────
+    배율은 **원본 크기에 종속**된다. 우리 코퍼스의 렌더 장변은 이렇게 갈린다.
+
+        tif  748건 중 99.6%  1240x1753          장변 1753
+        pdf  181건 1,120페이지                   장변 1500 ~ **7306**
+             (최대는 A0 도면을 150dpi 로 렌더한 5168x7306)
+
+    여기에 1.47 을 일괄로 주면 tif 는 2576 이 되지만 A0 도면은 10,740 이 된다.
+    포맷마다 글자 해상도가 달라져 A/B 가 성립하지 않고, 큰 쪽은 이미지 토큰이
+    44,518 까지 올라 비용과 모델 상한에 걸린다.
+
+    목표 장변을 주면 **원본과 무관하게 결과가 일정**해지고, 큰 문서는 줄어든다.
+
+    우선순위 — `D2S_UPSCALE` 과 둘 다 설정되면 **이쪽이 이긴다.** 더 구체적인
+    지정이기 때문이다. 미설정이면 기존 배율 경로가 그대로 돈다(하위 호환).
+
+    범위 — 512 ~ 8192 밖은 무시하고 0(끄기)으로 본다. 오타로 극단값이 들어가
+    비용이 폭증하는 것을 막는다.
+    """
+    try:
+        v = int(os.getenv("D2S_LONG_EDGE", "0"))
+    except ValueError:
+        return 0                                        # 숫자가 아니면 끈 것으로 본다
+    return v if 512 <= v <= 8192 else 0
+
+
 def crop_zoom() -> float:
     """재판독 크롭에 추가로 줄 배율. `D2S_CROP_ZOOM`, **기본 1(끄기)**.
 
@@ -169,9 +199,15 @@ def _conditioned(png: str) -> str:
     out = png
     if "holes" in prep_steps():
         out, _n = imageprep.remove_punch_holes(out)
-    k = upscale_factor()
-    if k > 1.0:
-        out = imageprep.upscale(out, k)
+    # 크기 조정은 두 갈래다. 장변 목표가 있으면 그쪽이 이긴다 — 더 구체적인
+    # 지정이고, 배율과 달리 **축소도 하므로** 대형 도면을 줄일 수 있다.
+    edge = target_long_edge()
+    if edge:
+        out = imageprep.resize_long_edge(out, edge)     # 확대·축소 양방향
+    else:
+        k = upscale_factor()                            # 기존 경로 — 확대 전용
+        if k > 1.0:
+            out = imageprep.upscale(out, k)
     return out
 
 
@@ -504,7 +540,10 @@ class VlmParser:
         #   비교 격자가 통째로 무력화된다. 조원이 d2d9255 에서 해상도로 같은
         #   결함을 고쳤다 — 이것은 그 나머지다.
         sysfp = hashlib.sha256(system.encode("utf-8")).hexdigest()[:12]
-        imgfp = f"up{upscale_factor():g}:prep{'+'.join(prep_steps()) or '-'}"
+        # `le` 는 장변 목표(D2S_LONG_EDGE). 배율과 **다른 축**이므로 따로 넣는다 —
+        # 같은 원본이라도 목표가 다르면 모델이 보는 이미지가 달라진다.
+        imgfp = (f"up{upscale_factor():g}:le{target_long_edge()}"
+                 f":prep{'+'.join(prep_steps()) or '-'}")
         imgfp += ":dsk1" if self.deskew else ":dsk0"
         version = (f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}"
                    f":{sysfp}:{imgfp}")

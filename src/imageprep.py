@@ -169,3 +169,49 @@ def upscale(png: str, k: float, out: str | None = None) -> str:
         im = im.convert("L") if im.mode == "1" else im
         im.resize((int(w * k), int(h * k)), Image.LANCZOS).save(out, "PNG")
     return out
+
+
+# ── 장변 맞추기 ─────────────────────────────────────────────────
+
+def resize_long_edge(png: str, edge: int, out: str | None = None) -> str:
+    """장변을 목표 픽셀에 맞춘다. **확대·축소 양방향.**
+
+    `upscale()` 은 배율을 받아 **확대만** 한다. 이 함수는 목표 장변을 받아
+    원본이 크면 줄이고 작으면 키운다 — 포맷이 섞인 코퍼스에서 모델에 가는
+    이미지 크기를 일정하게 만들기 위한 것이다.
+
+    왜 배율로는 안 되는가 (2026-08-26 실측)
+    ─────────────────────────────────────────────────────────
+        tif   748건 중 99.6% 가 1240x1753   (A4 150dpi)
+        pdf   181건 · 페이지 1,120장의 렌더 장변이 **1500 ~ 7306px**
+              최대는 `20FV904-DATA SHEET_REV0.pdf` 의 5168x7306 (A0 를 150dpi)
+
+    배율 1.47 을 일괄로 주면 tif 는 2576 이 되지만 A0 도면은 10,740 이 된다.
+    그 크기는 패치 37,098 개 · 이미지 토큰 44,518 로 tif 한 장(2,574)의 **17배**이고,
+    비용과 모델 상한 양쪽에 걸린다. 장변 목표로 주면 그런 문서가 **줄어든다.**
+
+    보간법
+        축소·확대 모두 LANCZOS 를 쓴다. `upscale()` 과 같은 선택을 유지해
+        두 경로가 서로 다른 결과를 내지 않게 한다 — 같은 소스에서 같은 크기로
+        가면 두 함수의 출력이 픽셀 단위로 동일해야 A/B 가 성립한다.
+
+    입력  : png — 원본 PNG 경로, edge — 목표 장변(px), out — 출력 경로(선택)
+    출력  : 조정된 PNG 경로. 이미 목표 크기면 **입력 경로를 그대로 돌려준다**
+            (파일을 쓸데없이 늘리지 않는다)
+    부수효과: 파일 쓰기. 같은 이름이 이미 있으면 재사용한다
+    """
+    with Image.open(png) as im:
+        w, h = im.size                                  # 원본 크기
+        cur = max(w, h)                                 # 현재 장변
+        if cur == edge or cur == 0:                     # 이미 목표거나 빈 이미지면 손대지 않는다
+            return png
+        k = edge / cur                                  # 확대(>1) 또는 축소(<1) 배율
+        out = out or png.replace(".png", f"_le{edge}.png")
+        if os.path.exists(out):                         # 같은 조건으로 이미 만들어 뒀으면 재사용
+            return out
+        # 1비트는 보간 전에 회색조로 올린다 — 안 그러면 계단이 그대로 남는다.
+        im = im.convert("L") if im.mode == "1" else im
+        # 반올림이 아니라 int() 를 쓴다 — `upscale()` 과 같은 규칙이라야
+        # 같은 소스·같은 목표에서 두 함수가 픽셀 단위로 같은 결과를 낸다.
+        im.resize((max(int(w * k), 1), max(int(h * k), 1)), Image.LANCZOS).save(out, "PNG")
+    return out
