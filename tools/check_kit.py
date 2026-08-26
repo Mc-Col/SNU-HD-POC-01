@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections import Counter
 
@@ -45,6 +46,25 @@ from src.contracts import ParserType, RawExtraction         # noqa: E402
 from src.pipeline import DefaultNormalize                   # noqa: E402
 
 NORM = DefaultNormalize()
+
+
+def _inches(v):
+    """치수 표기를 인치 실수로. 분수·혼합분수를 받는다."""
+    t = str(v or "").strip().replace('"', "")
+    m = re.match(r"^(\d+)-(\d+)/(\d+)$", t)
+    if m:
+        return int(m[1]) + int(m[2]) / int(m[3])
+    m = re.match(r"^(\d+)/(\d+)$", t)
+    if m:
+        return int(m[1]) / int(m[2])
+    m = re.match(r"^([\d.]+)$", t)
+    return float(m[1]) if m else None
+
+
+def _lead_num(v):
+    """앞머리 숫자만. 단위가 붙어 있어도 읽는다."""
+    m = re.match(r"^([\d.]+)", str(v or "").strip().replace(",", ""))
+    return float(m[1]) if m else None
 
 
 def _standard(key: str, value: str, label: str = "") -> str:
@@ -121,9 +141,44 @@ def main(argv=None) -> int:
     if not n_tag:
         print("   없음")
 
+    # ④ 유량계수가 밸브 크기에 비해 말이 되는가.
+    #    Cv 는 대체로 크기의 제곱에 비례한다 — 글로브는 약 10×d², 버터플라이도
+    #    30×d² 를 크게 넘지 않는다. 이 비가 수십 배로 뛰면 그 값은 Cv 가 아니라
+    #    **Cg** 다(Cg = C1 × Cv, C1 은 대개 33~37).
+    #
+    #    실제로 골든셋 5건이 Cg 를 rated_cv 에 담고 있었다. 셀 정합성 검사로는
+    #    하나도 걸리지 않았다 — 숫자로서는 완벽히 정상이었기 때문이다.
+    #    **물리로 재야 보인다.**
+    print("\n── ④ 유량계수가 크기에 비해 말이 되는가 " + "─" * 27)
+    n_cv = 0
+    ratios = []
+    for r in filled:
+        d = _inches(r.truth.get("valve_body_size"))
+        cv = _lead_num(r.truth.get("rated_cv"))
+        if not d or not cv:
+            continue
+        ratio = cv / (d * d)
+        size = r.truth.get("valve_body_size")
+        if ratio > 60:
+            n_cv += 1
+            print(f"   {r.doc_id}  {size} 에 Cv {cv:.0f} → {ratio:.0f}×d²"
+                  f"  🔴 Cg 로 의심된다 (÷35 하면 {ratio / 35:.0f}×d²)")
+        elif ratio > 35:
+            n_cv += 1
+            print(f"   {r.doc_id}  {size} 에 Cv {cv:.0f} → {ratio:.0f}×d²"
+                  f"  ⚠ 원문 확인 필요")
+        else:
+            ratios.append(ratio)
+    if not n_cv:
+        print("   없음")
+    if ratios:
+        ratios.sort()
+        print(f"   (정상 {len(ratios)}건 — 중앙 {ratios[len(ratios) // 2]:.0f}×d²"
+              f" · 최대 {ratios[-1]:.0f}×d²)")
+
     print("\n" + "─" * 66)
     print(f"표준값 불일치 {n_std}칸 · 어휘 밖 {n_vocab}칸 "
-          f"({len(seen)}종) · 태그 불일치 {n_tag}건")
+          f"({len(seen)}종) · 태그 불일치 {n_tag}건 · 유량계수 이상 {n_cv}건")
     print("어휘 밖이 전부 오기는 아니다 — 어휘가 아직 좁을 수 있다. "
           "승인하면 어휘가 자란다.")
     return 0
