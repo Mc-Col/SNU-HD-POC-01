@@ -450,5 +450,63 @@ def test_cv_panel_is_reachable_for_the_required_cv_field():
     at.number_input(key="cv_q_required_cv")          # 없으면 KeyError
 
 
+# ── 배선 · 쪽 전달 (서경빈 선임 보고 5-1 · 5-2) ───────────────
+
+class _NoVlm:
+    """API 를 부르지 않는 가짜 VLM. 배선만 확인한다."""
+
+    def extract(self, path, triage, fields):
+        return []
+
+
+def test_screen_does_not_assemble_its_own_parser(monkeypatch):
+    """배선은 `pipeline.build()` 한 곳에만.
+
+    화면이 손으로 조립하면 DualParser 는 얻어도 **VLM 응답 캐시와 실제
+    Normalizer 를 잃는다.** 캐시가 없으면 같은 문서를 두 번 읽을 때 값이
+    달라져 철학 6 이 깨진다.
+    """
+    from types import SimpleNamespace
+
+    from src import pipeline
+    from src.parsers.text.adapter import TextParser
+    from src.parsers.text.dual import DualParser
+
+    seen = {}
+
+    def spy(**kw):
+        seen.update(kw)
+        return SimpleNamespace(
+            vlm_parser=DualParser(_NoVlm(), TextParser()),
+            normalizer=pipeline.DefaultNormalize())
+
+    monkeypatch.setattr(pipeline, "build", spy)
+    d = source.from_vlm(os.path.join(ROOT, "fixtures", "ui",
+                                     "sample_multipage.pdf"), page=1)
+
+    assert seen, "from_vlm 이 build() 를 부르지 않았다 — 손으로 조립하고 있다"
+    assert seen["use_vlm"] is True
+    assert "텍스트 대조" in d.route_reason      # 두 경로 대조 결과가 화면에 남는다
+    # 텍스트만 나온 후보는 확신도 0 이라 자동확정되지 않는다
+    for r in d.records:
+        if r.raw_value and r.confidence == 0.0:
+            assert r.state is not FieldState.AUTO
+
+
+def test_pipeline_path_uses_the_page_the_human_picked():
+    """쪽 지정 오류는 실측에서 값을 가장 크게 바꾼 결함이다 (d040 46% → 93%)."""
+    src_pdf = os.path.join(ROOT, "fixtures", "ui", "sample_multipage.pdf")
+    d = source.from_pipeline(src_pdf, use_vlm=False, page=4)
+
+    assert d.page_no == 4
+    sel = d.result.triage.selected_page
+    assert sel is not None and sel.page == 4
+    assert "p4" in d.result.triage.reason
+
+    # 쪽을 주지 않으면 Triage 의 판단을 그대로 쓴다 (덮어쓰지 않는다)
+    plain = source.from_pipeline(src_pdf, use_vlm=False)
+    assert "사람이 p" not in plain.result.triage.reason
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

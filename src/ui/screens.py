@@ -160,7 +160,8 @@ def extract_screen() -> None:
             d = source.from_vlm(path, page=session.page(),
                                 only_mvp=session.only_mvp())
         else:
-            d = source.from_pipeline(path, only_mvp=session.only_mvp())
+            d = source.from_pipeline(path, only_mvp=session.only_mvp(),
+                                     page=session.page())
     except Exception as e:                      # 실패를 삼키지 않는다
         hooks.on_error(None, "ui.extract", e)
         st.error(f"추출 실패 — {type(e).__name__}: {e}")

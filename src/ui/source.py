@@ -163,29 +163,71 @@ def from_fixture(path: str | None = None, page_path: str | None = None,
 
 # ── 실제 파이프라인 ───────────────────────────────────────────
 
-def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True) -> UiDoc:
+class _PickedPageTriage:
+    """사람이 고른 쪽을 Triage 결과로 심는다.
+
+    `Pipeline.run_document(path)` 는 쪽 인자를 받지 않고 Triage 에게 묻는다.
+    Triage 가 쪽을 모르면 파서가 1쪽을 읽는다 — 쪽 지정 오류는 실측에서 값을
+    가장 크게 바꾼 결함이었다(홀드아웃 d040 46% → 93%, `docs/eval_history.md`).
+    화면은 사람이 고른 쪽을 알고 있으므로 여기서 주입한다.
+    """
+
+    def __init__(self, page: int) -> None:
+        self.page = max(1, int(page or 1))
+
+    def run(self, path: str):
+        from src.contracts import (DocumentClass, PageClass, PageInfo, Target,
+                                   TriageResult)
+        from src.preprocess import SUPPORTED, caution_reason, parse_filename
+
+        ext = os.path.splitext(path)[1].lower()
+        stats = {"ext": ext, "picked_page": self.page}
+        if ext not in SUPPORTED:
+            return TriageResult(path, DocumentClass.UNSUPPORTED, [], 1.0,
+                                f"미지원 포맷 {ext}", stats)
+        info = parse_filename(path)
+        reason = f"사람이 p{self.page} 를 지정"
+        warn = caution_reason(path)
+        return TriageResult(
+            source_path=path, document_class=DocumentClass.DATASHEET,
+            targets=[Target(page_from=self.page, page_to=self.page)],
+            confidence=0.5, reason=f"{reason} / {warn}" if warn else reason,
+            stats=stats, file_tag=info.tag_raw or "",
+            pages=[PageInfo(page=self.page, page_class=PageClass.SPEC,
+                            selected=True, reason="사람이 고름")],
+        )
+
+
+def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True,
+                  page: int | None = None) -> UiDoc:
     """완성된 모듈을 꽂은 파이프라인으로 처리한다.
 
     배선은 `src.pipeline.build()` 한 곳에만 있다 — 화면과 CLI 가 다른 결과를
     내지 않게 하려는 것이다(2026-08-25 조립).
 
     꽂히지 않은 모듈이 있으면 `build()` 가 사유를 돌려준다. 그것을 화면의
-    판정 근거에 함께 실어, 값이 왜 안 나오는지 사람이 알 수 있게 한다."""
+    판정 근거에 함께 실어, 값이 왜 안 나오는지 사람이 알 수 있게 한다.
+
+    `page` 를 주면 그 쪽을 처리한다 — 주지 않으면 Triage 의 판단을 쓴다."""
     from src.pipeline import build
 
     notes: list[str] = []
+    pg = int(page or 1)
     p = build(only_mvp=only_mvp, use_vlm=use_vlm, notes=notes)
+    if page:
+        p.triage = _PickedPageTriage(pg)
     result = p.run_document(path)
     ext = os.path.splitext(path)[1].lower()
     return UiDoc(
         result=result,
         display_name=os.path.basename(path),
         # tif 는 PDF 뷰어로 못 띄운다 — PNG 로 떠서 넘긴다(대상의 71.9%)
-        page_path=(path if ext == ".pdf" else render_page_png(path)),
+        page_path=(path if ext == ".pdf" else render_page_png(path, pg)),
         size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
         route_reason=" | ".join([result.triage.reason,
                                  *(f"[조립] {n}" for n in notes)]),
         origin="pipeline",
+        page_no=pg,
     )
 
 
@@ -231,8 +273,7 @@ def from_vlm(path: str, *, only_mvp: bool = False,
     from src import schema
     from src.contracts import (DocumentClass, DocumentResult, FailureKind,
                                FieldRecord, PageClass, PageInfo, TriageResult)
-    from src.parsers.vlm.openai_vlm import VlmParser
-    from src.pipeline import DefaultNormalize, _decide
+    from src.pipeline import _decide, build
 
     from src import preprocess
 
@@ -249,7 +290,17 @@ def from_vlm(path: str, *, only_mvp: bool = False,
               if f.source == "document"]
     from src.validate import domain
 
-    parser, norm = VlmParser(), DefaultNormalize()
+    # 부품은 `build()` 에서 꺼낸다 — **배선 지식을 화면이 갖지 않는다.**
+    # 손으로 조립하면 DualParser 는 얻어도 VLM 응답 캐시와 실제 Normalizer 를
+    # 잃는다. 캐시가 없으면 같은 문서를 두 번 읽을 때 값이 달라져(실측: 합의율
+    # 71% ↔ 100%) 철학 6 이 깨지고, 시연에서 두 번 돌리면 다른 화면이 나온다.
+    #
+    # DualParser 로 두 경로가 함께 돈다 — VLM 이 필드 배정의 주인이고 텍스트는
+    # 글자를 보증한다. tif 는 TEXT_EXT 밖이라 텍스트 경로가 비고, 그때는
+    # 대조 없이 VLM 단독과 같아진다. 그 사실이 route_reason 에 그대로 남는다.
+    notes: list[str] = []
+    built = build(only_mvp=only_mvp, use_vlm=True, notes=notes)
+    parser, norm = built.vlm_parser, built.normalizer
     raws = parser.extract(path, triage, fields)
     context = {e.field_key: e for e in raws}
     doc_id = os.path.basename(path)
@@ -294,11 +345,29 @@ def from_vlm(path: str, *, only_mvp: bool = False,
         display_name=os.path.basename(path),
         page_path=render_page_png(path, pg),
         size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
-        route_reason=triage.reason,
+        route_reason=_join_reason(triage.reason,
+                                  getattr(parser, "last_summary", None), notes),
         origin="vlm",
         page_no=pg,
         raws=context,
     )
+
+
+def _join_reason(reason: str, summary: dict[str, int] | None,
+                 notes: list[str] | None = None) -> str:
+    """두 경로 대조 결과와 조립 관찰을 화면에 한 줄로 남긴다.
+
+    "두 경로가 독립으로 읽어 대조한다" 를 말하려면 그 숫자가 화면에 있어야 한다.
+    0 인 항목은 적지 않는다 — tif 는 텍스트 경로가 비어 전부 `VLM만` 으로 나온다.
+    조립에 실패한 모듈이 있으면 그 사유도 함께 — 값이 왜 안 나오는지 화면에서 보이게.
+    """
+    parts = [reason]
+    if summary:
+        got = " · ".join(f"{k} {v}" for k, v in summary.items() if v)
+        if got:
+            parts.append(f"텍스트 대조 — {got}")
+    parts += [f"[조립] {n}" for n in (notes or [])]
+    return " / ".join(p for p in parts if p)
 
 
 def ensure_fixture_page(multi: bool = False) -> str:
