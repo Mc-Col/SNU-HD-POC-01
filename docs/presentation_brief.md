@@ -281,7 +281,7 @@
 
 | | |
 |---|---|
-| 아티팩트 (최신) | https://claude.ai/code/artifact/8764efaf-9875-4b72-b563-e92801eabece |
+| 아티팩트 (8/26판) | https://claude.ai/code/artifact/8764efaf-9875-4b72-b563-e92801eabece — ⚠️ **8/27 실험 미반영**(영어 지시문 기각 · 기본값 승격). 숫자와 판정은 **이 브리프가 최신이다** |
 | 아티팩트 (8/25판) | https://claude.ai/code/artifact/0f46278d-26d7-46b2-a1b0-1618d416e2d1 |
 | 실행 이력 · 판정 근거 | `docs/eval_history.md` |
 | 인사이트 62건 | `docs/insight_memory.md` |
