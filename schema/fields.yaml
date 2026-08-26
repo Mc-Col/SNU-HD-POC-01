@@ -90,7 +90,6 @@ fields:
     threshold: 0.90
     aliases:
       - "Model"
-      - "Model #"
       - "Model Number"
       - "VALVE BODY/BONNET Model"
       - "VALVE BODY/BONNET Model No."
@@ -510,7 +509,10 @@ fields:
     name: "POSITIONER MODEL NO."
     group: "포지셔너"
     db_code: "INS_148"
-    desc: "포지셔너 모델 번호"
+    desc: "포지셔너 **제품군 이름(시리즈명)**. 예: Logix 3800 Series · 3582G · IP8000.
+      ⚠ `Model #` 옆의 주문 코드가 아니다 — `3821-28EA-D41L-0130-00` 같은 긴 코드는
+      주문용이고 자산 마스터에는 시리즈명을 쓴다(2026-08-27 결정). 문서에 두 표기가
+      함께 있으면 짧은 시리즈명 쪽이다."
     required: true
     safety: normal
     source: document
@@ -520,6 +522,5 @@ fields:
       - "Positioner"
       - "Positioner Model"
       - "Model"
-      - "Model #"
       - "Model No."
       - "POSITIONER Model No. / Mfr."
