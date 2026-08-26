@@ -85,8 +85,8 @@ class NormalizeModule(Protocol):
         """(표준값, transform_trace) 를 반환한다.
 
         context 로 **앞서 확정된 다른 필드의 값**을 받는다. 문서에 글자로 적혀
-        있지 않은 파생 필드(`type_name` ← 태그, `fluid_state` ← 유체명)를 규칙으로
-        채우기 위한 것이다. 규칙은 `schema/rules.yaml` 의 `derived_fields` 에 둔다.
+        있지 않은 파생 필드(`type_name` ← 태그의 설비종류)를 규칙으로 채우기 위한
+        것이다. 규칙은 `schema/rules.yaml` 의 `derived_fields` 에 둔다.
 
         `context` 를 받지 않는 구형 구현도 계속 동작한다 — 호출부가 TypeError 를
         잡아 2인자로 다시 부른다(`reread` 의 attempt 확장 때와 같은 방식).
