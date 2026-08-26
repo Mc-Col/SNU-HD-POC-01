@@ -241,9 +241,11 @@ def _origin_note(col, page: int) -> None:
         col.markdown("<div class='d2s-raw'>합성 픽스처 — 판독하지 않고 저장된 "
                      "결과를 보여줍니다</div>", unsafe_allow_html=True)
     elif session.use_vlm():
-        from src import models
+        from src import models, schema
+        meta = schema.summary()
+        n = meta["mvp"] if session.only_mvp() else meta["field_count"]
         col.markdown(f"<div class='d2s-raw'>{models.for_attempt(0).name} 로 "
-                     f"p{page} 판독 · MVP 대상 필드</div>", unsafe_allow_html=True)
+                     f"p{page} 판독 · {n}필드</div>", unsafe_allow_html=True)
     else:
         col.markdown("<div class='d2s-raw'>규칙 경로 — 스캔 문서는 값이 "
                      "나오지 않습니다</div>", unsafe_allow_html=True)

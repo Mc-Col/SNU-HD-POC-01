@@ -62,6 +62,14 @@ def main_screen() -> None:
             help="끄면 규칙 경로만 씁니다. 스캔 문서는 값이 나오지 않습니다 — "
                  "대상의 71.9% 가 스캔이기 때문입니다.")
         session.set_use_vlm(bool(use_vlm))
+        meta = schema.summary()
+        only_mvp = st.toggle(
+            f"MVP {meta['mvp']}필드만 판독", value=session.only_mvp(),
+            key="tg_mvp",
+            help=f"끄면 전체 {meta['field_count']}필드를 뽑습니다(기본). "
+                 f"켜면 토큰과 검토 시간이 줄지만, 발표 숫자가 전체 기준이라 "
+                 f"시연도 전체로 두는 편이 설명이 쉽습니다.")
+        session.set_only_mvp(bool(only_mvp))
         st.caption("읽을 쪽은 다음 화면에서 지면을 보고 고릅니다.")
 
         st.markdown("---")
@@ -149,9 +157,10 @@ def extract_screen() -> None:
         if origin == "fixture":
             d = source.from_fixture(page_path=path, page=session.page())
         elif origin == "vlm" and session.use_vlm():
-            d = source.from_vlm(path, page=session.page())
+            d = source.from_vlm(path, page=session.page(),
+                                only_mvp=session.only_mvp())
         else:
-            d = source.from_pipeline(path)
+            d = source.from_pipeline(path, only_mvp=session.only_mvp())
     except Exception as e:                      # 실패를 삼키지 않는다
         hooks.on_error(None, "ui.extract", e)
         st.error(f"추출 실패 — {type(e).__name__}: {e}")

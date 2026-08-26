@@ -208,8 +208,12 @@ def render_page_png(path: str, page: int = 1) -> str | None:
         return None
 
 
-def from_vlm(path: str, *, only_mvp: bool = True, page: int | None = None) -> UiDoc:
+def from_vlm(path: str, *, only_mvp: bool = False,
+             page: int | None = None) -> UiDoc:
     """실제 문서를 VLM 으로 읽어 화면용 결과를 만든다.
+
+    기본은 **전체 28필드**다 (2026-08-25 결정 — 발표 헤드라인이 28필드다).
+    슬라이드는 28인데 시연이 9면 나머지 19개를 묻게 된다.
 
     page 를 주지 않으면 1페이지를 읽는다. 사양표 페이지 자동 선택은 Triage
     구현 후에 붙는다 — 지금은 사람이 화면에서 페이지를 고른다.

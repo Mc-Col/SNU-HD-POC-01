@@ -180,6 +180,19 @@ def use_vlm() -> bool:
     return bool(st.session_state.get("use_vlm", True))
 
 
+def set_only_mvp(v: bool) -> None:
+    st.session_state["only_mvp"] = bool(v)
+
+
+def only_mvp() -> bool:
+    """MVP 9필드만 판독할지. **기본은 전체 28필드다** (2026-08-25 결정).
+
+    발표 헤드라인을 28필드로 내기로 했으므로 화면도 28필드를 보여준다 —
+    슬라이드는 28인데 시연은 9면 "나머지 19개는?" 을 임원이 묻는다.
+    """
+    return bool(st.session_state.get("only_mvp", False))
+
+
 def set_page(n: int) -> None:
     st.session_state["vlm_page"] = max(1, int(n))
 
