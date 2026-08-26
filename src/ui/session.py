@@ -17,9 +17,11 @@ from src.contracts import FieldRecord, FieldState
 from src.hooks import hooks
 from src.ui.source import UiDoc
 
-# 화면 6단계 — 화면정의서와 같은 순서
+# 화면 6단계 — 화면정의서와 같은 순서. APPROVE 는 흐름 밖의 별도 화면이다
+# (문서 하나가 아니라 **실행 전체**의 후보를 한 번에 본다).
 MAIN, UPLOAD, CONFIRM, EXTRACT, HITL, DONE = (
     "main", "upload", "confirm", "extract", "hitl", "done")
+APPROVE = "approve"
 
 _STAGE = "stage"
 _DOC = "doc"
@@ -29,6 +31,7 @@ _ORIGIN = "origin"
 _RUN = "run_started"
 _ONLY_UNRESOLVED = "only_unresolved"
 _WHO = "reviewer"
+_CANDS = "page_candidates"
 
 
 def init() -> None:
@@ -40,6 +43,7 @@ def init() -> None:
     ss.setdefault(_ORIGIN, "fixture")
     ss.setdefault(_ONLY_UNRESOLVED, False)
     ss.setdefault(_WHO, "")
+    ss.setdefault(_CANDS, [])
 
 
 def stage() -> str:
@@ -89,6 +93,13 @@ def selected(key: str | None = None, *, toggle: bool = False) -> str | None:
     return ss.get(_SEL)
 
 
+def page_candidates(v: list[int] | None = None) -> list[int]:
+    """사람이 사양표 후보로 지목한 쪽. 규칙과 대조할 때 같은 후보집합을 쓴다."""
+    if v is not None:
+        st.session_state[_CANDS] = list(v)
+    return list(st.session_state.get(_CANDS) or [])
+
+
 def reviewer() -> str:
     """검토자 이름. 사람의 판단과 규칙 메모에 누가 썼는지 남기기 위한 것."""
     return (st.session_state.get(_WHO) or "").strip() or "reviewer"
@@ -102,20 +113,29 @@ def only_unresolved(value: bool | None = None) -> bool:
 
 # ── 로그 ──────────────────────────────────────────────────────
 
-def _start_run(d: UiDoc) -> None:
-    """문서 1건당 검증 세션 로그를 하나 연다. runs/hitl-<doc_id>/ 에 append."""
+def ensure_run(key: str, **meta) -> None:
+    """검증 세션 로그를 연다. **파일 하나당 하나**이고 여러 번 불러도 안전하다.
+
+    쪽 선택은 추출보다 먼저 일어난다. 그때 실행이 열려 있지 않으면 훅이
+    쓸 곳이 없어 이벤트가 조용히 버려진다 — 자동 선택 정확도를 공짜로
+    측정하려던 것이 통째로 사라진다. 그래서 파일 이름으로 미리 연다.
+    """
     ss = st.session_state
-    if ss.get(_RUN) == d.result.doc_id:
+    if not key or ss.get(_RUN) == key:
         return
     try:
-        hooks.start_run(
-            f"hitl-{d.result.doc_id}", schema.config_hashes(),
-            {"stage": "hitl", "origin": d.origin, "source": d.display_name,
-             "fields": len(d.records)},
-        )
-        ss[_RUN] = d.result.doc_id
+        hooks.start_run(f"hitl-{key}", schema.config_hashes(),
+                        {"source": key, **meta})
+        ss[_RUN] = key
     except Exception:
         pass          # 로깅 실패가 화면을 죽이지 않는다
+
+
+def _start_run(d: UiDoc) -> None:
+    import os
+    key = os.path.basename(pending() or "") or d.display_name
+    ensure_run(key, stage="hitl", origin=d.origin, fields=len(d.records),
+               doc_id=d.result.doc_id)
 
 
 def apply_human(rec: FieldRecord, action: str, value: str | None = None,

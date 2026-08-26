@@ -1,0 +1,73 @@
+{
+  "_readme": [
+    "사전 승인 화면 검증용 합성 후보. 회사 문서를 쓰지 않는다.",
+    "실물 형식과 같다 — eval/harness --emit 이 남기는",
+    "runs/raw/<id>/vocab_candidates.json 과 키가 동일하다.",
+    "쓰기: vocabulary.as_rows() 의 반환 그대로 + summary.",
+    "correctable=false 인 재질·안전 필드에는 '다른 표기' 선택지가 뜨면 안 된다 —",
+    "CS 를 C5 로 바꾸는 것은 탄소강을 크롬몰리강으로 바꿔치기하는 일이다."
+  ],
+  "summary": {"candidates": 6, "observations": 21, "fields": 6},
+  "rows": [
+    {
+      "field_key": "manufacturer",
+      "value": "FISHER CONTROLS",
+      "count": 6,
+      "docs": "d001, d002, d005, d012, d018, d021",
+      "labels": "Maker · Manufacturer",
+      "nearest": "FISHER",
+      "correctable": true,
+      "note": ""
+    },
+    {
+      "field_key": "characteristic",
+      "value": "EQ%",
+      "count": 5,
+      "docs": "d003, d006, d011, d017, d023",
+      "labels": "Char. · Flow Characteristic",
+      "nearest": "EQUAL PERCENTAGE",
+      "correctable": true,
+      "note": ""
+    },
+    {
+      "field_key": "valve_body_rating",
+      "value": "CL.300",
+      "count": 4,
+      "docs": "d004, d009, d014, d020",
+      "labels": "Rating",
+      "nearest": "300#",
+      "correctable": true,
+      "note": ""
+    },
+    {
+      "field_key": "valve_body_material",
+      "value": "CS",
+      "count": 3,
+      "docs": "d004, d007, d019",
+      "labels": "Body Material",
+      "nearest": "C5",
+      "correctable": false,
+      "note": "표시 전용 필드 — 값을 바꾸는 규칙이 붙지 않는다"
+    },
+    {
+      "field_key": "valve_stem_material",
+      "value": "Std.",
+      "count": 2,
+      "docs": "d011, d013",
+      "labels": "Stem Material",
+      "nearest": "",
+      "correctable": false,
+      "note": "1986 Fisher 양식의 체크박스. 비어 있는 것과 다르다"
+    },
+    {
+      "field_key": "valve_seat_material",
+      "value": "SCS14A + STELL.",
+      "count": 1,
+      "docs": "d011",
+      "labels": "Seat Ring Material",
+      "nearest": "SCS14A + STELLITE",
+      "correctable": false,
+      "note": ""
+    }
+  ]
+}

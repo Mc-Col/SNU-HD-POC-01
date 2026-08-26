@@ -353,6 +353,23 @@ GUIDANCE_HEADER = """# 판단 지침 — 자연어 규칙
 """
 
 
+class _BlockDumper(yaml.SafeDumper):
+    """여러 줄 글은 `|` 블록으로 쓴다.
+
+    기본 덤퍼는 줄바꿈을 따옴표 문자열로 접어 버린다. 그러면 이 파일이
+    **도메인 전문가가 읽고 고치는 산출물**이라는 성질을 잃는다 — 화면에서
+    한 번 저장할 때마다 손으로 쓴 문단이 기계 출력처럼 변한다.
+    """
+
+
+def _block_str(dumper, data):
+    style = "|" if "\n" in data else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_BlockDumper.add_representer(str, _block_str)
+
+
 def guidance(field_key: str) -> dict[str, Any] | None:
     """이 필드의 판단 지침. 없으면 None."""
     return ((_guidance_doc().get("fields") or {}).get(field_key)) or None
@@ -388,8 +405,8 @@ def set_guidance(field_key: str, text: str, by: str = "", today: str = "") -> st
         fields.pop(field_key, None)          # 빈 글은 삭제로 취급
 
     doc["fields"] = fields
-    body = yaml.safe_dump(doc, allow_unicode=True, sort_keys=False,
-                          default_flow_style=False, width=88)
+    body = yaml.dump(doc, Dumper=_BlockDumper, allow_unicode=True,
+                     sort_keys=False, default_flow_style=False, width=88)
     with open(GUIDANCE_PATH, "w", encoding="utf-8", newline="\n") as f:
         f.write(GUIDANCE_HEADER + body)
     _guidance_doc.cache_clear()

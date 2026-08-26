@@ -62,10 +62,7 @@ def main_screen() -> None:
             help="끄면 규칙 경로만 씁니다. 스캔 문서는 값이 나오지 않습니다 — "
                  "대상의 71.9% 가 스캔이기 때문입니다.")
         session.set_use_vlm(bool(use_vlm))
-        page = st.number_input(
-            "읽을 페이지", min_value=1, max_value=99, value=1, step=1, key="in_page",
-            help="사양표가 있는 페이지입니다. 자동 선택은 Triage 구현 후에 붙습니다.")
-        session.set_page(int(page))
+        st.caption("읽을 쪽은 다음 화면에서 지면을 보고 고릅니다.")
 
         st.markdown("---")
         st.caption("모듈이 붙기 전에도 화면을 검증할 수 있게 합성 픽스처를 둡니다. "
@@ -74,6 +71,18 @@ def main_screen() -> None:
             session.pending(source.ensure_fixture_page())
             session.origin("fixture")
             session.go(session.CONFIRM)
+        if st.button("합성 다중 페이지 — 쪽 고르기 시연", key="btn_fixture_multi",
+                     help="사양표가 2장이고 하나는 1986년 폐기본입니다. "
+                          "폐기 표시가 손글씨라 축소 이미지로는 가릴 수 없습니다"):
+            session.pending(source.ensure_fixture_page(multi=True))
+            session.origin("fixture")
+            session.go(session.CONFIRM)
+
+        st.markdown("---")
+        st.caption("실행이 끝난 뒤 어휘 밖 값을 **한 번에** 승인합니다 — "
+                   "문서마다 물으면 읽지 않고 승인하게 됩니다.")
+        if st.button("사전 승인 화면", key="btn_approve_open"):
+            session.go(session.APPROVE)
 
     with right:
         meta = schema.summary()
@@ -103,35 +112,20 @@ def upload_screen() -> None:
     session.go(session.CONFIRM)
 
 
-# ── 3 · 확인 ──────────────────────────────────────────────────
+# ── 3 · 쪽 고르기 ─────────────────────────────────────────────
 
 def confirm_screen() -> None:
+    """어느 쪽을 판독할지 사람이 고른다. 구현은 `pages.py` 에 있다.
+
+    쪽 선택을 사람이 하기로 정했으므로(2026-08-25) 이 화면은 파이프라인의
+    일부다 — 자동 선별에 쓰던 문서당 3,500 토큰이 여기서 사라진다.
+    """
+    from src.ui import pages
+
     path = session.pending()
     if not path:
         session.go(session.MAIN)
-
-    st.subheader("확인")
-    name = ("19-FV-001.pdf (합성 픽스처)" if session.origin() == "fixture"
-            else os.path.basename(path))
-    st.markdown(f"<span class='d2s-code'>{name} "
-                f"({os.path.getsize(path) // 1000} kB)</span>",
-                unsafe_allow_html=True)
-    if session.origin() == "vlm" and session.use_vlm():
-        from src import models, preprocess
-        warn = preprocess.caution_reason(path)
-        st.caption(f"**{models.for_attempt(0).name}** 로 {session.page()}페이지를 "
-                   f"판독합니다. MVP 대상 필드만 먼저 뽑습니다.")
-        if warn:
-            st.warning(f"이 문서는 {warn}")
-    else:
-        st.caption("규칙 경로로 처리합니다. 스캔 문서는 값이 나오지 않습니다.")
-
-    c1, c2, _ = st.columns([1, 1, 3])
-    if c1.button("변환 시작 ≫", type="primary", use_container_width=True,
-                 key="btn_start"):
-        session.go(session.EXTRACT)
-    if c2.button("≪ 돌아가기", use_container_width=True, key="btn_back"):
-        session.reset()
+    pages.render(path)
 
 
 # ── 4 · 추출 ──────────────────────────────────────────────────
@@ -153,7 +147,7 @@ def extract_screen() -> None:
     try:
         origin = session.origin()
         if origin == "fixture":
-            d = source.from_fixture()
+            d = source.from_fixture(page_path=path, page=session.page())
         elif origin == "vlm" and session.use_vlm():
             d = source.from_vlm(path, page=session.page())
         else:
@@ -203,6 +197,8 @@ def done_screen() -> None:
     with c3:
         if st.button("새로운 작업 시작", use_container_width=True, key="btn_new"):
             session.reset()
+        if st.button("사전 승인 화면", use_container_width=True, key="btn_approve"):
+            session.go(session.APPROVE)
 
     with st.expander("무엇이 기록되었나"):
         st.caption(f"검증 이력은 runs/hitl-{res.doc_id}/ 에 남습니다 — "

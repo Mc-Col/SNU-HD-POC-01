@@ -24,3 +24,7 @@ runs/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# 워크트리 — 병합·실험용 임시 체크아웃이다. 안에 .env 링크가 들어갈 수 있다.
+# 줄 끝 주석은 동작하지 않으므로 주석은 따로 줄을 쓴다.
+.claude/worktrees/
