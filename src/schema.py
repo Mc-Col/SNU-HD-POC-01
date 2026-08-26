@@ -447,6 +447,26 @@ def summary() -> dict[str, Any]:
     }
 
 
+# ── 파생 필드 (다른 필드에서 도출) ────────────────────────────
+#
+# `model_to_manufacturer` 와 같은 성격이다 — 문서에 없는 값을 규칙으로 채운다.
+# 다른 점은 **다른 필드의 값을 재료로 쓴다**는 것이고, 그래서 ④ Normalize 가
+# `context` 를 받아야 한다.
+
+def derived_fields() -> dict[str, Any]:
+    """필드키 → 도출 규칙. 기능이 꺼져 있으면 빈 dict."""
+    doc = _rules_doc().get("derived_fields") or {}          # rules.yaml 의 블록
+    if not doc.get("enabled"):                              # 스위치가 꺼져 있으면 도출하지 않는다
+        return {}
+    return {k: v for k, v in doc.items()                    # enabled 키는 규칙이 아니므로 뺀다
+            if k != "enabled" and isinstance(v, dict)}
+
+
+def derivation_for(field_key: str) -> dict[str, Any] | None:
+    """이 필드에 도출 규칙이 있으면 반환. 없으면 None."""
+    return derived_fields().get(field_key)                  # 없으면 하류가 지금과 동일하게 동작
+
+
 def reload() -> None:
     """yaml 을 수정한 뒤 캐시를 비운다 (개발 중 사용)."""
     for fn in (_fields_doc, _rules_doc, _guidance_doc, all_fields, _by_key):

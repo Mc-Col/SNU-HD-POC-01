@@ -901,3 +901,32 @@ sections:
 # 스키마에 아직 없는 field key 를 적어도 된다. 그 조각은 미매핑으로 남고,
 # 필드가 추가되는 순간 규칙 수정 없이 자동으로 붙는다.
 
+
+derived_fields:
+  enabled: true
+
+  type_name:
+    from: engineering_tag_no
+    how: tag_kind                  # 태그의 설비종류 두세 글자로 판정
+    map:
+      FV: "Flow Control Valve"
+      LV: "Level Control Valve"
+      PV: "Pressure Control Valve"
+      TV: "Temperature Control Valve"
+      HV: "Hand Valve"
+      XV: "On-Off Valve"
+      PCV: "Pressure Control Valve"
+      PDV: "Pressure Differential Valve"
+      FCV: "Flow Control Valve"
+      LCV: "Level Control Valve"
+      TCV: "Temperature Control Valve"
+    exceptions:
+      - "11-LV-001 은 LV 태그인데 골든셋 정답이 Flow Control Valve 다"
+      - "22-PCV-013 은 PCV 인데 정답이 Direct Operated Regulator 다 (레귤레이터 계열)"
+      - "→ 태그만으로는 확정되지 않는다. 그래서 REVIEW 로 보낸다"
+
+  # fluid_state 는 도출하지 않는다 (2026-08-26 협의).
+  #   유체명만으로는 상태를 확정할 수 없는 경우가 있다 — 같은 유체가 공정 조건에
+  #   따라 액체이기도 기체이기도 하고, 이상(two-phase) 흐름도 있다. 골든셋 30건에서
+  #   낱말 규칙(STEAM/GAS → GAS)이 전부 맞았지만 그것은 표본이 좁아서다.
+  #   ③-b 가 문서에서 못 읽으면 채우지 않고 NA 로 둔다 — 사람이 판단한다.
