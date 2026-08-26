@@ -182,6 +182,27 @@ def crop_zoom() -> float:
     return v if 1.0 <= v <= 6.0 else 1.0
 
 
+def upscale_cap() -> int:
+    """확대 후 장변 상한(px). `D2S_UPSCALE_CAP`, 기본 5000. 0 이면 무제한.
+
+    배율(`D2S_UPSCALE`)은 **원본 크기에 종속**된다. 코퍼스 렌더 장변이
+    1500~7306px 로 갈리므로(A0 도면을 150dpi 로 렌더한 5168x7306) 2배를 일괄로
+    주면 14,612px 이 되고 이미지 토큰이 44,000 을 넘어 비용과 모델 상한에 걸린다.
+
+    **상한만 건다.** 골든셋+홀드아웃 35건의 2배 확대 후 최대 장변은 4678px 이라
+    기본값 5000 은 **측정 대상 전부를 손대지 않는다.** 대형 도면만 잘린다.
+
+    장변 목표(`D2S_LONG_EDGE`)로 바꾸지 않은 이유 — 2026-08-27 실측에서
+    홀드아웃이 반대로 나왔다(관대 87% → 81%, 세 문서가 각각 −3칸, 뭉침·방향·기전
+    모두 있음). **작아진 문서가 나빠진다.** 확대는 유지하고 상한만 건다.
+    """
+    try:
+        v = int(os.getenv("D2S_UPSCALE_CAP", "5000"))
+    except ValueError:
+        return 5000
+    return v if v == 0 or 1024 <= v <= 16384 else 5000
+
+
 def prep_steps() -> tuple[str, ...]:
     """`D2S_PREP` 에 적힌 이미지 조정 단계. 쉼표로 구분한다."""
     v = os.getenv("D2S_PREP", "")
@@ -208,6 +229,13 @@ def _conditioned(png: str) -> str:
         k = upscale_factor()                            # 기존 경로 — 확대 전용
         if k > 1.0:
             out = imageprep.upscale(out, k)
+            # 상한 — 대형 도면만 자른다. 우리 측정 대상(최대 4678px)은 안 걸린다.
+            cap = upscale_cap()
+            if cap:
+                from PIL import Image as _Image
+                with _Image.open(out) as _im:
+                    if max(_im.size) > cap:
+                        out = imageprep.resize_long_edge(out, cap)
     return out
 
 
@@ -542,7 +570,8 @@ class VlmParser:
         sysfp = hashlib.sha256(system.encode("utf-8")).hexdigest()[:12]
         # `le` 는 장변 목표(D2S_LONG_EDGE). 배율과 **다른 축**이므로 따로 넣는다 —
         # 같은 원본이라도 목표가 다르면 모델이 보는 이미지가 달라진다.
-        imgfp = (f"up{upscale_factor():g}:le{target_long_edge()}"
+        imgfp = (f"up{upscale_factor():g}:cap{upscale_cap()}"
+                 f":le{target_long_edge()}"
                  f":prep{'+'.join(prep_steps()) or '-'}")
         imgfp += ":dsk1" if self.deskew else ":dsk0"
         version = (f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}"
