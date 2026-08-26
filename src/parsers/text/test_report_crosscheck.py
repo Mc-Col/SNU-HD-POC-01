@@ -76,3 +76,36 @@ def test_처리_실패를_표에_드러낸다():
 def test_대조가_없으면_없다고_적는다():
     md = render([], Counter(), use_vlm=False)
     assert "두 경로 대조 없음" in md
+
+
+# ── 대조 커버리지 (2026-08-26) ──────────────────────────────────
+
+
+def test_합의율만_내지_않고_대조_범위를_함께_적는다():
+    """합의율은 **대조가 가능했던 칸에서만** 잰 값이다.
+
+    커버리지를 안 적으면 "합의 96%" 가 전체 정확도로 읽힌다. 실측에서 전체
+    229칸 중 52칸(23%)에서만 두 경로가 서로를 검증했다 — 스캔 문서는 텍스트
+    층이 없어 애초에 대조 대상이 아니고, 엑셀은 VLM 을 부르지 않는다.
+    """
+    results = [
+        {"doc": "d001", "file": "a.pdf", "state": "채점", "labeler": "사람",
+         "path": "VLM+텍스트", "hit": 5, "miss": 1, "agree": 4, "conflict": 1, "bad": []},
+        {"doc": "d002", "file": "b.tif", "state": "채점", "labeler": "사람",
+         "path": "VLM+텍스트", "hit": 3, "miss": 2, "agree": 0, "conflict": 0, "bad": []},
+    ]
+    tot = Counter({"맞음": 8, "틀림": 3, "합의": 4, "불일치": 1,
+                   "대조된 문서": 1, "VLM 단독": 1, "텍스트 단독": 0,
+                   "맞음:사람": 8, "틀림:사람": 3})
+    md = render(results, tot, use_vlm=True)
+    assert "대조 범위" in md
+    assert "11칸 중 **5칸(45%)**" in md or "5칸" in md
+    assert "VLM 단독" in md and "대조 불가" in md
+
+
+def test_경로별_문서_수를_드러낸다():
+    """어느 경로에 검증 장치가 없는지 보이지 않으면 개선 대상을 못 정한다."""
+    tot = Counter({"맞음": 1, "틀림": 0, "합의": 1, "불일치": 0,
+                   "대조된 문서": 9, "VLM 단독": 15, "텍스트 단독": 6})
+    md = render([], tot, use_vlm=True)
+    assert "| 9 |" in md and "| 15 |" in md and "| 6 |" in md
