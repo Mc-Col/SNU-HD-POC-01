@@ -1,0 +1,755 @@
+<title>파이프라인 대조 · 외부 레퍼런스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F7F8F6; --surface:#FFFFFF; --sheet:#FBFBF9;
+  --ink:#16202B; --ink-2:#3D4954; --ink-3:#6B7681;
+  --rule:#D9DDD8; --rule-2:#E9ECE8;
+  --accent:#1F4E6B; --accent-soft:#E7EDF1; --accent-ink:#FFFFFF;
+  --auto:#2E7D5B; --auto-soft:#E4EFE9;
+  --review:#A9701C; --review-soft:#F6EEDF;
+  --na:#8B4A52; --na-soft:#F3E7E8;
+  --ours:#1F4E6B; --ours-soft:#E7EDF1;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans KR","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#121A22; --surface:#18222C; --sheet:#141D26;
+  --ink:#E3E8EA; --ink-2:#B4BFC7; --ink-3:#8A97A1;
+  --rule:#2C3944; --rule-2:#222D37;
+  --accent:#6BA6C9; --accent-soft:#1D2E3B; --accent-ink:#0E1620;
+  --auto:#5FB98D; --auto-soft:#172C23;
+  --review:#D8A24E; --review-soft:#2E2517;
+  --na:#C4838B; --na-soft:#2B1D1F;
+  --ours:#6BA6C9; --ours-soft:#1D2E3B;
+}}
+:root[data-theme="dark"]{
+  --ground:#121A22; --surface:#18222C; --sheet:#141D26;
+  --ink:#E3E8EA; --ink-2:#B4BFC7; --ink-3:#8A97A1;
+  --rule:#2C3944; --rule-2:#222D37;
+  --accent:#6BA6C9; --accent-soft:#1D2E3B; --accent-ink:#0E1620;
+  --auto:#5FB98D; --auto-soft:#172C23;
+  --review:#D8A24E; --review-soft:#2E2517;
+  --na:#C4838B; --na-soft:#2B1D1F;
+  --ours:#6BA6C9; --ours-soft:#1D2E3B;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 26px 110px}
+
+header{border-bottom:1px solid var(--rule);margin-bottom:14px;padding:52px 0 26px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+h1{font-size:clamp(29px,4.4vw,42px);line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+.lede{font-size:17px;color:var(--ink-2);margin:0 0 24px;max-width:64ch;font-weight:300}
+.meta{display:flex;flex-wrap:wrap;gap:6px 26px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.meta b{color:var(--ink-2);font-weight:500}
+
+section{margin:0 0 64px;scroll-margin-top:20px}
+h2{font-size:13px;font-family:var(--mono);font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+.h2sub{font-size:24px;font-weight:600;letter-spacing:-.015em;margin:0 0 8px;line-height:1.25;text-wrap:balance}
+.note{color:var(--ink-2);font-size:14.5px;max-width:66ch;margin:0 0 24px}
+h3{font-size:17px;font-weight:600;margin:34px 0 10px;letter-spacing:-.01em}
+p{margin:0 0 14px}
+code{font-family:var(--mono);font-size:.875em;background:var(--accent-soft);padding:.12em .38em;border-radius:3px}
+.tiny{font-size:12px;color:var(--ink-3);line-height:1.55}
+
+/* ── 정규 단계 정의 ── */
+.axis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));margin:0 0 8px}
+.ax{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:12px 14px;border-top:3px solid var(--accent)}
+.ax .k{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.06em}
+.ax .t{font-weight:600;font-size:14px;margin:3px 0 2px;letter-spacing:-.01em}
+.ax .d{font-size:12px;color:var(--ink-3);line-height:1.5}
+
+/* ── 매트릭스 ── */
+.mx-scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface);margin:0 0 12px}
+.mx{min-width:1080px}
+.mx-row{display:grid;grid-template-columns:150px repeat(7,1fr);border-bottom:1px solid var(--rule-2)}
+.mx-row:last-child{border-bottom:none}
+.mx-head{position:sticky;top:0;background:var(--ground);z-index:2}
+.mx-head .c{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);padding:10px 10px;border-left:1px solid var(--rule-2);font-weight:600}
+.mx-head .c:first-child{border-left:none}
+.lbl{padding:14px 12px;background:var(--sheet);display:flex;flex-direction:column;gap:3px;justify-content:center}
+.lbl .nm{font-weight:600;font-size:13.5px;letter-spacing:-.01em;line-height:1.3}
+.lbl .src{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.lane.ours .lbl{background:var(--ours-soft);box-shadow:inset 3px 0 0 var(--ours)}
+.c{padding:11px 10px;border-left:1px solid var(--rule-2);font-size:12px;line-height:1.5;color:var(--ink-2)}
+.c .cn{display:block;font-weight:600;color:var(--ink);font-size:12.5px;margin-bottom:2px;letter-spacing:-.005em}
+.c.none{color:var(--ink-3);font-family:var(--mono);font-size:11px;
+  background:repeating-linear-gradient(135deg,transparent 0 6px,var(--rule-2) 6px 7px);
+  display:flex;align-items:center;justify-content:center}
+.c.thick{background:var(--accent-soft)}
+.c.gap{background:var(--na-soft);box-shadow:inset 0 -3px 0 var(--na)}
+.c.mark{box-shadow:inset 0 -3px 0 var(--auto)}
+.c.mark2{box-shadow:inset 0 -3px 0 var(--review)}
+.tag{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:600;
+  padding:0 5px;border-radius:3px;margin-right:4px;vertical-align:1px;letter-spacing:.04em}
+.tag.m{background:var(--auto);color:var(--surface)}
+.tag.p{background:var(--review);color:var(--surface)}
+.tag.x{background:var(--na);color:var(--surface)}
+
+.legend{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:16px;height:10px;border-radius:2px;vertical-align:middle}
+.legend .l1 i{background:var(--auto)}
+.legend .l2 i{background:var(--review)}
+.legend .l3 i{background:var(--na)}
+.legend .l4 i{background:var(--accent-soft);border:1px solid var(--accent)}
+.legend .l5 i{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--rule) 4px 5px);border:1px solid var(--rule)}
+
+/* ── 발견 카드 ── */
+.finds{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));margin:26px 0 0}
+.find{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:16px 18px}
+.find.warn{border-top:3px solid var(--na)}
+.find.good{border-top:3px solid var(--auto)}
+.find.info{border-top:3px solid var(--accent)}
+.find .ft{font-weight:600;font-size:15px;margin:0 0 6px;letter-spacing:-.01em}
+.find p{font-size:13.5px;color:var(--ink-2);margin:0 0 8px;line-height:1.6}
+.find p:last-child{margin-bottom:0}
+
+/* ── 신호 굵기 비교 ── */
+.sig{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin:22px 0 0}
+.sigcol{background:var(--surface);border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.sigcol>.h{padding:11px 16px;background:var(--accent-soft);border-bottom:1px solid var(--rule-2);
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.sigcol>.h .t{font-weight:600;font-size:14px}
+.sigcol>.h .n{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:auto}
+.sigl{list-style:none;margin:0;padding:8px 0}
+.sigl li{padding:7px 16px;font-size:13px;display:flex;gap:9px;align-items:flex-start;line-height:1.5}
+.sigl li+li{border-top:1px solid var(--rule-2)}
+.sigl .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:6px}
+.sigl .on .dot{background:var(--auto)}
+.sigl .part .dot{background:var(--review)}
+.sigl .off .dot{background:var(--rule);border:1px solid var(--ink-3)}
+.sigl .off{color:var(--ink-3)}
+.sigl small{display:block;font-size:11.5px;color:var(--ink-3);margin-top:1px}
+
+/* ── 그림 ── */
+figure{margin:24px 0 8px;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:20px 20px 14px}
+figure .svgbox{overflow-x:auto}
+figure svg{max-width:100%;height:auto;display:block;color:var(--ink-2)}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:12px;line-height:1.6;max-width:72ch}
+figcaption b{color:var(--ink-2);font-weight:600}
+
+/* ── 방법론 카드 ── */
+.ms{display:grid;gap:16px}
+.m{background:var(--surface);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.m>.head{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:13px 18px;border-bottom:1px solid var(--rule-2)}
+.m.adopt>.head{background:var(--auto-soft)}
+.m.cond>.head{background:var(--review-soft)}
+.m .id{font-family:var(--mono);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.m.adopt .id{color:var(--auto)}
+.m.cond .id{color:var(--review)}
+.m .nm{font-weight:600;font-size:15.5px;letter-spacing:-.01em}
+.m .from{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-2);
+  border:1px solid var(--rule);border-radius:99px;padding:2px 10px;background:var(--surface)}
+.m .body{padding:16px 18px}
+.m .body p{font-size:14px;margin:0 0 11px}
+.m .body p:last-child{margin-bottom:0}
+.grid2{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin:12px 0}
+.kv{background:var(--sheet);border:1px solid var(--rule-2);border-radius:4px;padding:11px 13px}
+.kv .k{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.kv .v{font-size:13px;color:var(--ink-2);line-height:1.55}
+.kv .v b{color:var(--ink);font-weight:600}
+.quote{border-left:2px solid var(--accent);padding:2px 0 2px 13px;margin:12px 0;
+  font-size:13.5px;color:var(--ink-2);font-style:normal}
+.quote .who{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:5px}
+
+/* ── 표 ── */
+.tw{overflow-x:auto;margin:0 0 8px;border:1px solid var(--rule);border-radius:5px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-3);background:var(--ground);font-weight:600}
+tr:last-child td{border-bottom:none}
+td b{font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+
+footer{border-top:1px solid var(--rule);padding:26px 0 0;margin-top:14px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-3);line-height:1.9}
+footer a{color:var(--accent)}
+a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">SNU-HD-POC-01 · 리서치 부속물</p>
+  <h1>파이프라인 대조 — 외부 레퍼런스 5건과 우리</h1>
+  <p class="lede">각 연구가 실제로 돌린 처리 순서를 같은 축에 정렬해 놓고 우리 파이프라인과 겹쳐 본다.
+  칸이 비어 있는 곳과 유독 두꺼운 곳이 그 파이프라인이 무엇을 중요하게 봤는지를 말한다.</p>
+  <div class="meta">
+    <span><b>작성</b> 2026-08-25</span>
+    <span><b>근거</b> docs/research_vlm_extraction.md (rev.2)</span>
+    <span><b>대상</b> ③-b VLM Parser</span>
+  </div>
+</header>
+
+<section>
+  <h2>Axis</h2>
+  <p class="h2sub">정렬 축 — 문서에서 값을 뽑는 일곱 칸</p>
+  <p class="note">다섯 편의 논문은 용어도 순서도 제각각이다. 비교가 가능하려면 공통 축이 필요하다.
+  아래 일곱 칸은 다섯 편 전부에서 실제로 등장하거나 명시적으로 생략된 단계만 골라 만든 것이다.</p>
+  <div class="axis">
+    <div class="ax"><div class="k">S1</div><div class="t">입력 정규화</div><div class="d">렌더 해상도·방향·기울기·대비</div></div>
+    <div class="ax"><div class="k">S2</div><div class="t">텍스트 확보</div><div class="d">OCR 또는 텍스트 레이어</div></div>
+    <div class="ax"><div class="k">S3</div><div class="t">범위 좁히기</div><div class="d">어느 페이지를 볼 것인가</div></div>
+    <div class="ax"><div class="k">S4</div><div class="t">판독</div><div class="d">VLM 호출 구조와 횟수</div></div>
+    <div class="ax"><div class="k">S5</div><div class="t">근거</div><div class="d">값의 위치·출처를 남기는가</div></div>
+    <div class="ax"><div class="k">S6</div><div class="t">신뢰도</div><div class="d">믿어도 되는지 판정</div></div>
+    <div class="ax"><div class="k">S7</div><div class="t">사람·되먹임</div><div class="d">누가 어디서 개입하는가</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Matrix</h2>
+  <p class="h2sub">여섯 파이프라인을 같은 축에 겹쳐 놓기</p>
+  <p class="note">맨 윗줄이 우리다. 색 밑줄이 그어진 칸은 <b>우리가 가져올 수 있는 방법론</b>이고,
+  붉은 칸은 <b>우리에게 비어 있는 칸</b>이다.</p>
+
+  <div class="mx-scroll">
+    <div class="mx">
+
+      <div class="mx-row mx-head">
+        <div class="c" style="border-left:none"></div>
+        <div class="c">S1 입력 정규화</div>
+        <div class="c">S2 텍스트 확보</div>
+        <div class="c">S3 범위 좁히기</div>
+        <div class="c">S4 판독</div>
+        <div class="c">S5 근거</div>
+        <div class="c">S6 신뢰도</div>
+        <div class="c">S7 사람·되먹임</div>
+      </div>
+
+      <div class="mx-row lane ours">
+        <div class="lbl"><span class="nm">우리 프로젝트</span><span class="src">SNU-HD-POC-01</span></div>
+        <div class="c mark"><span class="cn"><span class="tag m">M5</span>200DPI PNG 렌더</span>1비트는 그레이로 · 방향·기울기 보정은 <b>기본 꺼짐</b></div>
+        <div class="c gap"><span class="cn">PDF 텍스트 레이어만</span><b>tif 71.9%는 없음</b> · xlsx·정비보고서는 있음</div>
+        <div class="c thick"><span class="cn">격자 판정 → 최신성 선택</span>몽타주 1장으로 후보 선별 → 날짜·개정표기로 최신 1장. 8p를 2~4호출로</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M1</span>extract() 문서 1회</span>28필드 일괄 · reread()는 <b>실패했을 때만</b></div>
+        <div class="c mark"><span class="cn"><span class="tag m">M4</span>bbox · raw_label · row_text</span>UI 하이라이트와 크롭 재판독의 입력</div>
+        <div class="c gap"><span class="cn">모델 자기보고 confidence <b>1개</b></span>0.90 / 0.95 임계에 직결</div>
+        <div class="c"><span class="cn">HITL 3상태 + on_rule_edit</span>AUTO·REVIEW·NA · 사람의 수정이 규칙으로 되돌아감 (Loop C)</div>
+      </div>
+
+      <div class="mx-row lane">
+        <div class="lbl"><span class="nm">스캔 금융문서 다단계</span><span class="src">R3 · 2604.26462</span></div>
+        <div class="c mark"><span class="cn"><span class="tag m">M5</span>엣지 분할 · 방향분류 + Hough</span>bicubic 재정규화 · CLAHE 대비 보정</div>
+        <div class="c"><span class="cn">PaddleOCRv3 또는 EasyOCR</span>다국어 · <b>엔진 교체만으로 12.07%p 차이</b></div>
+        <div class="c thick"><span class="cn">BM25 + 문장 임베딩</span>금융 용어 쿼리로 관련 페이지 검색 · 전송 페이지 <b>약 70% 감축</b></div>
+        <div class="c"><span class="cn">소형 VLM · 좁힌 범위 안</span>MiniCPM-o-2.6 / Gemma-3-27b / Qwen3-VL-8B</div>
+        <div class="c none">없음</div>
+        <div class="c none">없음</div>
+        <div class="c"><span class="cn">수동 검증 → 프롬프트 개선</span>우리 Loop C와 같은 형태</div>
+      </div>
+
+      <div class="mx-row lane">
+        <div class="lbl"><span class="nm">ExtractConf 신뢰도 엔진</span><span class="src">R1 · 2606.24420</span></div>
+        <div class="c none">명시 없음</div>
+        <div class="c mark2"><span class="cn"><span class="tag p">M7</span>AWS Textract</span>단어별 confidence + bbox · <b>파이프라인 필수 전제</b></div>
+        <div class="c none">인보이스 1~2p</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M1</span>Hunter + Mapper 이중 호출</span>필드주도 1회 + 문서주도 1회. <b>둘의 불일치가 신호</b></div>
+        <div class="c mark"><span class="cn"><span class="tag m">M4</span>bbox · 라벨 근접 · 라플라시안</span>선명도까지 특징으로 씀</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M3</span>5신호군 40특징 → CatBoost</span>isotonic 보정 · <b>AUC 0.705 → 0.928</b></div>
+        <div class="c mark"><span class="cn"><span class="tag m">M3</span>임계 라우팅</span><b>커버리지 80%에서 정확도 99.1%</b> (기준선 73.3%)</div>
+      </div>
+
+      <div class="mx-row lane">
+        <div class="lbl"><span class="nm">olmOCR</span><span class="src">R4 · 2502.18443</span></div>
+        <div class="c"><span class="cn">래스터화 장변 1024px</span>GPT-4o 라벨링 시에는 2048px</div>
+        <div class="c mark2"><span class="cn"><span class="tag p">M8</span>document anchoring</span>PDF 바이너리에서 텍스트블록 + 좌표 추출 · <b>born-digital 전용</b></div>
+        <div class="c none">페이지 전량</div>
+        <div class="c"><span class="cn">앵커 텍스트 + 이미지 동시 투입</span>파인튜닝 7B · 상한 6,000자</div>
+        <div class="c"><span class="cn">좌표를 <b>입력</b>으로만</span>출력 근거로는 쓰지 않음</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M6</span>JSON 스키마 검증 + 반복 검출</span>최빈 실패는 같은 토큰·줄의 무한 반복</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M6</span>재시도 사다리</span>temp 0.1→0.8 + 앵커 재샘플링 → 끝내 실패면 평문 폴백</div>
+      </div>
+
+      <div class="mx-row lane">
+        <div class="lbl"><span class="nm">채점 LLM 분리</span><span class="src">R7 · 2510.19334</span></div>
+        <div class="c none">해당 없음</div>
+        <div class="c"><span class="cn">계약서 텍스트</span>chunk re-ranking</div>
+        <div class="c none">해당 없음</div>
+        <div class="c"><span class="cn">추출 에이전트 1회</span>문서 텍스트 + 메타데이터 템플릿</div>
+        <div class="c none">없음</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M2</span>채점 LLM</span>같은 입력 + 뽑힌 값을 받아 필드별 0~1 점수. <b>73.3 → 80.5%</b>, 어려운 케이스 <b>61.1 → 76.6%</b></div>
+        <div class="c"><span class="cn">점수 기반 분류</span>논문은 수정값까지 냄</div>
+      </div>
+
+      <div class="mx-row lane">
+        <div class="lbl"><span class="nm">기권 방법 벤치마크</span><span class="src">R2 · 2511.19806</span></div>
+        <div class="c none">해당 없음</div>
+        <div class="c none">해당 없음</div>
+        <div class="c none">해당 없음</div>
+        <div class="c none">해당 없음</div>
+        <div class="c none">해당 없음</div>
+        <div class="c mark"><span class="cn"><span class="tag m">M2</span>신뢰도 8종 동일 조건 비교</span>VLM Judge <b>0.768</b> &gt; Self Consistency 0.677 &gt; Token Prob 0.665 &gt; <b>자기보고 0.604</b> &gt; 기권지시 0.427</div>
+        <div class="c"><span class="cn">임계 τ 에서 채택 / 기권</span>A-Acc = 맞는 답 채택 + 틀린 답 기권 비율</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="l1"><i></i>우리가 즉시 가져올 수 있는 칸 (M1~M6)</span>
+    <span class="l2"><i></i>조건부 — 텍스트 레이어가 있는 문서에만 (M7·M8)</span>
+    <span class="l3"><i></i>우리에게 비어 있는 칸</span>
+    <span class="l4"><i></i>그 파이프라인이 유독 두껍게 만든 칸</span>
+    <span class="l5"><i></i>그 파이프라인에 없는 단계</span>
+  </div>
+</section>
+
+<section>
+  <h2>Reading</h2>
+  <p class="h2sub">매트릭스가 말하는 것 — 셋</p>
+
+  <div class="finds">
+    <div class="find good">
+      <p class="ft">우리는 앞칸이 가장 두껍다</p>
+      <p>S3(범위 좁히기)에서 <b>최신성</b>으로 페이지를 고르는 파이프라인은 우리뿐이다. R3는 내용 유사도(BM25+임베딩)로 고르고, R1·R4·R7은 이 칸이 아예 없다.</p>
+      <p>그리고 R3의 제거 실험에서 <b>이 칸이 가장 큰 레버</b>였다 — 빼면 15.75~24.02%p 하락으로 다섯 구성 전부에서 1위. 우리가 이미 잘하고 있는 곳이다.</p>
+    </div>
+    <div class="find warn">
+      <p class="ft">S2가 tif에서 비어 있다</p>
+      <p>나머지 넷은 이 칸이 전부 채워져 있다 — Textract, PaddleOCR, PDF 바이너리, 계약서 텍스트. <b>텍스트로 글자를 보증하는 장치</b>가 다들 있다.</p>
+      <p>우리는 PDF 텍스트 레이어뿐이고, <b>코퍼스의 71.9%인 tif 734건에는 그마저 없다.</b> 이것이 우리 파이프라인의 가장 큰 구조적 공백이다.</p>
+    </div>
+    <div class="find warn">
+      <p class="ft">S6이 가장 얇다</p>
+      <p>R1은 이 칸에 40개 특징을 넣는다. R2는 이 칸 하나만 다루는 논문이다. R7은 이 칸을 위해 <b>LLM을 한 번 더 부른다.</b></p>
+      <p>우리는 <b>모델이 스스로 적은 숫자 하나</b>다. 그리고 R2 비교에서 그 방법은 여덟 중 일곱째였다.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Signals</h2>
+  <p class="h2sub">S6을 열어 보면 — 신호의 굵기</p>
+  <p class="note">같은 칸을 나란히 펼친 것이다. 오른쪽은 우리가 <b>지금 코드로</b> 만들 수 있는 신호이고,
+  점 색이 적용 범위를 말한다.</p>
+
+  <div class="sig">
+    <div class="sigcol">
+      <div class="h"><span class="t">R1 ExtractConf</span><span class="n">40 특징 · 5 신호군</span></div>
+      <ul class="sigl">
+        <li class="on"><span class="dot"></span><span>G1 토큰 로그확률·엔트로피<small>평균·최소·10퍼센타일·표준편차 등 14개</small></span></li>
+        <li class="on"><span class="dot"></span><span>G2 OCR 근거 일치<small>값이 원본 텍스트에 문자 그대로 있는가 + 유사도 50/75/90% · 12개</small></span></li>
+        <li class="on"><span class="dot"></span><span>G3 호출 간 값 일치<small>Hunter ↔ Mapper · Levenshtein / FuzzyWuzzy</small></span></li>
+        <li class="on"><span class="dot"></span><span>G4 공간·화질<small>라벨 근접, bbox OCR 신뢰도, 중심점 거리, 라플라시안 선명도 · 8개</small></span></li>
+        <li class="on"><span class="dot"></span><span>G5 필드 유형<small>숫자·날짜·제한텍스트·자유텍스트·영숫자 · 5개</small></span></li>
+      </ul>
+    </div>
+    <div class="sigcol">
+      <div class="h"><span class="t">우리 — 지금</span><span class="n">1 개</span></div>
+      <ul class="sigl">
+        <li class="on"><span class="dot"></span><span>모델 자기보고 confidence<small>SYSTEM 5항이 요구 · 0.90 / 0.95 임계에 직결</small></span></li>
+        <li class="off"><span class="dot"></span><span>그 외 없음<small>규칙 검증 결과도 신뢰도로 되먹이지 않는다</small></span></li>
+      </ul>
+      <div class="h" style="border-top:1px solid var(--rule-2)"><span class="t">우리 — 붙일 수 있는 것</span><span class="n">4~5 개</span></div>
+      <ul class="sigl">
+        <li class="on"><span class="dot"></span><span>extract() ↔ reread() 교차 일치<small>전 경로 적용 · 학습·OCR 불필요 · <b>M1</b></small></span></li>
+        <li class="on"><span class="dot"></span><span>크롭 라플라시안 선명도<small>전 경로 · PIL 몇 줄 · <b>M4</b></small></span></li>
+        <li class="on"><span class="dot"></span><span>형식 검증 통과 여부<small>전 경로 · 비용 사다리 앞칸이 이미 무료로 만들어 냄</small></span></li>
+        <li class="on"><span class="dot"></span><span>채점 LLM 점수<small>전 경로 · 문서당 1회 호출 · <b>M2</b></small></span></li>
+        <li class="part"><span class="dot"></span><span>텍스트 verbatim 대조<small>텍스트 레이어 있는 문서만 — tif 제외 · <b>M7</b></small></span></li>
+      </ul>
+    </div>
+  </div>
+  <p class="tiny" style="margin-top:12px">R1은 이 40특징을 CatBoost로 결합했고 학습에 <b>필드 단위 1,072표본</b>을 썼다.
+  우리 골든셋은 30문서 × 28필드 = 최대 840이고 홀드아웃·N/A를 빼면 더 적다.
+  그래서 <b>같은 결합 방식은 옮기지 않는다</b> — 특징 3~5개를 로지스틱 회귀로 묶는 데서 시작한다.</p>
+</section>
+
+<section>
+  <h2>M1</h2>
+  <p class="h2sub">가장 확실한 한 가지 — 우리는 이미 두 번 부르고 있다</p>
+  <p class="note">ExtractConf가 신뢰도를 얻는 방식의 핵심은 <b>성격이 다른 두 호출을 만들고 서로 대보는 것</b>이다.
+  그 구조가 우리 코드에 이미 있는데, 우리는 둘을 대보지 않는다.</p>
+
+  <figure>
+    <div class="svgbox">
+    <svg viewBox="0 0 900 372" role="img" aria-label="위쪽은 현재 우리 배선으로 reread가 실패했을 때만 호출되어 비교할 두 번째 값이 생기지 않는다. 아래쪽은 제안 배선으로 MVP 9필드는 항상 reread를 불러 두 값의 일치 여부를 신뢰도 신호로 쓴다.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--auto)"/>
+        </marker>
+      </defs>
+
+      <text x="0" y="14" font-size="11" font-family="monospace" fill="currentColor" opacity=".65" letter-spacing="1">지금</text>
+      <line x1="0" y1="22" x2="900" y2="22" stroke="currentColor" stroke-opacity=".18"/>
+
+      <rect x="0" y="44" width="152" height="46" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="76" y="66" font-size="12.5" text-anchor="middle" fill="currentColor">extract()</text>
+      <text x="76" y="81" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">문서 1회 · 28필드</text>
+
+      <line x1="152" y1="67" x2="222" y2="67" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar)"/>
+      <text x="187" y="60" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".55">값 v1</text>
+
+      <rect x="228" y="44" width="164" height="46" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="310" y="66" font-size="12.5" text-anchor="middle" fill="currentColor">자기보고 confidence</text>
+      <text x="310" y="81" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">모델이 적은 숫자 1개</text>
+
+      <line x1="392" y1="67" x2="462" y2="67" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar)"/>
+
+      <rect x="468" y="44" width="130" height="46" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="533" y="66" font-size="12.5" text-anchor="middle" fill="currentColor">임계 0.90 / 0.95</text>
+      <text x="533" y="81" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">측정된 적 없음</text>
+
+      <line x1="598" y1="67" x2="668" y2="67" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar)"/>
+
+      <rect x="674" y="44" width="130" height="46" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="739" y="72" font-size="12.5" text-anchor="middle" fill="currentColor">AUTO / REVIEW</text>
+
+      <path d="M310 90 L310 128 L152 128" fill="none" stroke="currentColor" stroke-opacity=".38" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <rect x="158" y="110" width="150" height="36" rx="4" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-dasharray="4 3"/>
+      <text x="233" y="126" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".7">reread() 크롭</text>
+      <text x="233" y="139" font-size="10" text-anchor="middle" fill="currentColor" opacity=".55">추출 실패했을 때만</text>
+      <text x="330" y="147" font-size="10.5" fill="currentColor" opacity=".7">비교할 두 번째 값이 생기지 않는다</text>
+
+      <text x="0" y="196" font-size="11" font-family="monospace" fill="var(--auto)" letter-spacing="1">제안 · M1</text>
+      <line x1="0" y1="204" x2="900" y2="204" stroke="var(--auto)" stroke-opacity=".35"/>
+
+      <rect x="0" y="226" width="152" height="52" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="76" y="246" font-size="12.5" text-anchor="middle" fill="currentColor">extract()</text>
+      <text x="76" y="261" font-size="10.5" text-anchor="middle" fill="var(--auto)">= Mapper · 문서주도</text>
+      <text x="76" y="273" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".55">근거 있는 것만 보고</text>
+
+      <line x1="152" y1="252" x2="222" y2="252" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar)"/>
+      <text x="187" y="245" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".55">v1 + bbox</text>
+
+      <rect x="228" y="226" width="164" height="52" rx="4" fill="none" stroke="var(--auto)" stroke-width="1.5"/>
+      <text x="310" y="246" font-size="12.5" text-anchor="middle" fill="currentColor">reread() 크롭</text>
+      <text x="310" y="261" font-size="10.5" text-anchor="middle" fill="var(--auto)">= Hunter · 필드주도</text>
+      <text x="310" y="273" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".55">MVP 9필드는 항상</text>
+
+      <line x1="392" y1="252" x2="462" y2="252" stroke="var(--auto)" stroke-opacity=".8" marker-end="url(#arg)"/>
+      <text x="427" y="245" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".55">값 v2</text>
+
+      <rect x="468" y="226" width="130" height="52" rx="4" fill="var(--auto)" fill-opacity=".1" stroke="var(--auto)" stroke-width="1.5"/>
+      <text x="533" y="250" font-size="13.5" text-anchor="middle" fill="currentColor">v1 ≟ v2</text>
+      <text x="533" y="266" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">문자열 유사도</text>
+
+      <path d="M76 278 L76 316 L520 316 L520 282" fill="none" stroke="var(--auto)" stroke-opacity=".55" marker-end="url(#arg)"/>
+      <text x="150" y="311" font-size="9.5" fill="currentColor" opacity=".55">v1 원본</text>
+
+      <line x1="598" y1="252" x2="668" y2="252" stroke="var(--auto)" stroke-opacity=".8" marker-end="url(#arg)"/>
+
+      <rect x="674" y="226" width="130" height="52" rx="4" fill="none" stroke="var(--auto)" stroke-width="1.5"/>
+      <text x="739" y="248" font-size="12.5" text-anchor="middle" fill="currentColor">신뢰도 신호</text>
+      <text x="739" y="264" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">일치 / 불일치</text>
+
+      <text x="0" y="352" font-size="10.5" fill="currentColor" opacity=".7">두 호출의 성격이 다르다는 것이 요점이다 — 문서를 훑는 쪽과 필드를 캐는 쪽은 서로 다른 방식으로 틀린다.</text>
+    </svg>
+    </div>
+    <figcaption><b>바뀌는 것은 화살표 하나다.</b> <code>reread()</code> 를 실패했을 때만 부르던 것을
+    MVP 9필드에 대해 항상 부르면, 지금은 존재하지 않는 두 번째 값 v2 가 생기고 v1 과 대볼 수 있게 된다.
+    ExtractConf 가 Hunter·Mapper 라고 부른 두 호출이 우리 <code>extract()</code>·<code>reread()</code> 와
+    같은 성격 대비를 이룬다 — 하나는 문서 전체를 훑어 근거 있는 것만 보고하고, 다른 하나는 지정된 필드를 캐낸다.</figcaption>
+  </figure>
+
+  <div class="ms">
+    <div class="m adopt">
+      <div class="head"><span class="id">M1</span><span class="nm">두 호출의 교차 일치를 신뢰도 신호로</span><span class="from">R1 ExtractConf</span></div>
+      <div class="body">
+        <p>ExtractConf 는 GPT-4o 를 두 번 부른다. 저자가 두 호출의 성격을 이렇게 갈라 놓았다.</p>
+        <div class="quote">Hunter 는 <b>완성 압박(completion pressure)</b> 아래 있어서, 그 필드가 문서에 분명히 있든 없든 답을 만들어낸다 — 없거나 애매한 필드에 그럴듯한 값을 지어내기 쉽다.
+          <span class="who">arXiv:2606.24420 · Hunter (필드 주도) 정의</span></div>
+        <div class="quote">Mapper 는 <b>시각적으로 근거가 있는 것만 보고한다</b>(reports only what is visually grounded).
+          <span class="who">arXiv:2606.24420 · Mapper (문서 주도) 정의</span></div>
+        <p>둘의 실패 방식이 반대라서 <b>불일치가 곧 위험 신호</b>가 된다. 우리 코드에도 같은 대비가 이미 있다.</p>
+        <div class="grid2">
+          <div class="kv"><div class="k">우리 Mapper</div><div class="v"><b>extract()</b> — 문서 전체를 훑어 필드별로 가장 두드러진 값을 낸다. 없으면 <code>raw_value: null</code> 과 <code>absence_reason</code>.</div></div>
+          <div class="kv"><div class="k">우리 Hunter</div><div class="v"><b>reread()</b> — 필드 하나를 bbox 크롭에서 다시 읽는다. 지정된 영역이 주어졌으므로 답을 낼 압박이 있다.</div></div>
+          <div class="kv"><div class="k">바꾸는 것</div><div class="v">MVP 9필드는 <b>실패 여부와 무관하게</b> reread 를 부르고, 두 값을 문자열 유사도로 비교해 신호로 남긴다.</div></div>
+          <div class="kv"><div class="k">비용</div><div class="v">문서당 9회 추가. 입력은 페이지가 아니라 <b>크롭</b>이라 토큰이 작고, tier1 모델로 돈다. 골든셋 30건이면 270회.</div></div>
+        </div>
+        <p class="tiny"><b>정직하게 적어 둘 것</b> — 논문에 이 신호(G3) 단독 AUC 수치는 없다. M4(OCR 신호만) 0.896 은 다른 신호군의 값이다.
+        그래서 채택 전에 골든셋에서 직접 재야 한다. 재는 법은 실험 <b>E2</b>: 일치한 집단과 불일치한 집단의 실제 정답률을 비교해,
+        불일치 집단이 뚜렷이 낮으면 신호로 성립한다.</p>
+      </div>
+    </div>
+
+    <div class="m adopt">
+      <div class="head"><span class="id">M2</span><span class="nm">평가 Agent 를 채점자로 — 추출과 채점을 분리</span><span class="from">R7 + R2</span></div>
+      <div class="body">
+        <p>두 논문이 같은 곳을 가리킨다. R7 은 채점 LLM 을 붙였을 때의 이득을 재고, R2 는 여덟 가지 신뢰도 방법을 같은 조건에서 줄 세웠다.</p>
+        <div class="tw"><table>
+          <thead><tr><th>출처</th><th>비교</th><th class="num">수치</th></tr></thead>
+          <tbody>
+            <tr><td>R7 · CUAD 계약서</td><td>추출 에이전트 단독 → 채점 LLM 추가 (전체)</td><td class="num">73.3% → <b>80.5%</b></td></tr>
+            <tr><td>R7 · CUAD 계약서</td><td>같은 조건, <b>어려운 케이스</b>만</td><td class="num">61.1% → <b>76.6%</b></td></tr>
+            <tr><td>R2 · 4개 벤치마크</td><td>VLM Judge (Qwen2.5-VL-7B / Gemma3-12B)</td><td class="num"><b>0.768</b> / 0.760</td></tr>
+            <tr><td>R2 · 같은 조건</td><td>자기보고 확신도 (Ask for Calibration)</td><td class="num">0.604</td></tr>
+          </tbody>
+        </table></div>
+        <p>R7 저자 설명은 간단하다 — 채점 LLM 은 <b>이미 뽑힌 후보를 갖고 시작</b>하므로 문제가 "열린 추출"에서 "검증"으로 바뀐다.
+        후보를 따져보는 것이 맨바닥에서 찾는 것보다 쉽다.</p>
+        <div class="grid2">
+          <div class="kv"><div class="k">우리 위치</div><div class="v">⑤ Validate 의 <b>평가 Agent</b> 칸. 비용 사다리에 이미 자리가 있다 — 규칙 검증(무료) → <b>평가 Agent(유료)</b> → HITL.</div></div>
+          <div class="kv"><div class="k">주의 — 우리 규칙과의 긴장</div><div class="v">논문의 채점자는 점수와 함께 <b>수정된 값</b>도 낸다. 우리는 <i>"재시도 프롬프트에 값이 틀렸다고 쓰지 않는다"</i>가 규칙이다.</div></div>
+          <div class="kv"><div class="k">안전한 이식</div><div class="v"><b>점수만 받고 수정값은 받지 않는다.</b> 금지된 것은 "네 답이 틀렸으니 다시 답하라"는 되묻기이고, 채점자는 문서를 직접 보고 독립 판정한다 — 성격이 다르지만 안전한 쪽을 고른다.</div></div>
+          <div class="kv"><div class="k">비용</div><div class="v">필드당이 아니라 <b>문서당 1회</b>로 묶는다. 28필드 값을 한 번에 채점받는다.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m adopt">
+      <div class="head"><span class="id">M3</span><span class="nm">임계는 정하는 게 아니라 곡선에서 읽는 것</span><span class="from">R1 ExtractConf</span></div>
+      <div class="body">
+        <p>우리 0.90 / 0.95 는 지금까지 <b>한 번도 측정된 적이 없는 숫자</b>다. ExtractConf 는 임계를 고르지 않고
+        커버리지-정확도 곡선을 그린 뒤 운용점을 읽는다.</p>
+        <div class="tw"><table>
+          <thead><tr><th>구성</th><th class="num">AUC</th><th class="num">ECE</th><th>뜻</th></tr></thead>
+          <tbody>
+            <tr><td>로그확률 평균만</td><td class="num">0.705</td><td class="num">0.245</td><td>모델이 준 숫자 하나에 기대는 경우</td></tr>
+            <tr><td>self-consistency 5회</td><td class="num">0.744</td><td class="num">0.075</td><td>같은 질문을 다섯 번</td></tr>
+            <tr><td>로그확률 + 엔트로피</td><td class="num">0.880</td><td class="num">0.180</td><td>모델 내부 신호만 묶은 것</td></tr>
+            <tr><td><b>OCR 근거 신호만</b></td><td class="num"><b>0.896</b></td><td class="num">0.197</td><td>모델 밖 신호가 모델 안 신호를 이긴다</td></tr>
+            <tr><td>전체 결합</td><td class="num"><b>0.928</b></td><td class="num">0.199</td><td>40특징 CatBoost</td></tr>
+            <tr><td>전체 + isotonic 보정</td><td class="num">0.926</td><td class="num"><b>0.034</b></td><td>순위는 그대로, <b>숫자가 확률이 된다</b></td></tr>
+          </tbody>
+        </table></div>
+        <p>운용 지표는 이렇게 읽는다 — <b>커버리지 80% 에서 자동화 정확도 99.1%</b>. 선별 없이 전부 자동 확정하면 73.3% 다.
+        "자동으로 넘길 비율을 80% 로 잡으면 그중 99.1% 가 맞다"는 문장이 임계를 대신한다.</p>
+        <p class="tiny">우리 실험은 <b>E1 → E4</b> 다. E1 은 골든셋 전량을 1회 추출해 자기보고 confidence 와 정오를 함께 기록하고 AUC 와 값 분포를 본다.
+        AUC 가 0.70 을 밑돌거나 값이 0.9 / 0.95 / 1.0 에 뭉치면 단독 사용을 폐기한다. E4 는 신호 3~5개를 로지스틱 회귀로 묶어 곡선을 그린다.
+        <b>홀드아웃 주의</b> — 결합 가중치를 학습한 데이터로 임계를 정하면 그 숫자는 부풀려진다. 학습용·보정용·평가용 배분이 먼저다.</p>
+      </div>
+    </div>
+
+    <div class="m adopt">
+      <div class="head"><span class="id">M4</span><span class="nm">크롭 선명도를 신호로 — 문서가 원인인 실패를 잡는다</span><span class="from">R1 G4</span></div>
+      <div class="body">
+        <p>ExtractConf 가 로그확률보다 OCR·공간 신호를 높게 친 이유가 여기 있다.</p>
+        <div class="quote">추출 오류는 <b>문서가 원인이지 모델이 원인이 아니다.</b> OCR 신뢰도는 실패 원인을 직접 측정하고, 로그확률은 그것과 무관한 결과를 측정한다.
+          <span class="who">arXiv:2606.24420</span></div>
+        <p>프론티어 LLM 은 <b>읽을 수 없는 원본을 읽으면서도</b> 높은 확신을 보인다. 그래서 "이 영역이 실제로 읽을 만한 상태인가"를
+        이미지에서 직접 재는 것이 값싸고 강한 신호가 된다. G4 의 정규화 라플라시안 점수가 그것이다.</p>
+        <div class="grid2">
+          <div class="kv"><div class="k">우리 구현</div><div class="v"><code>_crop()</code> 이 이미 만드는 크롭에 라플라시안 분산을 계산한다. PIL 로 몇 줄이고 외부 의존성이 없다.</div></div>
+          <div class="kv"><div class="k">적용 범위</div><div class="v"><b>전 경로.</b> tif 포함 — 이미지만 있으면 되므로 텍스트 레이어가 필요 없다.</div></div>
+          <div class="kv"><div class="k">우리 코퍼스와의 상성</div><div class="v">1비트 150DPI 팩스 스캔이 지배적이라 <b>선명도 편차가 크다.</b> 신호가 잘 갈릴 조건이다.</div></div>
+          <div class="kv"><div class="k">함께 볼 것</div><div class="v">같은 G4 의 <b>라벨 근접 매칭</b> — <code>raw_label</code> 이 <code>fields.yaml</code> 의 aliases 와 얼마나 맞는지. 이것도 무료다.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m adopt">
+      <div class="head"><span class="id">M5</span><span class="nm">기하 전처리를 기본으로 켠다</span><span class="from">R3 KYC</span></div>
+      <div class="body">
+        <p>지금 <code>VlmParser(deskew=False)</code> 다. "검증되지 않은 동작을 기본으로 만들지 않는다"는 판단은 옳았지만,
+        이제 켜는 쪽을 가리키는 외부 근거가 생겼다.</p>
+        <div class="tw"><table>
+          <thead><tr><th>OCR · VLM</th><th class="num">전체</th><th class="num">전처리 제거</th><th class="num">하락</th></tr></thead>
+          <tbody>
+            <tr><td>PaddleOCR · MiniCPM-o-2.6</td><td class="num">87.27</td><td class="num">71.00</td><td class="num"><b>−16.27</b></td></tr>
+            <tr><td>PaddleOCR · Gemma-3-27b</td><td class="num">72.97</td><td class="num">60.89</td><td class="num">−12.08</td></tr>
+            <tr><td>PaddleOCR · Qwen3-VL-8B</td><td class="num">85.30</td><td class="num">77.17</td><td class="num">−8.13</td></tr>
+            <tr><td>EasyOCR · MiniCPM-o-2.6</td><td class="num">75.20</td><td class="num">67.59</td><td class="num">−7.61</td></tr>
+            <tr><td>EasyOCR · Gemma-3-27b</td><td class="num">65.09</td><td class="num">58.92</td><td class="num">−6.17</td></tr>
+          </tbody>
+        </table></div>
+        <p>우리 실측도 같은 방향이다 — 스캔 758건 중 <b>71.5%가 0.5도를 넘는 기울기</b>를 갖고, 보정하면 글줄 투영 점수가
+        중앙값 159% 개선된다.</p>
+        <p class="tiny">R3 는 우리가 하지 않는 것을 하나 더 한다 — <b>CLAHE 대비 정규화.</b> 1비트 150DPI 팩스 스캔에서
+        효과가 있을지는 우리 골든셋에서 재봐야 한다. 실험 <b>E5</b> 로 deskew on/off 를 먼저 확정하고, CLAHE 는 그다음이다.</p>
+      </div>
+    </div>
+
+    <div class="m adopt">
+      <div class="head"><span class="id">M6</span><span class="nm">실패를 유형으로 나누고 재시도 사다리를 만든다</span><span class="from">R4 olmOCR</span></div>
+      <div class="body">
+        <p>olmOCR 의 최빈 실패는 <b>같은 토큰·줄·문단의 무한 반복</b>이다. 검출은 두 갈래로 한다 — 최대 컨텍스트 초과,
+        또는 JSON 스키마 검증 실패. 잡히면 temperature 를 0.1 에서 0.8 로 올리고 앵커를 다시 샘플링해 재시도하며,
+        끝내 실패하면 평문 추출로 폴백한다.</p>
+        <div class="grid2">
+          <div class="kv"><div class="k">우리 현재</div><div class="v"><code>_ask()</code> 가 JSON 파싱 실패 시 예외를 올린다. 삼키지 않는다는 점에서 같은 방어다 (철학 5).</div></div>
+          <div class="kv"><div class="k">구분되지 않는 것</div><div class="v"><b>길이 초과로 잘린 JSON</b> 과 <b>형식이 깨진 JSON</b> 이 같은 예외로 뭉친다. 원인이 다르면 대응도 달라야 한다.</div></div>
+          <div class="kv"><div class="k">고치는 법</div><div class="v"><code>finish_reason == "length"</code> 를 따로 기록한다. 한 줄이고, 처리 실패율 통계가 원인별로 갈린다.</div></div>
+          <div class="kv"><div class="k">폴백은 다르게</div><div class="v">olmOCR 은 temperature 를 올려 재시도한다. 우리는 <b>철학 6(같은 입력 → 같은 출력)</b> 때문에 그럴 수 없다. 우리 사다리는 <code>src/models.py</code> 의 <b>tier1 → tier2 모델 승격</b>이다.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m cond">
+      <div class="head"><span class="id">M7</span><span class="nm">텍스트 verbatim 대조 — 가장 강한 단일 신호, 그러나 절반의 경로에만</span><span class="from">R1 G2</span></div>
+      <div class="body">
+        <p>ExtractConf 에서 <b>OCR 근거 신호만 쓴 구성(AUC 0.896)이 모델 내부 신호만 쓴 구성(0.880)을 이겼다.</b>
+        핵심 특징은 하나다 — <i>추출된 값이 원본 OCR 텍스트에 문자 그대로 등장하는가.</i> 여기에 유사도 임계 50 / 75 / 90% 를 더한다.</p>
+        <p>이것은 우리 <code>ARCHITECTURE.md</code> §4.4 가 이미 정한 역할 분담과 같은 말이다 —
+        <b>VLM 이 어느 값이 어느 필드인지 정하고, 텍스트 레이어가 그 글자를 보증한다.</b></p>
+        <div class="grid2">
+          <div class="kv"><div class="k">적용 가능</div><div class="v"><b>xlsx·xlsm 118건</b> · PDF 텍스트 페이지(페이지 기준 68.3%) · <b>정비보고서 112건 중 111건</b>이 텍스트 레이어 보유</div></div>
+          <div class="kv"><div class="k">적용 불가</div><div class="v"><b>tif 734건 (71.9%)</b> — 텍스트 레이어가 아예 없다. 우리 주 경로다.</div></div>
+          <div class="kv"><div class="k">필요한 것</div><div class="v"><code>preprocess.probe_pages()</code> 가 이미 페이지 텍스트를 잡아 온다. 대조 로직만 추가하면 된다.</div></div>
+          <div class="kv"><div class="k">주의</div><div class="v">완전일치로 재면 OCR 잡음에 무너진다. 논문처럼 <b>퍼지 대조 + 임계 3단</b>으로 재야 한다.</div></div>
+        </div>
+        <p class="tiny">tif 까지 넓히려면 로컬 OCR 엔진을 붙여야 하고, 그것은 이번 범위 밖이다.
+        다만 <b>골든셋 30건에 대해서만 한 번 OCR 을 돌려 이 신호의 효과 상한을 재보는 것</b>은 가능하고,
+        그 숫자가 후속 과제의 근거가 된다. 실험 <b>E3</b>.</p>
+      </div>
+    </div>
+
+    <div class="m cond">
+      <div class="head"><span class="id">M8</span><span class="nm">텍스트 앵커링 — 시도할 값은 있으나 근거가 약하다</span><span class="from">R4 olmOCR</span></div>
+      <div class="body">
+        <p>PDF 바이너리에서 텍스트 블록과 이미지의 <b>좌표까지 함께</b> 뽑아 프롬프트에 넣고, 렌더 이미지와 같이 준다.
+        형식은 이렇다.</p>
+        <div class="quote" style="font-family:var(--mono);font-size:12px">RAW_TEXT_START<br>{좌표가 붙은 텍스트 블록들}<br>RAW_TEXT_END<span class="who">arXiv:2502.18443 Appendix A · 파인튜닝 시 상한 6,000자</span></div>
+        <p>이것을 채택하면 <code>ARCHITECTURE.md</code> §10 의 3-way A/B 중 <b>"VLM+텍스트" 칸의 실제 구현</b>이 된다.
+        지금 그 칸은 비어 있다.</p>
+        <div class="grid2">
+          <div class="kv"><div class="k">근거 강도</div><div class="v"><b>약하다.</b> 논문에 정량 ablation 이 없다. <i>"환각이 뚜렷이 줄었다"</i>는 정성 주장뿐이다.</div></div>
+          <div class="kv"><div class="k">범위 제한</div><div class="v">저자 스스로 <b>born-digital 전용</b>임을 밝힌다 — 텍스트 레이어가 없는 스캔에서는 래스터 이미지에만 의존한다고 명시.</div></div>
+          <div class="kv"><div class="k">우리 판정</div><div class="v">텍스트 레이어 있는 경로에서 <b>직접 재본다</b>. 논문 수치를 근거로 채택하지 않는다. 실험 <b>E7</b>.</div></div>
+          <div class="kv"><div class="k">충돌 없음</div><div class="v">§4.4 와 모순되지 않는다 — 텍스트를 주더라도 <b>어느 값이 어느 필드인지는 여전히 VLM 이 정한다.</b></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Risk</h2>
+  <p class="h2sub">마킹하면서 발견한 것 — 우리는 bbox 를 믿고 있다</p>
+  <p class="note">M1 과 M4 둘 다 크롭을 전제한다. 그런데 크롭의 입력인 bbox 가 얼마나 정확한지를
+  우리는 재본 적이 없다. 벤치마크가 주는 답은 낙관적이지 않다.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>지표 (ExStrucTiny, Gemini-2.5-Pro 기준)</th><th class="num">값</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td>페이지 정확도</td><td class="num">84.3%</td><td>어느 페이지인지는 대체로 맞힌다</td></tr>
+      <tr><td>bbox 근접성 (proximity)</td><td class="num">74.8%</td><td>대략 그 근처를 가리키기는 한다</td></tr>
+      <tr><td><b>bbox IoU</b></td><td class="num"><b>14.4%</b></td><td><b>정확한 상자는 못 그린다</b></td></tr>
+    </tbody>
+  </table></div>
+  <p class="tiny" style="margin:0 0 4px">논문 서술: <i>"정확한 텍스트 예측이 정확한 공간 근거를 담보하지 않는다 — 추출과 근거 위치 사이에 보정 간극(calibration gap)이 있다."</i></p>
+
+  <figure>
+    <div class="svgbox">
+    <svg viewBox="0 0 900 300" role="img" aria-label="모델이 준 bbox가 실제 값 영역에서 어긋나면 크롭이 엉뚱한 영역을 잘라 재판독 결과가 달라진다. 크롭 안에 라벨이 보이면 값 불일치이고, 라벨조차 없으면 bbox 오류이므로 값을 의심할 근거가 아니다.">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="arn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--na)"/>
+        </marker>
+      </defs>
+
+      <rect x="0" y="30" width="176" height="212" rx="3" fill="none" stroke="currentColor" stroke-opacity=".3"/>
+      <text x="88" y="20" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">페이지</text>
+
+      <line x1="18" y1="60" x2="158" y2="60" stroke="currentColor" stroke-opacity=".14" stroke-width="5"/>
+      <line x1="18" y1="76" x2="120" y2="76" stroke="currentColor" stroke-opacity=".14" stroke-width="5"/>
+      <line x1="18" y1="150" x2="158" y2="150" stroke="currentColor" stroke-opacity=".14" stroke-width="5"/>
+      <line x1="18" y1="166" x2="100" y2="166" stroke="currentColor" stroke-opacity=".14" stroke-width="5"/>
+
+      <rect x="16" y="96" width="62" height="26" rx="2" fill="none" stroke="currentColor" stroke-opacity=".55"/>
+      <text x="47" y="113" font-size="10" text-anchor="middle" fill="currentColor" opacity=".8">RATED CV</text>
+      <rect x="84" y="96" width="56" height="26" rx="2" fill="var(--auto)" fill-opacity=".16" stroke="var(--auto)"/>
+      <text x="112" y="113" font-size="10.5" text-anchor="middle" fill="currentColor">70.7</text>
+      <text x="16" y="138" font-size="9" fill="var(--auto)">실제 값 · 라벨</text>
+
+      <rect x="100" y="120" width="62" height="30" rx="2" fill="none" stroke="var(--na)" stroke-dasharray="4 3" stroke-width="1.5"/>
+      <text x="162" y="176" font-size="9" text-anchor="end" fill="var(--na)">모델이 준 bbox</text>
+      <text x="162" y="188" font-size="9" text-anchor="end" fill="var(--na)" opacity=".75">IoU 14.4%</text>
+
+      <line x1="176" y1="136" x2="238" y2="136" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar2)"/>
+      <text x="207" y="129" font-size="9.5" text-anchor="middle" fill="currentColor" opacity=".6">_crop()</text>
+
+      <rect x="244" y="106" width="150" height="60" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="319" y="130" font-size="12.5" text-anchor="middle" fill="currentColor">reread() 재판독</text>
+      <text x="319" y="147" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">값 v2 ≠ v1</text>
+
+      <path d="M394 122 L444 92" fill="none" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar2)"/>
+      <path d="M394 150 L444 194" fill="none" stroke="var(--na)" stroke-opacity=".7" marker-end="url(#arn)"/>
+
+      <rect x="450" y="54" width="212" height="62" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="466" y="76" font-size="11.5" fill="currentColor">크롭 안에 <tspan font-weight="600">라벨이 보인다</tspan></text>
+      <text x="466" y="94" font-size="10.5" fill="currentColor" opacity=".65">같은 칸을 다시 읽었는데 값이 달랐다</text>
+      <text x="466" y="108" font-size="10.5" fill="var(--auto)">→ 값 불일치 · 진짜 신호</text>
+
+      <rect x="450" y="166" width="212" height="62" rx="4" fill="var(--na)" fill-opacity=".08" stroke="var(--na)" stroke-width="1.5"/>
+      <text x="466" y="188" font-size="11.5" fill="currentColor">크롭 안에 <tspan font-weight="600">라벨이 없다</tspan></text>
+      <text x="466" y="206" font-size="10.5" fill="currentColor" opacity=".65">애초에 다른 영역을 읽었다</text>
+      <text x="466" y="220" font-size="10.5" fill="var(--na)">→ bbox 오류 · 값을 의심할 근거 아님</text>
+
+      <line x1="662" y1="85" x2="716" y2="85" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar2)"/>
+      <line x1="662" y1="197" x2="716" y2="197" stroke="var(--na)" stroke-opacity=".7" marker-end="url(#arn)"/>
+
+      <rect x="722" y="62" width="150" height="46" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+      <text x="797" y="82" font-size="12" text-anchor="middle" fill="currentColor">신뢰도 낮춤</text>
+      <text x="797" y="97" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">REVIEW 로</text>
+
+      <rect x="722" y="174" width="150" height="46" rx="4" fill="none" stroke="var(--na)" stroke-width="1.5"/>
+      <text x="797" y="194" font-size="12" text-anchor="middle" fill="currentColor">bbox 재요청</text>
+      <text x="797" y="209" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">값은 그대로 둔다</text>
+
+      <text x="0" y="272" font-size="10.5" fill="currentColor" opacity=".7">지금은 이 두 갈래가 구분되지 않는다 — 아래쪽 경우도 "값이 의심스럽다"로 처리된다.</text>
+      <text x="0" y="290" font-size="10.5" fill="var(--na)" opacity=".85">거짓 경보가 REVIEW 큐를 부풀리고, 사람이 멀쩡한 값을 다시 확인하게 된다.</text>
+    </svg>
+    </div>
+    <figcaption><b>M1 을 켜기 전에 이 분기를 먼저 넣어야 한다.</b> 재판독을 항상 부르기 시작하면
+    불일치 건수가 늘어나는데, 그중 일부는 값이 아니라 상자가 틀린 것이다. 구분하지 않으면
+    M1 이 신호가 아니라 잡음이 된다. <code>_crop()</code> 의 우측·상하 여백이 지금 0.02 인데
+    IoU 14.4% 환경에서는 좁다 — 좌측 0.10 은 라벨을 담으려는 의도라 맞다.</figcaption>
+  </figure>
+
+  <div class="finds">
+    <div class="find info">
+      <p class="ft">대응 1 — 여백을 키운다</p>
+      <p><code>_crop()</code> 의 우측·상하 여백 0.02 를 늘리고 최소 크롭 크기를 둔다. 크롭이 커지면 토큰이 늘지만, 페이지 전체보다는 훨씬 작다.</p>
+    </div>
+    <div class="find info">
+      <p class="ft">대응 2 — 불일치의 원인을 나눈다</p>
+      <p>재판독 결과에 <code>raw_label</code> 이 함께 오는지를 본다. 라벨이 보이면 값 불일치, 안 보이면 bbox 오류. 후자는 신뢰도를 깎지 않는다.</p>
+    </div>
+    <div class="find info">
+      <p class="ft">대응 3 — 우리 IoU 를 한 번 잰다</p>
+      <p>골든셋 30건의 bbox 를 눈으로 검수해 <b>우리 코퍼스의 실제 IoU</b> 를 기록한다. 공개 벤치와 다를 수 있고, 이 숫자가 있어야 여백값을 근거 있게 정한다. 실험 <b>E8</b>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Rejected</h2>
+  <p class="h2sub">매트릭스에 있지만 가져오지 않는 것</p>
+  <p class="note">칸이 채워져 있다고 다 가져올 수 있는 것은 아니다. 왜 안 되는지를 적어 두어야
+  나중에 같은 검토를 반복하지 않는다.</p>
+  <div class="tw"><table>
+    <thead><tr><th>레퍼런스의 방법</th><th>확인한 사실</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td><b>로컬 OCR 엔진</b> (R3 S2)</td><td>엔진 교체만으로 12.07%p 차이 — 효과는 확실하다. 하지만 새 의존성이고 PaddleOCR 은 Windows 설치 부담이 있다</td><td><b>범위 밖.</b> 골든셋 30건으로 상한만 재고 후속 과제로</td></tr>
+      <tr><td><b>은닉 상태 프로브</b> (R2 최고 성능 0.789~0.797)</td><td>중간층 활성값과 어텐션 가중치가 필요하다</td><td><b>불가.</b> OpenAI API 에서 꺼낼 수 없다</td></tr>
+      <tr><td><b>다중 모델 앙상블</b> (Consensus Entropy)</td><td>라우팅 +6.5%, 5모델 최적, 7.3%만 강모델로 승급</td><td><b>보류.</b> API 키가 하나뿐이다</td></tr>
+      <tr><td><b>동일 모델 self-consistency</b> (R2)</td><td>abstention 0.646~0.743 으로 VLM Judge 보다 낮다</td><td><b>보류.</b> 샘플링은 철학 6(같은 입력 → 같은 출력)과 정면 충돌한다. 크롭 재판독이 더 싸고 결정론적이다</td></tr>
+      <tr><td><b>CatBoost 40특징 결합</b> (R1 S6)</td><td>학습에 필드 단위 1,072표본을 썼다</td><td><b>축소 이식.</b> 우리는 최대 840(실질 더 적음)이라 과적합한다. 특징 3~5개 로지스틱 회귀로 시작</td></tr>
+      <tr><td><b>채점자의 값 수정</b> (R7 S6)</td><td>논문의 채점 LLM 은 점수와 함께 수정값도 낸다</td><td><b>점수만.</b> 값 수정은 우리 환각 방지 규칙과 부딪힌다 — 필요하면 REVIEW 로 넘긴다</td></tr>
+      <tr><td><b>temperature 를 올린 재시도</b> (R4 S7)</td><td>olmOCR 은 0.1 → 0.8 로 올려 반복 붕괴를 탈출한다</td><td><b>대체.</b> 철학 6 때문에 못 쓴다. 우리 사다리는 tier1 → tier2 모델 승격이다</td></tr>
+      <tr><td><b>Claude Citations</b></td><td>스캔 이미지 인용 미지원 · 구조화 출력과 병용 시 400 에러</td><td><b>기술적 불가.</b> 우리 근거 제시는 bbox 가 맡는다</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer>
+  R1 <a href="https://arxiv.org/abs/2606.24420">arXiv:2606.24420</a> ExtractConf ·
+  R2 <a href="https://arxiv.org/abs/2511.19806">arXiv:2511.19806</a> 기권 벤치마크 ·
+  R3 <a href="https://arxiv.org/abs/2604.26462">arXiv:2604.26462</a> 스캔 금융문서 다단계 ·
+  R4 <a href="https://arxiv.org/abs/2502.18443">arXiv:2502.18443</a> olmOCR ·
+  R6 <a href="https://arxiv.org/abs/2602.12203">arXiv:2602.12203</a> ExStrucTiny ·
+  R7 <a href="https://arxiv.org/abs/2510.19334">arXiv:2510.19334</a> 채점 LLM<br>
+  전체 조사·실험 설계 E1~E8 은 docs/research_vlm_extraction.md (rev.2) 에 있다.
+</footer>
+
+</div>

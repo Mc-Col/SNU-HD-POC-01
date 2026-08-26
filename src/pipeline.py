@@ -80,8 +80,17 @@ class ParserModule(Protocol):
 
 
 class NormalizeModule(Protocol):
-    def run(self, ex: RawExtraction, f: Field) -> tuple[str | None, list[str]]:
-        """(표준값, transform_trace) 를 반환한다."""
+    def run(self, ex: RawExtraction, f: Field,
+            context: dict[str, str | None] | None = None) -> tuple[str | None, list[str]]:
+        """(표준값, transform_trace) 를 반환한다.
+
+        context 로 **앞서 확정된 다른 필드의 값**을 받는다. 문서에 글자로 적혀
+        있지 않은 파생 필드(`type_name` ← 태그의 설비종류)를 규칙으로 채우기 위한
+        것이다. 규칙은 `schema/rules.yaml` 의 `derived_fields` 에 둔다.
+
+        `context` 를 받지 않는 구형 구현도 계속 동작한다 — 호출부가 TypeError 를
+        잡아 2인자로 다시 부른다(`reread` 의 attempt 확장 때와 같은 방식).
+        """
 
 
 class ValidateModule(Protocol):
@@ -388,6 +397,28 @@ class Pipeline:
             records[f.key] = rec
             context[f.key] = rec.value
 
+        # 파생 필드 2차 패스 — 1차에서 근거 없음으로 끝난 필드 중 도출 규칙이
+        # 있는 것만 다시 처리한다. 이 시점에는 context 에 전 필드 결과가 들어
+        # 있으므로 `type_name ← engineering_tag_no` 같은 도출이 가능하다.
+        #   1차에서 못 하는 이유는 fields.yaml 순서 때문이다 — type_name 이
+        #   첫 필드라 태그가 아직 context 에 없다. 2차 패스는 순서에 의존하지
+        #   않으므로 필드 순서가 바뀌어도 깨지지 않는다.
+        for f in fields:
+            if records[f.key].failure is not FailureKind.NO_EVIDENCE:
+                continue                                  # 값이 있거나 다른 실패면 대상 아님
+            if schema.derivation_for(f.key) is None:
+                continue                                  # 도출 규칙이 없으면 그대로 둔다
+            # 확신도를 0 으로 내려서 넘긴다. 파서가 낸 확신도는 "값이 없다는 데
+            # 대한 확신" 이지 "도출값이 맞다는 확신" 이 아니다. 그대로 두면
+            # 임계를 통과해 자동확정된다(실측 11건). 도출값은 문서 근거가
+            # 없으므로 사람이 확인해야 한다 — DualParser 가 텍스트 단독 값을
+            # 다루는 방식과 같다.
+            seed = replace(by_key[f.key], confidence=0.0)
+            rec = self._process(doc_id, path, f, seed, context, attempt=0)
+            if rec.value:                                 # 도출에 성공했을 때만 교체한다
+                records[f.key] = rec
+                context[f.key] = rec.value
+
         # 재시도 — 추출 실패에만. 제약 위반은 사람에게 넘긴다.
         for attempt in range(1, self.max_retries + 1):
             targets = [f for f in fields
@@ -443,10 +474,23 @@ class Pipeline:
                  context: dict[str, str | None], attempt: int) -> FieldRecord:
         t0 = time.perf_counter()
 
-        value, trace = self.normalizer.run(ex, f)
+        try:
+            value, trace = self.normalizer.run(ex, f, context)
+        except TypeError:
+            # context 를 받지 않는 구형 구현 — 계약 확장 이전 버전
+            value, trace = self.normalizer.run(ex, f)
         if trace and value != ex.raw_value:
             hooks.on_transform(doc_id, f.key, ex.raw_value, value,
                                rule="domain_rules", trace=trace)
+
+        # 파서가 값을 못 냈는데 ④ 가 값을 만들었다면 그것은 **문서 근거가 없는
+        # 도출값**이다. 파서의 확신도는 "값이 없다는 데 대한 확신" 이지 "도출값이
+        # 맞다는 확신" 이 아니므로 그대로 두면 임계를 통과해 자동확정된다
+        # (실측 — 골든셋에서 11건이 그렇게 auto 로 갔다).
+        # 확신도를 0 으로 내려 사람 확인 경로로 보낸다. 도출 지점(1차·2차 패스)에
+        # 관계없이 여기 한 곳에서 막는다.
+        if value and not ex.found:
+            ex = replace(ex, confidence=0.0)
 
         failure, detail = self.format_validator.check(f, value, ex, context)
         if failure is FailureKind.NONE:
@@ -670,6 +714,13 @@ def build(only_mvp: bool = True, use_vlm: bool = True, max_retries: int = 2,
     text_parser = TextParser()
     kw["text_parser"] = text_parser
     kw["format_validator"] = FormatValidator()
+
+    # ④ Normalize — 파생 필드 도출을 포함한 구현. 실패해도 기본 구현으로 계속한다.
+    try:
+        from src.normalize import Normalizer
+        kw["normalizer"] = Normalizer()
+    except Exception as e:                               # noqa: BLE001
+        log.append(f"normalize 기본 구현 유지 — {type(e).__name__}: {e}")
 
     for name, mod, cls in (("triage", "src.triage", "Triage"),
                            ("router", "src.router", "Router")):
