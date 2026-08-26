@@ -691,6 +691,14 @@ enum_allowed_values:
   # 보정하면 다른 재질로 바꿔치기한다. 표시만 하면 위험이 0이고, 사람이
   # 승인하면 어휘가 자란다(Loop C).
   flag_only:
+    # ⚠ 목록은 **정답지에서 관측된 값으로 자란다** (Loop C). 값을 바꾸지 않으므로
+    #   목록에 없는 표기를 추가하는 것은 위험이 0이고, 빠져 있으면 반대로 손해다 —
+    #   맞는 값이 매번 "확인필요" 로 떠서 검토자가 헛일을 하고, 그게 반복되면
+    #   진짜 경고도 흘려보게 된다.
+    #   2026-08-26 감사 — 정답 13칸이 어휘 밖이었다. 전부 사람이 문서에서 읽은
+    #   정당한 값이라 목록에 넣었다. 남은 1칸은 ACTUATOR TYPE 'STD' 인데 그 필드는
+    #   보정 대상(correct)이라 여기가 아니고, 'STD' 를 DIAPHRAGM 으로 만드는 별칭은
+    #   근거 없는 값을 만드는 일이라 넣지 않는다(철학 4).
     # 안전 필드 — **보정 대상이 아니다.** 값을 바꾸는 것은 금지이고,
     # 어휘 밖이면 사람에게 보내기만 한다. 검증은 값을 건드리지 않으므로
     # 안전 필드에서도 위험이 없다. 실측에서 이 필드가 "표시를 놓친 칸" 의
@@ -701,20 +709,27 @@ enum_allowed_values:
       ["A105", "A216 WCB", "A216 GR WCB", "A216 GR-WCB", "ASTM A216 GR-WCB",
        "WCB", "WCB STEEL", "WCC", "WCC STEEL", "CARBON STEEL(WCB)",
        "C5", "WC5", "CR-MO C5; F5A", "A217 C5", "A217 WC5",
-       "A351 CF8M", "CF8M", "A352 LCB", "LCB"]
+       "A351 CF8M", "CF8M", "A352 LCB", "LCB",
+       "CARBON STEEL"]     # 2026-08-26 — 정답 2칸이 풀어 쓴 표기였다
     valve_plug_material:
       ["316 SS", "316 SST", "316L SST", "SUS316", "SUS316L", "SUS403",
        "410 SS HT", "316 SST/COCR-A", "316 SST / COCR-A", "316 SST W/COCR-A",
        "316 SST + STELLITE", "316 SS + STF", "SUS316 + STELL.", "COCR-A",
-       "SUS 316/COCR-A"]      # d023 — 시트 어휘에 있던 표기가 플러그에도 나왔다
+       "SUS 316/COCR-A",      # d023 — 시트 어휘에 있던 표기가 플러그에도 나왔다
+       # 2026-08-26 어휘 감사 — 정답에 있는데 목록에 없던 표기
+       "630SST", "316SS STELLITE", "ALUMINUM/NITRILE"]
     valve_cage_material:
       ["17-4PH SST", "316 SS", "316 SST", "SUS316", "SUS403", "SUS440B",
-       "440 SST", "416 SS HT", "316 SST / ENC", "COCR-A"]
+       "440 SST", "416 SS HT", "316 SST / ENC", "COCR-A",
+       # 2026-08-26 어휘 감사
+       "630SST", "316SST W/ENC", "SUS 316 CR.P1."]
     valve_seat_material:
       ["316 SS", "316 SST", "SUS403", "SCS14A", "SCS14A + STELLITE",
        "CAST COCR-A", "COCR-A", "316 SST + STELLITE", "316 SST / COCR-A",
        "316 SST W/COCR-A", "SUS 316/COCR-A", "316 SS + STF", "410 SS HT",
-       "NBR"]
+       "NBR",
+       # 2026-08-26 어휘 감사 — STELLITE 를 줄여 쓴 표기가 목록에 없었다
+       "SCS14A + STELL.", "316SS STELLITE", "410SST", "ALUMINUM"]
     valve_stem_material:
       ["316 SS", "316 SST", "SUS316", "SUS316L", "INCONEL",
        "316SST + CR PLATE", "ALLOY 6, LGA", "17-4PH SST",
@@ -722,7 +737,8 @@ enum_allowed_values:
        # 사양이라는 뜻이고, **비어 있는 것과 다르다** — 문서가 명시적으로
        # 표준품이라고 말한 것이다. 다만 마스터에서 조회할 때는 재질명이
        # 아니므로 카탈로그 조회가 따로 필요하다.
-       "STD.", "STD", "STANDARD"]
+       "STD.", "STD", "STANDARD",
+       "630SST"]              # 2026-08-26 어휘 감사
 
 # ── 구두점이 뜻을 바꾸는 필드 ────────────────────────────────
 # 별칭 대조는 기본적으로 영숫자만 남긴다(회사명 CO.,LTD. 의 점은 잡음이다).
