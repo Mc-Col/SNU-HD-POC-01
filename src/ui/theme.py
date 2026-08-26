@@ -37,6 +37,35 @@ def chip(state: FieldState, text: str | None = None) -> str:
             f"background:{c}14'>{text or label(state)}</span>")
 
 
+# 표시원 배지 — 어느 수단이 이 칸을 불렀는가. 색으로 구분한다
+FLAG_COLOR = {"확신도": ACCENT, "어휘": AMBER, "출처": MAROON}
+_KIND = {"auto": GREEN, "review": AMBER, "na": MAROON, "off": "#8A97A1"}
+
+
+def badge(text: str, kind: str = "off") -> str:
+    """작은 배지 하나. 쪽 고르기의 날짜·개정표기 표시에 쓴다."""
+    c = _KIND.get(kind, _KIND["off"])
+    return (f"<span class='d2s-chip' style='color:{c};border-color:{c};"
+            f"background:{c}14'>{text}</span>")
+
+
+def flag_badge(source: str) -> str:
+    """표시원 배지 — 확신도 · 어휘 · 출처."""
+    c = FLAG_COLOR.get(source, ACCENT)
+    return (f"<span class='d2s-chip' style='color:{c};border-color:{c};"
+            f"background:{c}14'>{source}</span>")
+
+
+# 사람의 조치를 화면에 영어 열거값으로 내보내지 않는다
+ACTION = {"approve": "확인", "override": "수정", "na_confirm": "N/A 확인"}
+
+# 안전·식별 표시 — 원시 열거값(safety/identity) 대신 짧은 한글로
+SAFETY_TAG = {
+    "safety": f"<span class='d2s-code' style='color:{MAROON}'> 안전</span>",
+    "identity": f"<span class='d2s-code' style='color:{ACCENT}'> 식별</span>",
+}
+
+
 def chip_counts(counts: dict[str, int]) -> str:
     out = []
     for s in (FieldState.AUTO, FieldState.REVIEW, FieldState.NA):
@@ -55,7 +84,10 @@ def inject_css() -> None:
   .d2s-val{font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.35;
     word-break:break-all}
   .d2s-raw{font-size:11px;opacity:.62;line-height:1.4}
+  .d2s-was{opacity:.55;text-decoration:line-through .5px}
   .d2s-note{font-size:11.5px;color:#A9701C;line-height:1.45}
+  .d2s-note1{font-size:11px;color:#A9701C;line-height:1.4;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
   .d2s-guide{font-size:12.5px;line-height:1.65;white-space:pre-wrap;
     border-left:3px solid #1F4E6B;padding:2px 0 2px 10px;margin:2px 0 6px;opacity:.92}
   .d2s-req{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;opacity:.6}

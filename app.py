@@ -11,7 +11,7 @@ from __future__ import annotations
 import streamlit as st
 
 from src import env
-from src.ui import hitl, screens, session, theme
+from src.ui import approve, hitl, screens, session, theme
 
 env.load()      # .env 는 프로세스 시작 시 한 번 읽는다 (VLM 키)
 
@@ -24,6 +24,7 @@ ROUTES = {
     session.CONFIRM: screens.confirm_screen,
     session.EXTRACT: screens.extract_screen,
     session.DONE: screens.done_screen,
+    session.APPROVE: approve.render,
 }
 
 

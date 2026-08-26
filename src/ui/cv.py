@@ -7,8 +7,8 @@ Cv 물리 교차검증은 루프에서 뺐다(잘못된 제약이 정상 값을 
 차압(ΔP)은 기준정보 항목이 아니다 (2026-08-23 결정 — 30필드에 넣지 않음).
 따라서 문서에서 뽑을 수 없고 계산 시 사람이 넣는다. 화면이 그걸 숨기지 않는다.
 
-채우는 대상은 RATED CV NORMAL 이다 — 운전조건에서 필요한 Cv 이기 때문이다.
-RATED CV MAX(밸브 정격)는 밸브의 사이즈·트림에서 정해지므로 계산으로 채우지 않는다.
+채우는 대상은 REQUIRED CV 다 — 운전조건에서 필요한 Cv 이기 때문이다.
+RATED CV(밸브 정격)는 밸브의 사이즈·트림에서 정해지므로 계산으로 채우지 않는다.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from src.ui.source import UiDoc
 # 공정조건 원천 필드 — 값이 아니라 '어디서 왔는지'를 같이 보여주기 위한 목록
 Q_KEYS = ("normal_flow_rate",)
 SG_KEYS = ("specific_gravity",)
-P_KEYS = ("maximum_pressure", "normal_pressure")
+P_KEYS = ("normal_pressure",)   # maximum_pressure 는 스키마에서 사라졌다
 
 Q_UNITS = {"m3/h": 1.0, "gpm": 0.2271247}
 P_UNITS = {"bar": 1.0, "kg/cm2": 0.980665, "psi": 0.0689476, "MPa": 10.0}
@@ -62,7 +62,7 @@ def panel(d: UiDoc, rec: FieldRecord) -> None:
     sg0, sg_src = _source_line(d, SG_KEYS)
     _p0, p_src = _source_line(d, P_KEYS)
 
-    st.caption("운전조건에서 필요한 Cv 를 계산합니다. 밸브 정격(RATED CV MAX)이 아닙니다.")
+    st.caption("운전조건에서 필요한 Cv 를 계산합니다. 밸브 정격(RATED CV)이 아닙니다.")
     st.caption("문서에서 온 공정조건 — 단위 정규화는 MVP 범위 외이므로 원문 그대로입니다")
     st.markdown(
         f"<div class='d2s-raw'>유량 · {q_src}<br>비중 · {sg_src}<br>"

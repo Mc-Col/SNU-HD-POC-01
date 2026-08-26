@@ -6,14 +6,15 @@
     "  → 픽스처가 스키마와 어긋나면 화면이 뜨지 않고 KeyError 로 알려준다. 의도한 동작이다.",
     "fixtures/ui/sample_page.pdf 는 이 파일에서 생성된다: python fixtures/ui/make_sample.py",
     "  → bbox 와 지면의 값 위치가 구조적으로 일치한다. 좌표를 손으로 맞추지 않는다.",
-    "2026-08-24 이종수: 스키마 변경 반영 — maximum_pressure→normal_pressure, rated_cv_max→rated_cv, rated_cv_normal→required_cv, valve_body_type 추가."
+    "2026-08-24 이종수: 스키마 변경 반영 — maximum_pressure→normal_pressure, rated_cv_max→rated_cv, rated_cv_normal→required_cv, valve_body_type 추가.",
+    "bbox 는 계약대로 정규화(0~1)다. 생성기가 page_size 를 곱해 그린다."
   ],
   "doc_id": "19-FV-001",
   "source_name": "19-FV-001.pdf",
   "source_bytes": 787000,
   "page_size": [
     595,
-    640
+    662
   ],
   "parser": "vlm",
   "elapsed_ms": 8420,
@@ -41,30 +42,30 @@
       "label": "SERVICE",
       "text": "RECYCLE TO DHC FEED FILTERS",
       "bbox": [
-        250,
-        192,
-        430,
-        208
+        0.4202,
+        0.29,
+        0.7227,
+        0.3142
       ]
     },
     {
       "label": "LINE NO.",
       "text": "10-P-1042-A1A",
       "bbox": [
-        250,
-        214,
-        430,
-        230
+        0.4202,
+        0.3233,
+        0.7227,
+        0.3475
       ]
     },
     {
       "label": "P&ID",
       "text": "D-2-1041 SH.3",
       "bbox": [
-        250,
-        500,
-        430,
-        516
+        0.4202,
+        0.7885,
+        0.7227,
+        0.8127
       ]
     }
   ],
@@ -77,10 +78,10 @@
       "confidence": 0.96,
       "state": "auto",
       "bbox": [
-        250,
-        104,
-        430,
-        120
+        0.4202,
+        0.1571,
+        0.7227,
+        0.1813
       ],
       "source_locator": "p1:tbl1:r1c2"
     },
@@ -92,10 +93,10 @@
       "confidence": 0.98,
       "state": "auto",
       "bbox": [
-        250,
-        126,
-        430,
-        142
+        0.4202,
+        0.1904,
+        0.7227,
+        0.2145
       ],
       "source_locator": "p1:tbl1:r2c2"
     },
@@ -107,10 +108,10 @@
       "confidence": 0.97,
       "state": "auto",
       "bbox": [
-        250,
-        148,
-        430,
-        164
+        0.4202,
+        0.2236,
+        0.7227,
+        0.2477
       ],
       "source_locator": "p1:tbl1:r3c2"
     },
@@ -122,10 +123,10 @@
       "confidence": 0.94,
       "state": "auto",
       "bbox": [
-        250,
-        170,
-        430,
-        186
+        0.4202,
+        0.2568,
+        0.7227,
+        0.2809
       ],
       "source_locator": "p1:tbl1:r4c2"
     },
@@ -149,10 +150,10 @@
       "confidence": 0.93,
       "state": "auto",
       "bbox": [
-        250,
-        258,
-        430,
-        274
+        0.4202,
+        0.3897,
+        0.7227,
+        0.4139
       ],
       "source_locator": "p1:tbl2:r1c2"
     },
@@ -166,10 +167,10 @@
       "failure": "format",
       "note": "형식·허용값 위반 — 단일 값이어야 하는데 두 값이 병기됨(최대/정상 추정). 재시도하지 않고 확인 요청",
       "bbox": [
-        250,
-        280,
-        430,
-        296
+        0.4202,
+        0.423,
+        0.7227,
+        0.4471
       ],
       "source_locator": "p1:tbl2:r2c2"
     },
@@ -181,10 +182,10 @@
       "confidence": 0.95,
       "state": "auto",
       "bbox": [
-        250,
-        302,
-        430,
-        318
+        0.4202,
+        0.4562,
+        0.7227,
+        0.4804
       ],
       "source_locator": "p1:tbl2:r3c2"
     },
@@ -196,10 +197,10 @@
       "confidence": 0.93,
       "state": "auto",
       "bbox": [
-        250,
-        324,
-        430,
-        340
+        0.4202,
+        0.4894,
+        0.7227,
+        0.5135
       ],
       "source_locator": "p1:tbl2:r4c2"
     },
@@ -211,10 +212,10 @@
       "confidence": 0.94,
       "state": "auto",
       "bbox": [
-        250,
-        546,
-        430,
-        562
+        0.4202,
+        0.858,
+        0.7227,
+        0.8822
       ],
       "source_locator": "p1:tbl5:r1c2"
     },
@@ -238,10 +239,10 @@
       "confidence": 0.95,
       "state": "auto",
       "bbox": [
-        250,
-        390,
-        430,
-        406
+        0.4202,
+        0.5891,
+        0.7227,
+        0.6133
       ],
       "source_locator": "p1:tbl3:r1c2"
     },
@@ -249,14 +250,19 @@
       "key": "valve_body_rating",
       "raw_label": "BODY RATING",
       "raw_value": "ANSI CLASS 300",
-      "value": "ANSI CLASS 300",
+      "value": "300#",
       "confidence": 0.92,
       "state": "auto",
+      "transform_trace": [
+        "원문 'ANSI CLASS 300'",
+        "규칙 schema/rules.yaml : value_aliases.valve_body_rating",
+        "표기 변종 → 표준값 '300#'"
+      ],
       "bbox": [
-        250,
-        412,
-        430,
-        428
+        0.4202,
+        0.6224,
+        0.7227,
+        0.6465
       ],
       "source_locator": "p1:tbl3:r2c2"
     },
@@ -275,10 +281,10 @@
         "WCB/316 SST"
       ],
       "bbox": [
-        250,
-        434,
-        430,
-        450
+        0.4202,
+        0.6556,
+        0.7227,
+        0.6797
       ],
       "source_locator": "p1:tbl3:r3c2"
     },
@@ -290,10 +296,10 @@
       "confidence": 0.97,
       "state": "auto",
       "bbox": [
-        250,
-        434,
-        430,
-        450
+        0.4202,
+        0.6888,
+        0.7227,
+        0.713
       ],
       "source_locator": "p1:tbl3:r3c2"
     },
@@ -311,10 +317,10 @@
         "교차검증 생략 — ACTUATOR TYPE 은 추출 대상 아님(구동부는 FAIL POSITION 만). 사람 확인 필수"
       ],
       "bbox": [
-        250,
-        478,
-        430,
-        494
+        0.4202,
+        0.7553,
+        0.7227,
+        0.7795
       ],
       "source_locator": "p1:tbl4:r1c2"
     },

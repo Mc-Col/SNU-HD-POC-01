@@ -21,11 +21,17 @@ def _rgb(hex_: str) -> tuple[float, float, float]:
     return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def boxes_for(records: list[FieldRecord], page: int, selected: str | None) -> tuple:
-    """캐시 키가 되도록 원시 튜플만 담는다."""
+def boxes_for(records: list[FieldRecord], page: int | None,
+              selected: str | None) -> tuple:
+    """캐시 키가 되도록 원시 튜플만 담는다.
+
+    `page=None` 이면 쪽으로 거르지 않는다 — 원본에서 한 쪽만 떠서 보여주는
+    경우(스캔 tif 는 항상 그렇다) 레코드의 쪽 번호는 원본 기준이고 이미지는
+    한 장뿐이라, 번호로 거르면 박스가 전부 사라진다.
+    """
     out = []
     for r in records:
-        if not r.bbox or r.page != page:
+        if not r.bbox or (page is not None and r.page != page):
             continue
         out.append((
             float(r.bbox[0]), float(r.bbox[1]), float(r.bbox[2]), float(r.bbox[3]),

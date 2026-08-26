@@ -18,7 +18,7 @@ from streamlit.testing.v1 import AppTest
 from src import schema
 from src.contracts import FieldState
 from src.hooks import hooks
-from src.ui import export, screens, source
+from src.ui import approve, export, overlay, pages, screens, source
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "app.py")
@@ -216,6 +216,238 @@ def test_guidance_can_be_written_from_the_screen(guidance_restored):
     schema.reload()
     assert text in schema.guidance(key)["text"]
     assert hooks.counters["on_rule_edit"] >= 1        # Loop C 입력이 남는다
+
+
+# ── 쪽 고르기 (화면 3) ────────────────────────────────────────
+
+MULTI = os.path.join(ROOT, "fixtures", "ui", "sample_multipage.pdf")
+
+
+def _views():
+    source.ensure_fixture_page(multi=True)
+    return pages.observe.__wrapped__(MULTI, 0.0)      # 캐시 우회
+
+
+def test_handwritten_mark_is_invisible_to_text_tools():
+    """손글씨 폐기 표시는 어느 도구도 못 읽는다 — 비교 화면이 존재하는 이유다."""
+    v = {x.page: x for x in _views()}
+    assert v[4].date_raw and "1986" in v[4].date_raw
+    assert not v[4].superseded and not v[4].marker
+    assert v[1].date_raw.startswith("2003")
+
+
+def test_rule_picks_the_latest_of_two_specs():
+    views = _views()
+    got, why = pages.rule_would_pick(views, [1, 4], "10FV001")
+    assert got == 1 and "2003" in why
+    # 후보가 없으면 규칙은 아무거나 고르지 않는다
+    assert pages.rule_would_pick(views, [], "10FV001")[0] is None
+
+
+def test_page_picker_lists_every_page_and_records_the_comparison():
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    at.button(key="btn_fixture_multi").click().run()
+    assert at.session_state["stage"] == "confirm"
+    for n in (1, 2, 3, 4):
+        at.checkbox(key=f"pg_{n}")                    # 없으면 KeyError
+
+    at.checkbox(key="pg_1").check().run()
+    assert at.session_state["page_candidates"] == [1]
+    at.button(key="btn_start").click().run()
+
+    assert at.session_state["stage"] == "hitl"
+    assert at.session_state["vlm_page"] == 1
+    assert hooks.counters["on_human_action"] >= 1     # 자동 대조가 기록된다
+
+
+def test_two_candidates_open_the_compare_view():
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    at.button(key="btn_fixture_multi").click().run()
+    at.checkbox(key="pg_1").check().run()
+    at.checkbox(key="pg_4").check().run()
+
+    assert at.session_state["page_candidates"] == [1, 4]
+    at.button(key="top_pick_1")   # 실행 버튼은 격자 위에 (스크롤 없이)
+    at.button(key="top_pick_4")
+    at.button(key="pick_1")       # 비교 화면에도 쪽마다 버튼이 뜬다
+    at.button(key="pick_4")
+    with pytest.raises(KeyError):
+        at.button(key="btn_start")    # 후보가 둘이면 단일 시작 버튼은 없다
+
+
+# ── 표시원 (화면 5) ───────────────────────────────────────────
+
+def test_flags_are_computed_from_the_shared_assembler():
+    """표시는 저장되지 않는다 — 규칙이 바뀌면 다음 렌더에서 바로 달라진다."""
+    d = source.from_fixture()
+    rec = d.record("valve_body_material")
+    got = {f.source for f in d.flags(rec)}
+    assert {"확신도", "어휘"} <= got
+
+    # 어휘를 통과하는 값은 표시가 붙지 않는다
+    assert not [f for f in d.flags(d.record("actuator_fail_action"))
+                if f.source == "어휘"]
+
+
+def test_bbox_is_normalized_per_contract():
+    d = source.from_fixture()
+    boxes = overlay.boxes_for(d.records, None, None)
+    assert boxes and all(0.0 <= v <= 1.0 for b in boxes for v in b[:4])
+    assert overlay.render(d.page_path, 1, boxes)[1:4] == b"PNG"
+
+
+# ── 사전 승인 (화면 6) ────────────────────────────────────────
+
+def _cand_rows():
+    _s, rows = approve.load(approve.FIXTURE)
+    return rows
+
+
+def test_candidates_are_frequency_sorted():
+    counts = [r["count"] for r in _cand_rows()]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_material_fields_offer_no_alias_option():
+    """CS → C5 는 탄소강을 크롬몰리강으로 바꿔치기하는 일이다. 선택지에 없어야 한다."""
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    at.button(key="btn_approve_open").click().run()
+    at.selectbox[0].set_value("합성 픽스처 (시험용)").run()
+
+    mat = at.radio(key="ap_valve_body_material::CS")
+    assert approve.ALIAS not in mat.options and mat.value == approve.IGNORE
+    maker = at.radio(key="ap_manufacturer::FISHER CONTROLS")
+    assert approve.ALIAS in maker.options
+    assert maker.value == approve.IGNORE              # 기본값은 무시
+
+
+def test_approved_yaml_carries_the_seen_line():
+    rows = {r["field_key"]: r for r in _cand_rows()}
+    picked = [
+        {**rows["manufacturer"], "choice": approve.ALIAS, "target": "FISHER"},
+        {**rows["valve_seat_material"], "choice": approve.KEEP,
+         "target": "SCS14A + STELL."},
+    ]
+    text = approve.to_yaml(picked, "2026-08-25")
+
+    assert "value_aliases:" in text and "enum_allowed_values:" in text
+    assert "to: FISHER" in text or 'to: "FISHER"' in text
+    assert "2026-08-25 승인" in text
+    assert "원문라벨" in text
+    # 재질은 어휘에만 들어가고 값을 바꾸는 규칙이 되지 않는다
+    seat = text[text.index("enum_allowed_values:"):]
+    assert "valve_seat_material" in seat and "from:" not in seat
+
+
+def test_screen_never_writes_the_rules_file():
+    before = io.open(os.path.join(ROOT, "schema", "rules.yaml"),
+                     encoding="utf-8").read()
+    rows = {r["field_key"]: r for r in _cand_rows()}
+    approve.to_yaml([{**rows["manufacturer"], "choice": approve.KEEP,
+                      "target": "FISHER CONTROLS"}], "2026-08-25")
+    after = io.open(os.path.join(ROOT, "schema", "rules.yaml"),
+                    encoding="utf-8").read()
+    assert before == after
+
+
+# ── 스캔 tif (대상의 71.9%) ───────────────────────────────────
+
+SCAN = os.path.join(ROOT, "fixtures", "ui", "sample_scan.tif")
+
+
+def test_scan_has_no_badges_and_the_rule_cannot_decide():
+    """스캔은 텍스트가 없으니 규칙이 최신성을 못 가린다 — 그래서 사람이 고른다."""
+    views = pages.observe.__wrapped__(SCAN, 0.0)
+    assert len(views) == 4 and not any(v.has_text for v in views)
+
+    got, why = pages.rule_would_pick(views, [1, 4], None)
+    assert got is None and "사람" in why          # 판정불가는 '틀림' 이 아니다
+
+
+def test_scan_is_rendered_and_boxes_land_on_the_page_we_showed():
+    d = source.from_fixture(page_path=SCAN, page=1)
+    assert d.page_path.lower().endswith(".png")   # tif 는 PDF 뷰어로 못 띄운다
+    assert d.page_no == 1
+    assert overlay.boxes_for(d.records, d.page_no, None)
+
+    # 다른 쪽을 떠 왔으면 그 쪽 박스만 그린다 — 1쪽 레코드가 4쪽에 찍히면 거짓이다
+    d4 = source.from_fixture(page_path=SCAN, page=4)
+    assert d4.page_no == 4
+    assert overlay.boxes_for(d4.records, d4.page_no, None) == ()
+
+
+def test_grid_images_are_shrunk_and_image_formats_share_one_render():
+    from PIL import Image
+    small = pages.thumbs.__wrapped__(SCAN, 0.0)
+    assert small and max(Image.open(small[0]).size) <= pages.GRID_PX * 2
+    # 이미지는 dpi 요청이 무시되므로 72·200 이 같은 폴더를 쓴다 (두 번 뜨지 않는다)
+    assert pages._bucket(SCAN, 72) == pages._bucket(SCAN, 200) == "orig"
+    assert pages._bucket("x.pdf", 72) != pages._bucket("x.pdf", 200)
+
+
+def test_scan_flows_through_the_page_picker():
+    at = AppTest.from_file(APP, default_timeout=120)
+    at.run()
+    at.session_state["pending_file"] = SCAN
+    at.session_state["origin"] = "fixture"
+    at.session_state["stage"] = "confirm"
+    at.run()
+
+    for n in (1, 2, 3, 4):
+        at.checkbox(key=f"pg_{n}")
+    at.checkbox(key="pg_2").check().run()          # 도면을 골라도 화면은 막지 않는다
+    at.button(key="btn_start").click().run()
+
+    assert at.session_state["stage"] == "hitl"
+    assert at.session_state["vlm_page"] == 2
+    assert at.session_state["doc"].page_no == 2
+
+
+# ── 사람이 최종 확정한다 (정책, 2026-08-25) ───────────────────
+
+def test_every_row_offers_a_way_to_change_the_value():
+    """AI 판정에 따라 사람의 수정 권한을 제한하지 않는다."""
+    at = _to_hitl()
+    for rec in at.session_state["doc"].records:
+        if rec.state is FieldState.AUTO:
+            at.text_input(key=f"ed_{rec.field_key}")    # 없으면 KeyError
+        else:
+            at.text_input(key=f"in_{rec.field_key}")
+
+
+def test_confident_value_can_be_corrected_and_stays_countable():
+    """자동확정을 사람이 고친 건수가 곧 오적재 관측치다 — state 를 지우면 셀 수 없다."""
+    at = _to_hitl()
+    key = "manufacturer"                                # 정상추출 · 일반 필드
+    rec = at.session_state["doc"].record(key)
+    assert rec.state is FieldState.AUTO and rec.human_action is None
+
+    at.text_input(key=f"ed_{key}").input("FISHER CONTROLS").run()
+    at.button(key=f"edok_{key}").click().run()
+
+    rec = at.session_state["doc"].record(key)
+    assert rec.human_action == "override"
+    assert rec.final_value == "FISHER CONTROLS"
+    assert rec.state is FieldState.AUTO             # 판정은 지우지 않는다
+    assert "수정" in rec.note
+
+
+def test_safety_field_keeps_both_confirm_and_edit():
+    at = _to_hitl()
+    at.button(key="ok_actuator_fail_action")         # 확인
+    at.text_input(key="ed_actuator_fail_action")     # 수정
+    at.text_input(key="ed_engineering_tag_no")
+
+
+def test_cv_panel_is_reachable_for_the_required_cv_field():
+    """필드 이름이 바뀌면(rated_cv_normal → required_cv) 버튼이 조용히 죽는다."""
+    at = _to_hitl()
+    rec = at.session_state["doc"].record("required_cv")
+    assert rec.state is FieldState.NA
+    at.number_input(key="cv_q_required_cv")          # 없으면 KeyError
 
 
 if __name__ == "__main__":

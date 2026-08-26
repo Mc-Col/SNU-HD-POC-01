@@ -16,18 +16,20 @@ from __future__ import annotations
 import io
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src import schema
 from src.contracts import (
     DocumentClass, DocumentResult, FailureKind, FieldRecord, FieldState,
-    ParserType, Target, TriageResult,
+    ParserType, RawExtraction, Target, TriageResult,
 )
+from src.validate import domain
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FIXTURE_DIR = os.path.join(ROOT, "fixtures", "ui")
 FIXTURE_JSON = os.path.join(FIXTURE_DIR, "sample_document_result.json")
 FIXTURE_PDF = os.path.join(FIXTURE_DIR, "sample_page.pdf")
+FIXTURE_MULTI = os.path.join(FIXTURE_DIR, "sample_multipage.pdf")
 
 
 @dataclass
@@ -41,7 +43,28 @@ class UiDoc:
     page_path: str | None
     size_bytes: int
     route_reason: str
-    origin: str                      # "fixture" | "pipeline"
+    origin: str                      # "fixture" | "pipeline" | "vlm"
+    # 이 지면 이미지가 **원본의 몇 쪽인가.** 스캔은 한 쪽만 떠 오므로
+    # 이미지 자체에는 쪽 번호가 없다. 이것이 없으면 bbox 를 어느 쪽 것과
+    # 맞춰야 할지 알 수 없어, 다른 쪽 박스를 그리거나 전부 사라진다.
+    page_no: int = 1
+    # 표시원 계산에 필요한 원재료. 계약에 넣지 않는 이유는 아래 flags() 참고
+    raws: dict[str, RawExtraction] = field(default_factory=dict)
+
+    def flags(self, rec: FieldRecord) -> list[domain.Flag]:
+        """이 칸에 붙는 확인필요 표시 전부 — **매번 다시 계산한다.**
+
+        저장하지 않는 이유: 표시는 (값 · 추출 · 문맥 · 규칙)의 파생물이고,
+        저장하면 규칙이 바뀔 때 낡은 채로 남는다. 조합을 아는 곳은
+        `src/validate/domain.check_all` 하나뿐이다 — 화면도 평가 하네스도
+        같은 함수를 부르므로 "화면에서 본 것과 채점된 숫자" 가 갈리지 않는다.
+        """
+        try:
+            f = schema.get(rec.field_key)
+        except KeyError:
+            return []
+        return domain.check_all(f, rec.final_value, self.raws.get(rec.field_key),
+                                self.raws or None, confidence=rec.confidence)
 
     @property
     def records(self) -> list[FieldRecord]:
@@ -65,7 +88,13 @@ def _failure(s: str | None) -> FailureKind:
     return FailureKind(str(s or "none").lower())
 
 
-def from_fixture(path: str | None = None) -> UiDoc:
+def from_fixture(path: str | None = None, page_path: str | None = None,
+                 page: int = 1) -> UiDoc:
+    """`page_path` 를 주면 그 지면 위에 bbox 를 그린다.
+
+    다중 페이지 픽스처(`sample_multipage.pdf`)의 1쪽이 이 사양표와 같은
+    지면이므로, 쪽 고르기 화면을 지나온 흐름에서도 좌표가 그대로 맞는다.
+    """
     path = path or FIXTURE_JSON
     with io.open(path, encoding="utf-8") as f:
         fx = json.load(f)
@@ -113,17 +142,22 @@ def from_fixture(path: str | None = None) -> UiDoc:
         rec.validate()                      # 비고 누락·N/A 에 값 있음 → 예외
         records.append(rec)
 
+    sheet = page_path if (page_path and os.path.exists(page_path)) else FIXTURE_PDF
+    if os.path.splitext(sheet)[1].lower() != ".pdf":
+        # tif 는 PDF 뷰어로 못 띄운다 — 실제 경로와 같게 PNG 로 떠서 넘긴다
+        sheet = render_page_png(sheet, page) or FIXTURE_PDF
     result = DocumentResult(
-        doc_id=doc_id, source_path=FIXTURE_PDF, triage=tri,
+        doc_id=doc_id, source_path=sheet, triage=tri,
         records=records, elapsed_ms=int(fx.get("elapsed_ms", 0)),
     )
     return UiDoc(
         result=result,
         display_name=fx.get("source_name", os.path.basename(FIXTURE_PDF)),
-        page_path=FIXTURE_PDF,
+        page_path=sheet,
         size_bytes=int(fx.get("source_bytes", 0)),
         route_reason=fx.get("route", {}).get("reason", ""),
         origin="fixture",
+        page_no=page,
     )
 
 
@@ -202,17 +236,36 @@ def from_vlm(path: str, *, only_mvp: bool = True, page: int | None = None) -> Ui
 
     fields = [f for f in (schema.mvp_fields() if only_mvp else schema.all_fields())
               if f.source == "document"]
+    from src.validate import domain
+
     parser, norm = VlmParser(), DefaultNormalize()
     raws = parser.extract(path, triage, fields)
+    context = {e.field_key: e for e in raws}
+    doc_id = os.path.basename(path)
 
     records = []
     for ex in raws:
         f = schema.get(ex.field_key)
         value, trace = norm.run(ex, f)
-        # 값이 없으면 NO_EVIDENCE 로 넘겨야 N/A 로 판정된다 —
-        # 파이프라인과 같은 판정 함수를 쓴다. 화면과 채점이 갈리면 안 된다.
-        failure = FailureKind.NONE if value else FailureKind.NO_EVIDENCE
-        state, note = _decide(f, ex, value, failure, "", "", None)
+
+        # 표시원은 조립 함수 하나에서만 나온다. 확신도는 `_decide` 가 직접
+        # 보므로 여기서 또 넣지 않는다 — 넣으면 사유 문구가 어긋난다.
+        hard = [fl for fl in domain.check_all(f, value, ex, context,
+                                              confidence=ex.confidence)
+                if fl.source != "확신도"]
+        if not value:
+            # 값이 없으면 NO_EVIDENCE 로 넘겨야 N/A 로 판정된다 —
+            # 파이프라인과 같은 판정 함수를 쓴다. 화면과 채점이 갈리면 안 된다.
+            failure, detail = FailureKind.NO_EVIDENCE, ""
+        elif hard:
+            failure, detail = hard[0].kind, " / ".join(fl.why for fl in hard)
+            for fl in hard:
+                if fl.source == "어휘":
+                    # 후보 큐에 쌓아 두면 사전 승인 화면이 한 번에 보여준다
+                    domain.observe_all(f, value, doc_id, label=ex.raw_label or "")
+        else:
+            failure, detail = FailureKind.NONE, ""
+        state, note = _decide(f, ex, value, failure, detail, "", None)
         records.append(FieldRecord(
             doc_id=os.path.basename(path), field_key=f.key, field_name=f.name,
             value=value, raw_value=ex.raw_value, raw_label=ex.raw_label,
@@ -224,8 +277,7 @@ def from_vlm(path: str, *, only_mvp: bool = True, page: int | None = None) -> Ui
         ))
 
     result = DocumentResult(
-        doc_id=os.path.basename(path), source_path=path,
-        triage=triage, records=records)
+        doc_id=doc_id, source_path=path, triage=triage, records=records)
     return UiDoc(
         result=result,
         display_name=os.path.basename(path),
@@ -233,16 +285,20 @@ def from_vlm(path: str, *, only_mvp: bool = True, page: int | None = None) -> Ui
         size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
         route_reason=triage.reason,
         origin="vlm",
+        page_no=pg,
+        raws=context,
     )
 
 
-def ensure_fixture_page() -> str:
+def ensure_fixture_page(multi: bool = False) -> str:
     """합성 지면이 없으면 만든다. 픽스처에서 생성되므로 bbox 와 항상 일치한다."""
-    if not os.path.exists(FIXTURE_PDF):
+    want = FIXTURE_MULTI if multi else FIXTURE_PDF
+    if not os.path.exists(want):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "_make_sample", os.path.join(FIXTURE_DIR, "make_sample.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         mod.build()
-    return FIXTURE_PDF
+        mod.build_multipage()
+    return want
