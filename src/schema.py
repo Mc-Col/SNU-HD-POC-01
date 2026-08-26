@@ -226,6 +226,34 @@ def value_aliases(field_key: str) -> list[dict[str, Any]]:
     return out
 
 
+def numeric_format() -> dict[str, Any]:
+    """숫자 표기 통일 설정. 꺼져 있으면 빈 dict."""
+    d = _rules_doc().get("numeric_format") or {}
+    return d if d.get("enabled") else {}
+
+
+def norm_number(s: str) -> str:
+    """숫자 표기를 통일한다 — 소수점 앞 0 을 채우고 뒤 0 을 뗀다.
+
+    입력  : s — 원문(단위가 붙어 있어도 된다)
+    출력  : 표기만 통일한 문자열. 값은 바뀌지 않는다
+    부수효과: 없음
+
+    `.933` → `0.933` · `0.9300` → `0.93`. 단위는 건드리지 않는다.
+    """
+    cfg = numeric_format()
+    if not cfg:
+        return s
+    def fix(m):
+        v = m.group(0)
+        if cfg.get("leading_zero") and v.startswith("."):
+            v = "0" + v
+        if cfg.get("strip_trailing_zero") and "." in v:
+            v = v.rstrip("0").rstrip(".")
+        return v
+    return re.sub(r"\d*\.\d+", fix, str(s or ""))
+
+
 # ── 허용 어휘 ─────────────────────────────────────────────────
 #
 # 표준화와 검증은 같은 표의 앞뒷면이다.

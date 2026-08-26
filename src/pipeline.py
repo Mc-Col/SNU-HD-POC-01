@@ -223,6 +223,12 @@ class DefaultNormalize:
 
         if not schema.feature_enabled("unit_conversion"):
             trace.append("단위 변환 비활성 (MVP) — 원문 보존")
+        # 숫자 표기만 통일한다 — .933 → 0.933. 값은 바뀌지 않는다.
+        # 마스터 열에 .933 이 들어가면 조회·정렬이 깨진다.
+        fixed = schema.norm_number(raw)
+        if fixed != raw:
+            trace.append(f"숫자 표기 통일 → {fixed}")
+            return fixed, trace
         return raw, trace
 
 

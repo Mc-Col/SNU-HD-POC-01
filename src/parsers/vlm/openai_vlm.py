@@ -134,6 +134,24 @@ def upscale_factor() -> float:
     return v if 1.0 < v <= 4.0 else 1.0
 
 
+def crop_zoom() -> float:
+    """재판독 크롭에 추가로 줄 배율. `D2S_CROP_ZOOM`, **기본 1(끄기)**.
+
+    글자 오독(자릿수는 같고 한두 글자 다름)을 표적으로 2배를 시험했으나
+    **효과를 증명하지 못했다.** 개발셋 30건에서 글자 오독이 10 → 13 → 11 로
+    기준선보다 오히려 많았다. 게다가 그 실행에만 `--escalate` 를 함께 켜서
+    규칙 16 · 크롭 확대 · 에스컬레이션 셋이 섞였다 — **측정 설계 실수다.**
+
+    스위치는 남긴다. 순수 비교(에스컬레이션만 켜고 배율 없이 / 배율까지)를
+    할 기회가 있으면 그때 다시 잰다.
+    """
+    try:
+        v = float(os.getenv("D2S_CROP_ZOOM", "1"))
+    except ValueError:
+        return 1.0
+    return v if 1.0 <= v <= 6.0 else 1.0
+
+
 def prep_steps() -> tuple[str, ...]:
     """`D2S_PREP` 에 적힌 이미지 조정 단계. 쉼표로 구분한다."""
     v = os.getenv("D2S_PREP", "")
@@ -242,6 +260,14 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
        옳음  `2.51`  `1.05`  `116`
        틀림  `2.51 Cv`  `1.05 Sp. Gr.`  `Cv:116`
 15. **한 항목의 값만 낸다. 옆 칸 값을 이어 붙이지 마라.**
+16. **문서 제목·공사명·프로젝트명은 값이 아니다.** 지면 맨 위의 큰 글씨는
+   그 문서가 무엇인지를 말할 뿐이고 어떤 필드의 값도 아니다.
+   예) `CONTROL VALVE RETROFIT`(공사명) · `CONTROL VALVE SPECIFICATION`(양식명)
+   · `Pilot Operated Regulator`(양식 표제) · `Pressure Reducing`(용도 표기).
+   **항목명이 있는 칸의 값만 낸다.** 그 항목의 칸이 비어 있으면 값을 만들지 말고
+   `absence_reason: "no_evidence"` 로 비운다.
+   ⚠ 특히 `equipment_full_description` 은 **설비 자체의 설명**이지 문서 제목이나
+   공사 이름이 아니다. 해당 칸이 없으면 비운다.
    `LS AR / LIQUID` 처럼 나오면 두 항목을 합친 것이다 — 각자의 칸에 넣는다.
 
 출력은 JSON 하나다:
@@ -646,7 +672,17 @@ class VlmParser:
                     return None
                 out = os.path.join(self.render_dir,
                                    f"crop_p{page}_{int(x0*1000)}_{int(y0*1000)}.png")
-                im.crop(box).save(out, "PNG")
+                piece = im.crop(box)
+                # 재판독은 **한 행짜리 좁은 띠**라 더 키워도 토큰이 적게 는다.
+                # 실측에서 남은 오류의 16%가 자릿수는 같고 한두 글자만 다른
+                # 글자 오독이다(5↔3 · 8↔9 · 로마자 II↔IV). 2배 확대가 최대
+                # 개선이었던 것과 같은 표적이므로, 크롭에는 배율을 더 준다.
+                k = crop_zoom()
+                if k > 1.0:
+                    piece = piece.resize(
+                        (max(1, int(piece.width * k)),
+                         max(1, int(piece.height * k))), Image.LANCZOS)
+                piece.save(out, "PNG")
                 return out
         except Exception:
             return None
