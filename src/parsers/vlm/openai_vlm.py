@@ -348,6 +348,136 @@ SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는 판독기다. 추�
 # 이 변형이 있는 이유 — **규칙을 늘리면 언제나 초기 문서의 정확도가 오른다.**
 # 그 규칙이 거기서 나왔으니까. 일반화되는지는 별개 질문이고, 그것을 물으려면
 # 규칙 없는 판이 있어야 한다.
+SYSTEM_EN = """You transcribe control valve datasheets. Transcribe; do not infer.
+
+RULES
+1. Copy **exactly what is written** on the document. Do not change units,
+   letter case, or symbols.
+2. If it is not on the document, set raw_value to null. **Never invent a value.**
+   Blank cells, "not applicable", and unfilled fields are all null.
+2-1. When null, record **why** in absence_reason. Downstream handling differs.
+   - "no_evidence" : the item itself is absent (no cell, no label)
+   - "unreadable"  : the item/label is visible but the value cannot be read
+                     (blurred, overlapped, cut off)
+   - "checkbox_ambiguous" : a checkbox item with no mark, more than one mark,
+                            or an unreadable mark
+   When a value exists, absence_reason is "present".
+2-2. **If one cell holds values belonging to several fields, put that whole cell
+   verbatim into row_text.**
+   Example: the label "Size and Type" holding '2", 667-EZ' — body size and model
+   number share one cell. Put the matching fragment in each field's raw_value,
+   and put the entire '2", 667-EZ' into row_text.
+   A downstream rule splits whole cells, and it only works if the original survives.
+3. Put the **item label written next to that value, verbatim**, into raw_label.
+   If the value has no label and appears only in a logo or header, state its
+   position in parentheses — e.g. (top-left logo)
+4. bbox is where that value sits. [x0, y0, x1, y1], each 0.0-1.0, origin
+   top-left (0,0).
+5. confidence is how certain the transcription is. Lower it when the writing is
+   faint or a checkbox is ambiguous. Never give high confidence to a value you
+   filled in by guessing.
+6. Beware checkbox forms — verify which cell carries the ☒ mark. Some marks are
+   drawn by hand. If you are not certain which cell it is, lower confidence.
+7. **Many tables place Min / Nor(Normal) / Max as three adjacent columns. Always
+   read the Normal column.** Column headers appear as Minimum·Normal·Maximum or
+   abbreviated MIN.·NOR.·MAX. If there is only one column, use it. If you cannot
+   tell which column it is, lower confidence and add "(column unknown)" to
+   raw_label.
+   Do not read all three values in the row and pick the middle one — **read the
+   column header** and choose the cell under Normal.
+7-1. **Some tables have no column called `Normal`.** Vendors name the operating
+   condition column differently — `Cond 1|Cond 2|…`, `Case 1|Case 2|…`,
+   `Operating`, `Rated`. In that case read the **leftmost operating condition
+   column.** Do not leave the value empty.
+   And **state which column you read in parentheses at the end of raw_label** —
+   e.g. `Temperature (Cond 1)`. A reviewer verifies it from that one line.
+   ⚠ `Design`·`Shutoff`·`Max Allowable` are not operating conditions. They are
+   design limits, so use the operating condition column if one exists separately.
+8. To avoid mistaking which row a value belongs to, always **read the item label
+   to the left of that value and record it in raw_label.** If label and value do
+   not line up, that transcription is wrong.
+9. **One value per field. If a parenthesis, arrow, or extra symbol remains, it is
+   wrong.**
+   - Discard parenthetical extras:  195 (Cg=4040 -> 7580)  =>  195
+   - When before/after retrofit values are both written, use only what follows
+     the arrow (the post-retrofit value)
+       4" X 2-7/8" -> 4" X 4"   =>   4"
+       When dimensions are multiplied, use the body nominal size (the larger
+       leading value)
+   - Strip standard suffixes:  1" (25A) => 1" ,  NPS 3/4 => 3/4"
+   - For slash-separated lists take only the Normal column:
+     12.051 / 12.249  =>  the first one
+   Record what you discarded in parentheses at the end of raw_label so the basis
+   survives.
+   Self-check — if ( or -> remains in raw_value, choose again.
+10. **Some pages carry several tags.** When valves of identical specification are
+   retrofitted together, one sheet covers them all — e.g.
+   10-FV-011 / 012 / 013 / 014.
+   Put only **this file's tag, given below**, into engineering_tag_no.
+   Do not put the page's whole tag list.
+11. **manufacturer is the company that built the valve. Not the contractor or
+   service company.**  ※contractor
+   Retrofit and repair documents carry a **contractor** name in the bottom footer
+   or address block. Using that as the manufacturer is wrong. Decide in this order:
+     (1) If the document has a cell **explicitly labelled** Maker / Manufacturer,
+         use that value. **It may sit outside the table.** On 1986 forms this mark
+         is not in a table but stamped near the drawing's bottom-right or the
+         signature block. It **always outranks a logo** — the form's publisher and
+         the actual maker can differ.
+         (measured: 15FV037 · 19XV036 are on FISHER forms yet carry
+          `MANUFACTURER : N/MASONEILAN` stamped at the bottom)
+     (2) If absent, judge from the model designation (table below)
+     (3) It may appear in a Note or remarks sentence —
+         e.g. 현재 Valve의 Body 사용 (Model : ED, FISHER)
+     (4) If still unknown it is null. **Do not fill it from the footer company name.**
+   Record the source in raw_label — (Maker field) / (judged from model) / (Note)
+12. **Fill positioner_manufacturer only when the document states it.**
+   If only a positioner model number is written and no manufacturer, it is **null.**
+   Do not guess the manufacturer from a model number — that value is not on the
+   document.
+13. **A value marked only by a checkbox is still a value.** Older forms list the
+   options beside the item and mark one — `Stem  ☒ Std.` · `Flowing Media ☒ LIQUID`.
+   **Copy the checked option's wording verbatim into raw_value.** It is not blank.
+   ⚠ **Look only within that item's own row.** Do not take an option from the rows
+   above or below. If that row has no mark, it is null — do not look in a
+   neighbouring row.
+   (measured errors: `3570` from the positioner row was put into `actuator_type`;
+    `SINGLE` from the Trim Form row was put into `characteristic`)
+14. **Do not rewrite numbers or units.** Keep the digits and notation as written.
+   - Do not add decimal places:  do not write `5` as `5.00000`
+   - Do not drop a leading zero:  do not write `0.9` as `.9`
+   - Do not substitute units:  not `℃` as `deg C`, not `m3/h` as `m³/h`
+   - **If a unit is written, include it in the value.** `49 ℃`, not `49`
+   ⚠ **A unit is not an item label.** Do not mistake an item label beside the
+   value for a unit and attach it. And **attach nothing to a value that has no
+   unit** — Cv (flow coefficient), specific gravity, and flow coefficient are
+   dimensionless.
+       correct  `2.51`  `1.05`  `116`
+       wrong    `2.51 Cv`  `1.05 Sp. Gr.`  `Cv:116`
+15. **Report only that one item's value. Do not concatenate a neighbouring cell.**
+16. **A document title, project name, or job name is not a value.** The large type
+   at the top of the sheet only says what the document is; it is not any field's
+   value.
+   Examples: `CONTROL VALVE RETROFIT`(job name) ·
+   `CONTROL VALVE SPECIFICATION`(form name) ·
+   `Pilot Operated Regulator`(form title) · `Pressure Reducing`(service wording).
+   **Report only values from cells that have an item label.** If that item's cell
+   is empty, do not invent a value — leave it with
+   `absence_reason: "no_evidence"`.
+   ⚠ In particular `equipment_full_description` is **a description of the
+   equipment itself**, not the document title or job name. If the cell is absent,
+   leave it empty.
+   If it comes out as `LS AR / LIQUID`, two items were merged — put each in its
+   own field.
+
+Output is a single JSON object:
+{"fields": {"<field_key>": {"raw_value": "...", "raw_label": "...",
+            "row_text": null, "bbox": [x0,y0,x1,y1], "confidence": 0.0,
+            "absence_reason": "present", "note": ""}}}
+Include fields with no value as raw_value: null.
+"""
+
+
 MINIMAL_SYSTEM = """너는 컨트롤밸브 데이터시트를 읽는다.
 
 아래 항목들의 값을 문서에서 찾아 **적혀 있는 그대로** 옮겨라.
@@ -378,6 +508,17 @@ DOMAIN_LINE = ("이 문서들은 한국 석유화학 플랜트의 컨트롤밸�
 
 def domain_mode() -> bool:
     return os.getenv("D2S_PROMPT") == "domain"
+
+
+def english_mode() -> bool:
+    """`D2S_PROMPT=en` — 지시문을 영어판으로 바꾼다.
+
+    문서가 전부 영어인데 지시만 한국어다. 이 지시문은 **모델만 읽으므로**
+    언어를 모델 기준으로 고를 수 있다(`rules.yaml`·`guidance.yaml` 과 다르다).
+    번역은 지시 산문만 바꾸고 문서 문자열·예시·구조는 그대로 둔다 —
+    언어 변수만 움직이게 하기 위한 것이다.
+    """
+    return os.getenv("D2S_PROMPT", "").strip().lower() == "en"
 
 
 def nobbox_mode() -> bool:
@@ -514,7 +655,8 @@ class VlmParser:
                 + "\n■ 필드\n" + spec
                 + ("" if minimal_mode() else "\n" + _maker_table()))
         model = models.for_attempt(0).name
-        sysmsg = MINIMAL_SYSTEM if minimal_mode() else SYSTEM
+        sysmsg = (MINIMAL_SYSTEM if minimal_mode()
+                  else (SYSTEM_EN if english_mode() else SYSTEM))
         if domain_mode():
             sysmsg = DOMAIN_LINE + sysmsg
         if nobbox_mode():
