@@ -15,6 +15,8 @@
 - 발표: 2026-08-27
 - 산출물 기준: `docs/ARCHITECTURE.md`
 - 설계 판단 근거: `docs/insight_memory.md`
+- 남은 작업·대기 결정: `docs/TODO.md`
+- 평가 실행 이력: `docs/eval_history.md`
 
 ## 데이터 흐름
 

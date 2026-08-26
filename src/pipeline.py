@@ -164,16 +164,51 @@ class DefaultNormalize:
         rule = schema.domain_rule(f.key)
         if rule:
             probe = schema.norm_label(raw)
+            # ① 값 자체가 ATO/ATC 인 경우 — 역전 매핑
             for m in rule.get("map", []):
                 for cand in m.get("from", []):
                     if schema.norm_label(cand) == probe or probe.startswith(schema.norm_label(cand)):
                         trace.append(m.get("trace", f"규칙 {cand} → {m['to']}"))
                         trace.append(f"결과 {m['to']}")
                         return m["to"], trace
-            trace.append("규칙 미적용 — 표기가 사전에 없음")
+
+            # ② 라벨이 직접 기재인 경우 — 값에는 방향만 적혀 있다
+            #    "Air Fails Valve to : Close" → FAIL CLOSE
+            #    값만 보면 역전 표기와 구분이 불가능하므로 **라벨을 본다**.
+            #    라벨을 **문자열 목록으로 맞추지 않는다.** 실측에서
+            #    `Air fail Valve to` · `Air failure valve to` 가 목록의
+            #    `AIR FAILS VALVE TO` 와 한 글자씩 달라 전부 빗나갔다.
+            #    목록을 늘리면 변종이 끝없이 나온다(인사이트 50) — 대신
+            #    규칙의 원래 의도인 **"FAIL 어간이 있으면 직접 기재"** 를 쓴다.
+            got = schema.norm_label(ex.raw_label or "")
+            direct = bool(got) and "FAIL" in got
+            #    단, `Fail/Air-To` 처럼 직접·역전 표기가 한 라벨에 같이 있으면
+            #    방향을 정할 수 없다. **안전 필드이므로 변환하지 않고 넘긴다.**
+            if direct and re.search(r"AIRTO|ATO\b|ATC\b", got):
+                trace.append(f"원문라벨 {ex.raw_label!r} 에 직접·역전 표기가 "
+                             f"함께 있어 방향을 정할 수 없다 — 사람 확인")
+                direct = False
+            if direct:
+                for m in rule.get("direct_map") or []:
+                    if probe in {schema.norm_label(c) for c in m.get("from", [])}:
+                        trace.append(f"원문라벨 {ex.raw_label!r} 은 직접 기재")
+                        trace.append(m.get("trace", f"{raw} → {m['to']}"))
+                        trace.append(f"결과 {m['to']}")
+                        return m["to"], trace
+
+            # ③ 라벨도 값도 못 가리면 변환하지 않는다.
+            #    역전 여부를 모르는 채 방향을 정하면 안전 사양을 뒤집는다.
+            trace.append("규칙 미적용 — 표기가 사전에 없고 라벨로도 방향을 알 수 없음")
 
         for m in schema.value_aliases(f.key):
-            if schema.norm_label(raw) in {schema.norm_label(c) for c in m.get("from", [])}:
+            if m.get("compare_only"):
+                # 대조용 별칭이다. 값을 **바꾸지는** 않는다 — 안전 필드의
+                # 역전 표기를 값만 보고 펴면 방향이 뒤집힌다.
+                continue
+            # 치수는 구두점이 값이다 — norm_alias 가 필드별로 가른다.
+            # norm_label 이면 12" 가 1/2" 로 보정된다(24배 오류).
+            if schema.norm_alias(raw, f.key) in {
+                    schema.norm_alias(c, f.key) for c in m.get("from", [])}:
                 trace.append(f"표기 정규화 → {m['to']}")
                 return m["to"], trace
 

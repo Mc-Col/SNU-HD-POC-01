@@ -22,6 +22,41 @@ domain_rules:
       - from: ["FAIL LAST", "FAIL IN PLACE", "FAIL LOCK"]
         to: "FAIL LAST"
         trace: "직접 기재"
+    # ── 직접 기재 표기 (2026-08-24) ────────────────────────────
+    # 위 map 은 값 자체가 ATO/ATC 인 경우다. 그런데 대부분의 양식은
+    # 라벨이 이미 "공기 상실 시" 를 뜻하고 값에는 방향만 적는다.
+    #   "Air Fails Valve to : Close"  → FAIL CLOSE   (라벨이 직접 기재)
+    #   "Air to Actuator   : Open"    → FAIL CLOSE   (라벨이 역전. 값과 반대)
+    # 값만 보면 둘 다 그냥 Close/Open 이라 구분이 불가능하다. **라벨을 봐야 한다.**
+    #
+    # 골든셋 11건의 원문라벨은 전부 직접 기재였다 —
+    #   Air Fails Valve to · Fail Position · Failure Mode · Actuator Fail
+    direct_labels:
+      - "AIR FAILS VALVE TO"
+      - "FAIL POSITION"
+      - "FAIL ACTION"
+      - "FAILURE MODE"
+      - "ACTUATOR FAIL"
+      - "ACTUATOR FAILURE MODE"
+      - "FAIL SAFE POSITION"
+      - "FAIL SAFE"
+    direct_map:
+      # `VALVE OPEN` · `VALVE CLOSE` 는 2026-08-24 평가에서 관측 (d007 · d010)
+      - from: ["OPEN", "TO OPEN", "OPENS", "FO", "F.O.", "개방",
+               "VALVE OPEN", "VALVE OPENS", "V/V OPEN", "OPEN POSITION",
+               "FAIL OPEN", "FAIL-OPEN", "FAIL TO OPEN"]
+        to: "FAIL OPEN"
+        trace: "라벨이 직접 기재 — 공기 상실 시 개방"
+      - from: ["CLOSE", "CLOSED", "TO CLOSE", "CLOSES", "FC", "F.C.", "폐쇄",
+               "VALVE CLOSE", "VALVE CLOSED", "V/V CLOSE", "CLOSE POSITION",
+               "FAIL CLOSE", "FAIL-CLOSE", "FAIL TO CLOSE"]
+        to: "FAIL CLOSE"
+        trace: "라벨이 직접 기재 — 공기 상실 시 폐쇄"
+      - from: ["LOCK", "LAST", "IN PLACE", "LOCKED", "정지"]
+        to: "FAIL LAST"
+        trace: "라벨이 직접 기재 — 공기 상실 시 현 위치 유지"
+    # 라벨이 이 목록에 없고 값도 ATO/ATC 가 아니면 **변환하지 않는다.**
+    # 역전 여부를 모르는 상태에서 방향을 정하면 안전 사양을 뒤집을 수 있다.
     cross_check: []
     # 2026-08-23 결정 — ACTUATOR TYPE 은 추출 대상이 아니다(구동부는 FAIL POSITION 만).
     # 따라서 자동 교차검증이 불가하고, 사람 확인이 유일한 안전장치다.
@@ -29,158 +64,228 @@ domain_rules:
     cross_check_note: "ACTUATOR TYPE 추출 대상 외 → 자동 교차검증 불가"
 
 # ── 표기 매핑 ──────────────────────────────────────────────────
-# 같은 값의 다른 표기. 라벨링 중 raw_label 로 수집되는 것을 여기에 누적한다.
+# 같은 값의 다른 표기. **평가 실행에서 실제로 나온 것만 넣는다.**
+# 상상해서 늘리면 문서에 없는 값을 맞다고 판정하게 된다.
+#
+# 2026-08-24 첫 VLM 실행(68%)의 오답 30건 중 13건이 "값은 맞고 표기만 다름"
+# 이었다. 아래는 그때 관측된 표기다. 출처를 seen 에 남긴다.
 value_aliases:
-  # 예:
-  # valve_body_material:
-  #   - from: ["CS", "C.S.", "CARBON STEEL"]
-  #     to: "CARBON STEEL"
-  #
-  # ── 숫자 필드 표시 (2026-08-25) ────────────────────────────────
-  # `numeric: true` 면 값 대조에서 **글자를 통째로 무시하고 숫자만** 본다.
-  # `eval/harness.py` 의 `_numeric()` 과 텍스트 파서 채점기가 여기를 읽는다.
-  #
-  # 왜 필요한가
-  #   단위 어휘를 아무리 늘려도 못 잡는 경우가 있다.
-  #     · 어휘에 없는 표기      `5Nm3/h`      → 정답을 숫자로 못 읽어 오답 처리
-  #     · 글자가 깨진 표기      `(m?h)` `kg/cm?(g)`  (2026-08-24 실측)
-  #   숫자 필드라고 알려주면 둘 다 통과한다. 재질·형식처럼 글자가 값인 필드에는
-  #   절대 쓰지 않는다 — `A351 CF8M` 과 `A351 CF3M` 이 같아진다.
-  normal_flow_rate:
-    - numeric: true
-  normal_pressure:
-    - numeric: true
-  normal_temperature:
-    - numeric: true
-  specific_gravity:
-    - numeric: true
-  viscosity:
-    - numeric: true
-  rated_cv:
-    - numeric: true
-  required_cv:
-    - numeric: true
-  actuator_fail_action:
-    # 52PV014 의 "Fail Position" 칸 값이 "VALVE CLOSE" 다. 파서는 맞는 칸을 읽었고
-    # 표준값으로 바꾸는 것은 ④ Normalize 몫이다 (2026-08-25).
-    - from: ["VALVE CLOSE", "VALVE CLOSED", "CLOSE", "CLOSED"]
-      to: "FAIL CLOSE"
-    - from: ["VALVE OPEN", "VALVE OPENED", "OPEN", "OPENED"]
-      to: "FAIL OPEN"
 
-  # ── 표기 통일 (2026-08-26) ──────────────────────────────────────
-  #
-  # 왜 필요한가 — 실측
-  #   골든셋 30건을 파이프라인으로 돌려 정답과 대조하니 **틀린 61칸 중 27칸이
-  #   "값은 같고 표기만 다른" 것**이었다.
-  #     등급 12건    600#  vs  ANSI CLASS 600
-  #     제조사 11건  FISHER vs Fisher Controls
-  #     사이즈 4건   1"    vs  1" (25A)
-  #   마스터DB 에 이대로 들어가면 "Class 600 밸브가 몇 대인가" 를 셀 수 없다.
-  #   이 과제가 없애려는 문제를 그대로 재생산한다.
-  #
-  # 표준형을 무엇으로 정했나
-  #   등급     `CLASS 300`   ANSI 는 폐기된 명칭(ASME B16.34 로 이관), `#` 은 현장 약어
-  #   누설등급 `CLASS IV`    ANSI/FCI 70-2 규격 자체가 로마자를 쓴다
-  #   제조사   대문자 한 단어  법인명 접미(Co., Ltd. · Inc.)와 현지법인 표기를 접는다
-  #   사이즈   인치 표기      `NPS 2` · `2"` 는 표기 차이다. **단위 변환은 하지 않는다**
-  #            (`unit_conversion: enabled: false` 결정) — mm 표기는 손대지 않는다
-  #
-  # ⚠️ 원문을 지우지 않는다. `FieldRecord` 가 `value`(표준값) · `raw_value`(원문) ·
-  #    `transform_trace`(근거)를 따로 담는다. 사람이 언제든 되짚을 수 있다.
-  #
-  # ⚠️ 여기 없는 표기는 그대로 둔다. 목록에 없다고 틀린 값이 아니다 —
-  #    실물에서 관측된 것만 넣는다(짜맞추지 않는다).
-
+  # 등급 — 단일 필드 최대 실패(7건). ANSI/ASME/CL 접두어가 붙거나 안 붙는다.
   valve_body_rating:
-    # ANSI/ASME 압력 등급. 숫자가 같으면 같은 등급이다.
-    # RF·Flg 같은 플랜지 면 표기가 붙어 오는데, 그건 연결 형식이지 등급이 아니다.
-    - from: ["150", "150#", "CL 150", "CL150", "ANSI 150", "ANSI CLASS 150",
-             "ASME 150#", "ASME CL.150", "ASME CLASS 150", "150 RF", "CLASS 150"]
-      to: "CLASS 150"
-    - from: ["300", "300#", "CL 300", "CL300", "ANSI 300", "ANSI CLASS 300",
-             "ASME 300#", "ASME CL.300", "ASME CLASS 300", "300 RF", "ANSI 300 RF",
-             "CL300-RF Flg", "CLASS 300"]
-      to: "CLASS 300"
-    - from: ["600", "600#", "CL 600", "CL600", "ANSI 600", "ANSI CLASS 600",
-             "ASME 600#", "ASME CL.600", "ASME CLASS 600", "600 RF", "CLASS 600"]
-      to: "CLASS 600"
-    - from: ["900", "900#", "CL 900", "ANSI CLASS 900", "CLASS 900"]
-      to: "CLASS 900"
-    - from: ["1500", "1500#", "CL 1500", "CL1500", "ANSI 1500", "ANSI CLASS 1500",
-             "ASME 1500#", "ASME CL.1500", "CLASS 1500"]
-      to: "CLASS 1500"
-    - from: ["2500", "2500#", "CL 2500", "ANSI CLASS 2500", "CLASS 2500"]
-      to: "CLASS 2500"
-    # `MOP 150 PSIG`(댐퍼 최대 운전압력)는 ANSI 등급이 아니다 — 넣지 않는다
+    - from: ["ANSI CLASS 150", "ASME CLASS 150", "ASME CL.150", "CL 150",
+             "CLASS 150", "ANSI 150", "ASME 150#", "150 LB", "150LB", "150", "150#", "150 RF"]
+      to: "150#"
+    - from: ["ANSI CLASS 300", "ASME CLASS 300", "ASME CL.300", "CL 300",
+             "CLASS 300", "ANSI 300", "ASME 300#", "300 LB", "300LB", "300", "300#", "300 RF", "ANSI 300 RF", "CL300-RF Flg"]
+      to: "300#"
+      seen: "d005 · d006 ANSI CLASS 300 / d010 ASME 300# / d011 ASME CLASS 300"
+    - from: ["ANSI CLASS 600", "ASME CLASS 600", "ASME CL.600", "CL 600",
+             "CLASS 600", "ANSI 600", "ASME 600#", "600 LB", "600LB", "600", "600#", "600 RF"]
+      to: "600#"
+      seen: "d004 ANSI CLASS 600 / d007 ASME CL.600"
+    - from: ["ANSI CLASS 900", "ASME CL.900", "CL 900", "CLASS 900", "900", "900#"]
+      to: "900#"
+    - from: ["ANSI CLASS 1500", "ASME CLASS 1500", "ASME CL.1500", "CL 1500",
+             "CLASS 1500", "ANSI 1500", "1500", "1500#", "ASME 1500#"]
+      to: "1500#"
+      seen: "d008 CL 1500"
+    - from: ["ANSI CLASS 2500", "ASME CL.2500", "CL 2500", "CLASS 2500", "2500", "2500#"]
+      to: "2500#"
 
-  valve_leakage_class:
-    # ANSI/FCI 70-2. 규격이 로마자를 쓰므로 로마자로 통일한다.
-    - from: ["CLASS 1", "CLASS I", "ANSI CLASS 1", "ANSI CLASS I", "FCI CLASS I"]
-      to: "CLASS I"
-    - from: ["CLASS 2", "CLASS II", "ANSI CLASS 2", "ANSI CLASS II", "FCI CLASS II"]
-      to: "CLASS II"
-    - from: ["CLASS 3", "CLASS III", "ANSI CLASS 3", "ANSI CLASS III"]
-      to: "CLASS III"
-    - from: ["CLASS 4", "CLASS IV", "ANSI CLASS 4", "ANSI CLASS IV", "FCI CLASS IV",
-             "ANSI/FCI 70-2 CLASS 4", "ANSI/FCI 70-2 CLASS IV"]
-      to: "CLASS IV"
-    - from: ["CLASS 5", "CLASS V", "ANSI CLASS 5", "ANSI CLASS V", "FCI CLASS V"]
-      to: "CLASS V"
-    - from: ["CLASS 6", "CLASS VI", "ANSI CLASS 6", "ANSI CLASS VI", "FCI CLASS VI"]
-      to: "CLASS VI"
-
-  manufacturer: &maker_names
-    # 법인명 접미와 현지법인 표기를 접는다. 같은 회사를 두 이름으로 세지 않기 위해서다.
-    - from: ["FISHER", "FISHER CONTROLS", "FISHER CONTROLS INTERNATIONAL",
-             "NIPPON FISHER", "NIPPON FISHER CO.,LTD.", "EMERSON FISHER"]
+  # 제조사 — 법인명 접미(Controls · Co.,Ltd. · Inc.)가 붙는다. 짧은 형으로 통일.
+  # ⚠ 구두점이 뜻을 바꾸는 필드는 punct_significant 에 적는다(이 파일 아래).
+  #   회사명은 CO.,LTD. 의 점을 지워야 맞고, 크기는 1/2" 의 사선을 지우면 틀린다.
+  manufacturer:
+    - from: ["FISHER CONTROLS", "FISHER CONTROLS INTERNATIONAL",
+             "NIPPON FISHER", "NIPPON FISHER CO.,LTD.", "FISHER CO.,LTD.", "EMERSON FISHER", "NIPPON FISHER CO.,LTD.", "EMERSON FISHER"]
       to: "FISHER"
-    - from: ["METSO", "METSO KOREA", "METSO AUTOMATION", "METSO FLOW CONTROL",
-             "NELES", "METSO VALSTONE", "METSO VALSTONE INC."]
+      seen: "d001 Fisher Controls"
+    - from: ["METSO AUTOMATION", "METSO KOREA", "METSO KOREA CO., LTD.",
+             "METSO FLOW CONTROL", "NELES", "METSO VALSTONE", "METSO VALSTONE INC."]
       to: "METSO"
-    - from: ["VALSTONE", "VALSTONE CONTROLS", "VALSTONE CONTROLS, INC.",
-             "VALSTONE SERVICE", "VALSTONE SERVICE. CO.", "VALSTONE SERVICE, CO."]
+    - from: ["VALSTONE CONTROLS, INC.", "VALSTONE CONTROLS",
+             "VALSTONE SERVICE, CO.", "VALSTONE SERVICE CO.", "VALSTONE SERVICE"]
       to: "VALSTONE"
-    - from: ["FLOWSERVE", "FLOWSERVE CORPORATION", "VALTEK", "FLOWSERVE VALTEK"]
-      to: "FLOWSERVE"
-    - from: ["MASONEILAN", "NIIGATA MASONEILAN", "DRESSER MASONEILAN",
-             "BAKER HUGHES MASONEILAN"]
-      to: "MASONEILAN"
-    - from: ["UNICON", "UNICON VALVE", "UNICON CO., LTD."]
+      seen: "d011 VALSTONE CONTROLS, INC."
+    - from: ["UNICON SYSTEM CO.,LTD.", "UNICON SYSTEM", "UNICON SYSTEM CO.", "UNICON VALVE", "UNICON CO., LTD."]
       to: "UNICON"
-    - from: ["AUTOMAX", "AUTOMAX USA", "AUTOMAX INC."]
-      to: "AUTOMAX"
-    - from: ["SAMWOO", "SAMWOO TECH", "SAMWOO TECH CO., LTD."]
-      to: "SAMWOO"
-    - from: ["AZBIL", "YAMATAKE", "AZBIL YAMATAKE"]
+      seen: "d007 UNICON SYSTEM CO.,LTD."
+    - from: ["FLOWSERVE CORPORATION", "FLOWSERVE KOREA", "VALTEK", "FLOWSERVE VALTEK", "FLOWSERVE VALTEK"]
+      to: "FLOWSERVE"
+    # N/ 은 일본 합작사 표기의 축약이다 — 니가타인지 닛폰인지는 문서만으로
+    # 확정할 수 없으나 어느 쪽이든 모브랜드는 같다. NIPPON FISHER → FISHER 와
+    # 같은 처리다. d022 · d023 두 건에서 확신도 0.99 로 그대로 나왔다.
+    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN",
+             "N/MASONEILAN", "N/ MASONEILAN", "N/MASONEILAN CO.,LTD.", "BAKER HUGHES MASONEILAN", "BAKER HUGHES MASONEILAN"]
+      to: "MASONEILAN"
+      seen: "d006 NIIGATA MASONEILAN — 단 이 건의 정답은 FISHER 였다(별칭이 아니라 오독) / d022 · d023 N/MASONEILAN"
+    - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL", "AZBIL YAMATAKE", "AZBIL YAMATAKE"]
       to: "AZBIL"
-    - from: ["YTC", "YOUNG TECH", "YOUNG TECH CO., LTD."]
+
+  # 누설등급 — 로마자·아라비아가 섞인다. **표준값은 아라비아**다
+  # (2026-08-25 결정: 조회하는 사람이 숫자 4를 먼저 떠올린다).
+  # 표준(ANSI/FCI 70-2)의 표기법은 로마자이지만, 그것은 문서의 표기법이고
+  # DB 열의 표기법은 쓰는 사람 기준으로 정한다. 원문은 감사 시트에 남는다.
+
+    # ── 원격에서 받음 — 우리 골든셋에 없던 벤더
+    - from: ["AUTOMAX USA", "AUTOMAX INC."]
+      to: "AUTOMAX"
+    - from: ["SAMWOO TECH", "SAMWOO TECH CO., LTD."]
+      to: "SAMWOO"
+    - from: ["YOUNG TECH", "YOUNG TECH CO., LTD.", "YOUNG TECH CO., LTD."]
       to: "YTC"
+  valve_leakage_class:
+    # Class I 은 "착좌 누설 규정 없음" 을 뜻하는 실재 등급이다. d028 에서 나왔다.
+    - from: ["ANSI CLASS I", "ANSI CLASS 1", "CLASS I", "CLASS 1", "ANSI I", "FCI CLASS I"]
+      to: "CLASS 1"
+      seen: "d028 CLASS 1"
+    - from: ["ANSI CLASS II", "ANSI CLASS 2", "CLASS II", "CLASS 2", "ANSI II", "FCI CLASS II"]
+      to: "CLASS 2"
+    - from: ["ANSI CLASS III", "ANSI CLASS 3", "CLASS III", "CLASS 3"]
+      to: "CLASS 3"
+    - from: ["ANSI CLASS IV", "ANSI CLASS 4", "CLASS IV", "CLASS 4", "ANSI IV", "FCI CLASS IV", "ANSI/FCI 70-2 CLASS 4", "ANSI/FCI 70-2 CLASS IV"]
+      to: "CLASS 4"
+      seen: "d004 · d006 CLASS 4 / d005 · d007 CLASS IV / d008 Class IV"
+    - from: ["ANSI CLASS V", "ANSI CLASS 5", "CLASS V", "CLASS 5", "FCI CLASS V"]
+      to: "CLASS 5"
+    - from: ["ANSI CLASS VI", "ANSI CLASS 6", "CLASS VI", "CLASS 6", "FCI CLASS VI"]
+      to: "CLASS 6"
 
-  # 포지셔너 제조사도 같은 이름을 쓴다 (같은 회사가 밸브·포지셔너를 다 만든다)
-  positioner_manufacturer: *maker_names
+  # 유량 특성
+  characteristic:
+    - from: ["EQ%", "EQ %", "EQUAL PERCENT", "EQUAL %", "EQUAL PERCENTAGE",
+             "%EQ", "EQUAL-PERCENT"]
+      to: "EQUAL PERCENTAGE"
+      seen: "d001~d003 Equal Percent / d005 · d010 · d011 EQ%"
+    - from: ["MODIFIED PERCENTAGE", "MODIFIED EQUAL PERCENT", "MOD. EQ%",
+             "MODIFIED %"]
+      to: "MODIFIED PERCENTAGE"
+      seen: "d004"
+    - from: ["LINEAR", "LIN."]
+      to: "LINEAR"
+    - from: ["QUICK OPENING", "Q.O.", "QO"]
+      to: "QUICK OPENING"
 
+  # 본체 크기 — 규격 접미(25A·NPS·DN)가 붙는다. 2026-08-24 평가에서 관측.
+  # 값 자체는 인치 표기로 통일한다 — 마스터DB 에 25A 와 1" 가 섞이면 안 된다.
   valve_body_size:
-    # 표기 차이만 접는다. 인치↔mm 변환은 MVP 범위 밖이다
-    # (`unit_conversion: enabled: false`). mm 표기는 손대지 않는다.
-    - from: ['3/4"', "NPS 3/4", "3/4 IN", "3/4IN", "3/4 INCH"]
-      to: '3/4"'
-    - from: ['1"', "NPS 1", "1 IN", "1IN", "1 INCH", '1" (25A)']
-      to: '1"'
-    - from: ['1-1/2"', "NPS 1-1/2", "1-1/2 IN", "1-1/2IN", "1 1/2 IN", '1-1/2" (40A)']
-      to: '1-1/2"'
-    - from: ['2"', "NPS 2", "2 IN", "2IN", "2 INCH", '2" (50A)']
-      to: '2"'
-    - from: ['3"', "NPS 3", "3 IN", "3IN", '3" (80A)']
-      to: '3"'
-    - from: ['4"', "NPS 4", "4 IN", "4IN", "4 INCH", '4" (100A)']
-      to: '4"'
-    - from: ['6"', "NPS 6", "6 IN", "6IN", '6" (150A)']
-      to: '6"'
-    - from: ['8"', "NPS 8", "8 IN", "8IN", '8" (200A)']
-      to: '8"'
-    - from: ['12"', "NPS 12", "12 IN", "12IN", '12" (300A)']
-      to: '12"'
+    - from: ["1/2\"", "1/2 IN", "NPS 1/2", "DN15", "15A", "1/2\" (15A)"]
+      to: "1/2\""
+    - from: ["3/4\"", "3/4 IN", "NPS 3/4", "DN20", "20A", "3/4\" (20A)"]
+      to: "3/4\""
+      seen: "d009 NPS 3/4"
+    - from: ["1\"", "1 IN", "NPS 1", "DN25", "25A", "1\" (25A)"]
+      to: "1\""
+      seen: "d007 1\" (25A)"
+    - from: ["1-1/2\"", "1 1/2\"", "1.5\"", "NPS 1-1/2", "DN40", "40A"]
+      to: "1-1/2\""
+    - from: ["2\"", "2 IN", "NPS 2", "DN50", "50A", "2\" (50A)"]
+      to: "2\""
+    - from: ["3\"", "3 IN", "NPS 3", "DN80", "80A", "3\" (80A)"]
+      to: "3\""
+    - from: ["4\"", "4 IN", "NPS 4", "DN100", "100A", "4\" (100A)"]
+      to: "4\""
+    - from: ["6\"", "6 IN", "NPS 6", "DN150", "150A"]
+      to: "6\""
+    - from: ["8\"", "8 IN", "NPS 8", "DN200", "200A"]
+      to: "8\""
+    # 8" 위가 비어 있었다. 골든셋 21건에 큰 밸브가 없어서 드러나지 않았고,
+    # 그 사이 12" 가 1/2" 로 보정되고 있었다(punct_significant 로 수정).
+    - from: ["10\"", "10 IN", "NPS 10", "DN250", "250A"]
+      to: "10\""
+    - from: ["12\"", "12 IN", "NPS 12", "DN300", "300A"]
+      to: "12\""
+      seen: "d032 12\""
+    - from: ["14\"", "14 IN", "NPS 14", "DN350", "350A"]
+      to: "14\""
+    - from: ["16\"", "16 IN", "NPS 16", "DN400", "400A"]
+      to: "16\""
+    - from: ["18\"", "18 IN", "NPS 18", "DN450", "450A"]
+      to: "18\""
+    - from: ["20\"", "20 IN", "NPS 20", "DN500", "500A"]
+      to: "20\""
+    - from: ["24\"", "24 IN", "NPS 24", "DN600", "600A"]
+      to: "24\""
+
+  # 본체 형상
+  valve_body_type:
+    - from: ["GLOBE", "GLOBE VALVE", "GLOBE (DOUBLE)", "GLOBE(SINGLE)"]
+      to: "GLOBE"
+    - from: ["ANGLE", "ANGLE VALVE"]
+      to: "ANGLE"
+    # 피시테일은 버터플라이 디스크의 한 형식이다. BUTTERFLY 로 합칠지는
+    # 도메인 판단이라 합치지 않았다 — 문서가 적은 대로 둔다(철학 4).
+    - from: ["FISHTAIL BUTTERFLY", "FISH TAIL BUTTERFLY", "FISHTAIL"]
+      to: "FISHTAIL BUTTERFLY"
+      seen: "d028 FISHTAIL BUTTERFLY"
+    - from: ["BALL", "BALL VALVE", "SEGMENT BALL"]
+      to: "BALL"
+    - from: ["BUTTERFLY", "BTFY"]
+      to: "BUTTERFLY"
+
+  # 구동부 형식 — 1986년 Fisher 양식은 체크박스 문구가 "Diaph." 다.
+  # 공압/역작동 같은 수식어는 표준값에서 뗀다. `actuator_type` 은 **구동 방식**을
+  # 담는 항목이고, 역작동(RA)은 별개 속성이며 이 30필드에 자리가 없다.
+  # 원문은 감사 시트에 남으므로 정보가 사라지지 않는다.
+  actuator_type:
+    - from: ["DIAPHRAGM", "DIAPH.", "DIAPH", "PNEUMATIC DIAPHRAGM",
+             "DIAPHRAGM RA", "DIAPHRAGM (RA)", "SPRING DIAPHRAGM",
+             "PNEUMATIC DIAPH."]
+      to: "DIAPHRAGM"
+      seen: "d001~d003 Diaph. / d005 · d010 PNEUMATIC DIAPHRAGM / d007 DIAPHRAGM RA"
+    - from: ["CYLINDER", "VL CYLINDER", "PNEUMATIC CYLINDER", "PISTON",
+             "PISTON CYLINDER"]
+      to: "CYLINDER"
+      seen: "d008 · d014 VL Cylinder (FLOWSERVE 양식)"
+    - from: ["ELECTRIC", "MOTOR", "ELECTRIC MOTOR"]
+      to: "ELECTRIC"
+
+  # 포지셔너 제조사 — 본체 제조사와 다를 수 있다(본체 FISHER + 포지셔너 SMC).
+  # 문서에 제조사가 없고 모델명만 있는 경우가 많아 model_to_manufacturer 가
+  # 함께 동작한다.
+  positioner_manufacturer:
+    - from: ["FISHER CONTROLS", "FISHER CONTROLS INTERNATIONAL", "NIPPON FISHER"]
+      to: "FISHER"
+      seen: "3582G · 3582 → FISHER (모델명 판단 11건)"
+    - from: ["FLOWSERVE CORPORATION", "FLOWSERVE KOREA", "VALTEK"]
+      to: "FLOWSERVE"
+      seen: "d014 Logix 3800 Series"
+    - from: ["SMC CORPORATION", "SMC KOREA"]
+      to: "SMC"
+      seen: "d0xx SMC 2건"
+    - from: ["NIIGATA MASONEILAN", "MASONEILAN DRESSER", "DRESSER MASONEILAN"]
+      to: "MASONEILAN"
+      seen: "d0xx Masoneilan"
+    - from: ["AZBIL CORPORATION", "YAMATAKE", "YAMATAKE-HONEYWELL"]
+      to: "AZBIL"
+      seen: "d0xx Azbil"
+    - from: ["YOUNG TECH", "YOUNG TECH CO.", "YTC"]
+      to: "YTC"
+      seen: "d013 YT-1200 (모델명 판단)"
+
+  # 유체 상태 — 닫힌 어휘이고 이웃이 멀어 안전하다.
+
+    # ── 원격에서 받음 — 우리 골든셋에 없던 벤더
+    - from: ["METSO KOREA", "METSO AUTOMATION", "METSO FLOW CONTROL", "NELES", "METSO VALSTONE", "METSO VALSTONE INC."]
+      to: "METSO"
+    - from: ["VALSTONE CONTROLS", "VALSTONE CONTROLS, INC.", "VALSTONE SERVICE", "VALSTONE SERVICE. CO.", "VALSTONE SERVICE, CO."]
+      to: "VALSTONE"
+    - from: ["UNICON VALVE", "UNICON CO., LTD."]
+      to: "UNICON"
+    - from: ["AUTOMAX USA", "AUTOMAX INC."]
+      to: "AUTOMAX"
+    - from: ["SAMWOO TECH", "SAMWOO TECH CO., LTD."]
+      to: "SAMWOO"
+  fluid_state:
+    - from: ["LIQUID", "LIQ.", "LIQ"]
+      to: "LIQUID"
+    - from: ["GAS", "GASEOUS"]
+      to: "GAS"
+    - from: ["VAPOR", "VAPOUR"]
+      to: "VAPOR"
+    - from: ["STEAM"]
+      to: "STEAM"
 
 # ── 모델명 → 제조사 ───────────────────────────────────────────
 #
@@ -202,6 +307,38 @@ value_aliases:
 #    (rules.yaml)" 를 남겨 사람이 되짚을 수 있게 한다.
 #
 # 채우는 방법 — 접두어 매칭. 긴 접두어를 먼저 검사한다.
+
+  # ── 원격에서 받음 — 수치 대조 스위치 ──────────────────────────
+  # 이 필드들은 표기 별칭이 아니라 **숫자로 대조**한다. 0.85 와 .85 가
+  # 같은 값이라는 것을 채점기가 알아야 한다.
+  normal_flow_rate:
+    - numeric: true
+  normal_pressure:
+    - numeric: true
+  normal_temperature:
+    - numeric: true
+  rated_cv:
+    - numeric: true
+  required_cv:
+    - numeric: true
+  specific_gravity:
+    - numeric: true
+  viscosity:
+    - numeric: true
+
+  # ── 대조 전용 (compare_only) ──────────────────────────────
+  # 두 경로가 'CLOSE' 와 'FAIL CLOSE' 를 냈으면 같은 뜻이다 — 대조에서 불일치로
+  # 세면 사람을 헛되이 부른다. 그러나 **보정에는 쓰지 않는다.** 안전 필드이고
+  # `AIR TO CLOSE`(공기가 닫음 = 끊기면 열림) 같은 역전 표기가 있어 값만 보고
+  # 방향을 정할 수 없다. 방향 판정은 domain_rules 의 라벨 검사가 한다.
+  actuator_fail_action:
+    - from: ["VALVE CLOSE", "VALVE CLOSED", "CLOSE", "CLOSED"]
+      to: "FAIL CLOSE"
+      compare_only: true
+    - from: ["VALVE OPEN", "VALVE OPENED", "OPEN", "OPENED"]
+      to: "FAIL OPEN"
+      compare_only: true
+
 model_to_manufacturer:
   enabled: true
   note: "골든셋에서 관측된 것만. 상상해서 늘리지 않는다 — 실물에서 나온 것만 추가"
@@ -304,42 +441,265 @@ unit_tokens:
   - "(°C)"
   - "(kg/h)"
   - "(Sp.Gr.)"
-  # 2026-08-25 골든셋 21건 대조에서 값으로 잘못 집힌 표기
-  - Deg C          # 15LV015 "Inlet Temperature | Deg C | 41"
-  - Deg.C
-  - deg C
-  - SG             # 15LV015 "Specific Gravity | SG | 0.993"
-  - Sp. Gr.        # 괄호 없는 표기가 빠져 있었다
-  - Kg/cm2A
-  - Cv             # 52PV014 "Required Cv | Cv | 75.7" — 유량계수의 단위 칸
 
-# ── 형식 검증 규칙 (⑤-a) ───────────────────────────────────────
+# ── 복합 라벨 분해 ─────────────────────────────────────────────
+# 라벨 하나가 표준 필드 여러 개를 덮는 칸. 벤더 양식에서 흔하다.
+# 1:1 유사표현 사전으로는 풀 수 없어 별도 규칙으로 쪼갠다.
 #
-# 무엇을 보는가 (2026-08-25)
-#   `src/validate/format` 이 읽는다. **형식만** 본다 — 값이 옳은지는 도메인
-#   검증(⑤-b)과 사람의 몫이다. 위반을 찾아도 재시도를 걸지 않는다
-#   (재시도는 "못 읽음" 에만. 값이 틀렸다고 모델에게 말하면 환각을 유도한다).
+# 형식 두 가지
+#   separator : 라벨과 값을 같은 구분자로 쪼개 순서대로 짝짓는다.
+#               fields 의 null 은 "대응 표준 필드 없음 → 버림".
+#               조각 수가 fields 수와 다르면 쪼개지 않고 미매핑으로 남긴다.
+#   pattern   : 값에 정규식을 걸고 named group 이름을 field key 로 쓴다.
 #
-# 규칙을 어떻게 정했는가
-#   골든셋 20건의 정답값을 실측해서 정했다. 상상으로 만든 규칙은 없다.
-#     · numeric    : 그 필드의 정답이 **전부** 숫자를 포함한 필드만 지정
-#     · max_length : 실측 최대 길이의 2배 안팎. 통째로 잘못 집힌 값(문장 한 줄)을
-#                    잡는 용도이지 값을 재는 자가 아니다
-#     · tag        : 태그 명명 규칙은 `preprocess.parse_tag()` 가 이미 안다.
-#                    정규식을 여기 다시 쓰지 않는다
+# 스키마에 아직 없는 field key 를 적어도 된다. 그 조각은 미매핑으로 남고,
+# 필드가 추가되는 순간 규칙 수정 없이 자동으로 붙는다.
+
+  # ── 원격에서 받음 — 우리 파일에 없던 항목
+  - "Deg C"
+  - "Deg.C"
+  - "deg C"
+  - "SG"
+  - "Sp. Gr."
+  - "Kg/cm2A"
+  - "Cv"
+
+composite_labels:
+
+  - label: "Size/Pressure Class/Body Form"
+    separator: "/"
+    fields: [valve_body_size, valve_body_rating, valve_body_type]
+    note: "Fisher·Samwoo 계열 텍스트 PDF"
+
+  - label: "Model / Body Type / Trim Type"
+    separator: "/"
+    fields: [model_no, valve_body_type, null]
+    note: |
+      Trim Type("Standard")은 트림 구조 표기이지 유량 특성이 아니다.
+      CHARACTERISTIC 은 같은 문서의 "Trim # - Cv / Characteristic"("Linear")에서 온다.
+      2026-08-24 골든셋 대조에서 확인 — 대응 필드 없음으로 정정.
+
+  - label: "Max Shutoff / Shutoff Class"
+    separator: "/"
+    fields: [null, valve_leakage_class]
+    note: "앞 조각(최대 차압)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Fail/Air-To"
+    separator: "/"
+    fields: [actuator_fail_action, null]
+    note: |
+      Fail 표기와 Air-To 표기를 한 칸에 같이 준다. 예) "Close / Open"
+      앞 조각이 Fail 값이므로 그대로 쓴다. 뒤 조각은 역전 규칙 교차검증에 쓸 수 있다.
+      (Fail=Close 이면 Air-To=Open 이어야 정합)
+
+  - label: "Design Press./Temp."
+    separator: "/"
+    fields: [null, null]
+    note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
+
+  - label: "Process Fluid"
+    separator: "/"
+    fields: [fluid_name, fluid_state]
+    note: "Flowserve 계열. 값이 'LS AR / LIQUID' 형태로 유체명과 상태를 묶어 준다"
+
+  - label: "Size and Type"
+    pattern: '^\s*(?P<valve_body_size>[\d\-/½¼¾\.]+\s*")\s*,?\s*(?P<model_no>\S.*?)\s*$'
+    note: |
+      Fisher 1986 수기 양식. 값이 '1" 1250R-GL' / '2", 657-EZ' 형태로
+      바디 사이즈와 모델번호를 한 칸에 묶어 준다.
+      유사표현으로 넣으면 두 필드가 같은 표기를 다투므로 복합 규칙으로 둔다.
+
+  - label: "Body Matl / Bonnet Matl"
+    separator: "/"
+    fields: [valve_body_material, null]
+    note: "Flowserve·Valtek 계열. 뒤 조각(보닛 재질)은 마스터 스키마에 대응 필드 없음"
+
+  - label: "Trim # - Cv / Characteristic"
+    separator: "/"
+    fields: [null, characteristic]
+    note: |
+      앞 조각은 "2.62  Cv:116" 형태로 트림번호와 정격 Cv 가 묶여 있다.
+      Cv 필드 이름이 확정되면(RATED CV / RATED CV MAX) pattern 규칙으로 바꿔 앞 조각도 살릴 것.
+
+  - label: "Body Model(Type)"
+    pattern: '^(?P<model_no>[^(]+)\((?P<valve_body_type>[^)]+)\)$'
+    note: "한국어 리트로핏 점검서. 값이 '657-ED(GLOBE)' 형태로 모델과 바디 형상을 묶어 준다"
+
+# ── To-be (MVP 범위 외) ───────────────────────────────────────
+
+  # ── 원격에서 받음 — 우리 파일에 없던 항목
+  - label: Size/Pressure Class/Body Form
+    separator: /
+    fields:
+    - valve_body_size
+    - valve_body_rating
+    - null
+    note: 'Fisher·Samwoo 계열 텍스트 PDF.
+    
+      세 번째 조각은 대응 필드 없음 — Body Form 은 주조·단조 구분(Cast/Forged)이지
+    
+      밸브 형식이 아니다. 19FV077 값이 "2.00 / CL 1500 / Cast" 인데 골든셋 정답은
+    
+      Globe 이고, 그 값은 같은 문서의 "Valve Model / Body Type" 줄에 있다.
+    
+      2026-08-25 골든셋 대조에서 정정.
+    
+      '
+  - label: Model No. / Mfr.
+    separator: ','
+    fields:
+    - positioner_model_no
+    - positioner_manufacturer
+    note: '52PV014 값 예: "I/P5000, SMC" — 모델, 제조사 순.
+    
+      값이 한 조각뿐이면(10FV079 "AVP-302") 규칙이 발동하지 않고,
+    
+      같은 라벨이 POSITIONER MODEL NO. 의 구역 한정 유사표현으로 잡힌다.
+    
+      '
+  - label: Act. Type/Matl
+    separator: /
+    fields:
+    - actuator_type
+    - null
+    note: '값 예: ''VL Cylinder / Aluminum'' — 뒤는 액추에이터 재질(우리 필드 아님)'
+  - label: Max Shutoff / Shutoff Class
+    separator: /
+    fields:
+    - null
+    - valve_leakage_class
+    note: '값 예: ''27.000 kg/cm² / Class V'' — 앞은 최대 차압(우리 필드 아님)'
+  - label: Plug Matl / Facing
+    separator: /
+    fields:
+    - valve_plug_material
+    - null
+    note: '값 예: ''410 SS HT /'' — 뒤는 표면처리'
+  - label: Stem Matl / Facing
+    separator: /
+    fields:
+    - valve_stem_material
+    - null
+  - label: Seat Ring Matl / Facing
+    separator: /
+    fields:
+    - valve_seat_material
+    - null
+  - label: Seat Ring Mtl/ Facing|Treatment
+    separator: /
+    fields:
+    - valve_seat_material
+    - null
+  - label: Seat Retainer Mtl/ Facing|Treatment
+    separator: /
+    fields:
+    - valve_cage_material
+    - null
+    note: Valtek 은 케이지를 Seat Retainer 라고 부른다 (킷 라벨링에서 확인)
+  - label: Valve Model / Body Type
+    separator: /
+    fields:
+    - model_no
+    - valve_body_type
+    - null
+    note: '19FV077 — 라벨은 두 조각인데 값은 "Mark One / Globe / Standard" 로 세 조각이다.
+    
+      세 번째는 트림 구조라 대응 필드가 없다.
+    
+      '
+
+unit_conversion:
+  enabled: false
+  note: "MVP 는 원문 표기 보존. 향후 분류별 단위를 고정하고 변환까지 구현"
+
+# ── 허용 어휘 ─────────────────────────────────────────────────
 #
-# ⚠️ 범주형 허용값 목록(GLOBE/BUTTERFLY …)은 MVP 범위 밖이다.
-#    벤더 표기가 계속 나와서 목록을 닫으면 정상 값을 위반으로 잡는다.
+# 표준화와 검증은 **같은 표의 앞뒷면**이다.
+#   표에 있으면  → 표준값으로 매핑한다        (value_aliases)
+#   표에 없으면  → 확인필요로 표시하고 후보 큐에 쌓는다
 #
-# ⚠️ numeric 은 **단위 표기를 위반으로 보지 않는다.** 옛 데이터시트는 단위를
-#    사람이 손으로 썼고 `142.6 m3/Hr` · `205 kg/cm2(g)` 가 모두 정상이다.
-#    숫자가 하나라도 있으면 통과이고, 하나도 없으면 위반이다.
+# 어휘가 **불완전한 상태에서 유사 보정을 켜면 오염된다.** 그래서 두 층으로
+# 나눈다 — correct 는 값을 바꾸고, flag_only 는 표시만 한다.
 #
-#    한 칸 더 좁혀 "숫자와 **알려진 단위**만 허용" 하는 규칙도 만들어 재봤다.
-#    `약 53.8` 같은 값을 잡을 수 있지만, 골든셋 정답 3건을 오탐했다 —
-#    `30 m3h`(슬래시 없음) · `205 kg/cm2(g)`(괄호 게이지 표기) · `8 g/cm2G`.
-#    사람이 손으로 쓴 단위 변형은 어휘로 끝까지 못 따라간다(2026-08-25 실측).
-#    그래서 켜지 않았다. 정상 값을 위반으로 부르는 검사는 쓸 수 없다.
+# 제외한 것과 이유
+#   actuator_fail_action  안전 필드. Fail Open/Close 가 어휘 안에서 이웃이라
+#                         유사 보정이 가장 잘 걸리고 틀리면 가장 비싸다
+#   engineering_tag_no    식별 필드. 10-FV-002 와 10-FV-003 은 거리 1이다
+#   model_no · fluid_name · equipment_full_description   열린 값
+#   수치 필드             어휘가 아니라 단위 문제다
+enum_allowed_values:
+  enabled: true
+
+  # 값을 표준값으로 바꾼다. 허용값은 value_aliases 의 to 값이 곧 그것이다
+  # (한 곳에만 적어 어긋나지 않게 한다).
+  correct:
+    - manufacturer
+    - positioner_manufacturer
+    - valve_body_rating
+    - valve_body_type
+    - valve_leakage_class
+    - characteristic
+    - actuator_type
+    - valve_body_size
+    - fluid_state
+
+  # 값을 바꾸지 않는다. 어휘 밖이면 확인필요로 표시만 한다.
+  #
+  # 재질을 여기 두는 이유 — 골든셋 19건에 본체 재질만 13종이고, 한두 글자
+  # 차이로 서로 다른 등급이 공존한다.
+  #     C5   ASTM A217 Cr-Mo      CS   탄소강      WC5  A217 다른 등급
+  # 보정하면 다른 재질로 바꿔치기한다. 표시만 하면 위험이 0이고, 사람이
+  # 승인하면 어휘가 자란다(Loop C).
+  flag_only:
+    # 안전 필드 — **보정 대상이 아니다.** 값을 바꾸는 것은 금지이고,
+    # 어휘 밖이면 사람에게 보내기만 한다. 검증은 값을 건드리지 않으므로
+    # 안전 필드에서도 위험이 없다. 실측에서 이 필드가 "표시를 놓친 칸" 의
+    # 최대 항목이었다(17칸 중 7칸) — 표시할 수단이 아예 없었기 때문이다.
+    actuator_fail_action: ["FAIL OPEN", "FAIL CLOSE"]
+
+    valve_body_material:
+      ["A105", "A216 WCB", "A216 GR WCB", "A216 GR-WCB", "ASTM A216 GR-WCB",
+       "WCB", "WCB STEEL", "WCC", "WCC STEEL", "CARBON STEEL(WCB)",
+       "C5", "WC5", "CR-MO C5; F5A", "A217 C5", "A217 WC5",
+       "A351 CF8M", "CF8M", "A352 LCB", "LCB"]
+    valve_plug_material:
+      ["316 SS", "316 SST", "316L SST", "SUS316", "SUS316L", "SUS403",
+       "410 SS HT", "316 SST/COCR-A", "316 SST / COCR-A", "316 SST W/COCR-A",
+       "316 SST + STELLITE", "316 SS + STF", "SUS316 + STELL.", "COCR-A",
+       "SUS 316/COCR-A"]      # d023 — 시트 어휘에 있던 표기가 플러그에도 나왔다
+    valve_cage_material:
+      ["17-4PH SST", "316 SS", "316 SST", "SUS316", "SUS403", "SUS440B",
+       "440 SST", "416 SS HT", "316 SST / ENC", "COCR-A"]
+    valve_seat_material:
+      ["316 SS", "316 SST", "SUS403", "SCS14A", "SCS14A + STELLITE",
+       "CAST COCR-A", "COCR-A", "316 SST + STELLITE", "316 SST / COCR-A",
+       "316 SST W/COCR-A", "SUS 316/COCR-A", "316 SS + STF", "410 SS HT",
+       "NBR"]
+    valve_stem_material:
+      ["316 SS", "316 SST", "SUS316", "SUS316L", "INCONEL",
+       "316SST + CR PLATE", "ALLOY 6, LGA", "17-4PH SST",
+       # 1986 Fisher 양식은 재질 행에 "Std." 체크박스를 둔다. 벤더 기본
+       # 사양이라는 뜻이고, **비어 있는 것과 다르다** — 문서가 명시적으로
+       # 표준품이라고 말한 것이다. 다만 마스터에서 조회할 때는 재질명이
+       # 아니므로 카탈로그 조회가 따로 필요하다.
+       "STD.", "STD", "STANDARD"]
+
+# ── 구두점이 뜻을 바꾸는 필드 ────────────────────────────────
+# 별칭 대조는 기본적으로 영숫자만 남긴다(회사명 CO.,LTD. 의 점은 잡음이다).
+# 그런데 치수는 구두점이 값 자체다 — 사선·소수점을 지우면 다른 크기가 된다.
+#
+#   1/2"   → 12   ═══  12"   → 12      12인치가 1/2인치로 보정된다
+#   1.5"   → 15   ═══  15"   → 15
+#   1-1/2" → 112  ═══  112"  → 112
+#
+# 실제로 일어났다 — 조원 골든셋 10PV081(d044) 의 12" 가 1/2" 로 보정됐다.
+# 우리 골든셋 21건에 큰 밸브가 없어서 보이지 않았다.
+# 여기 적힌 필드는 / . - 를 살려서 대조한다. 표에 없는 표기는 보정하지 않고
+# 어휘 검증이 후보 큐로 올린다 — 그것이 옳은 동작이다.
+punct_significant:
+  - valve_body_size
+
+# ── 원격에서 받음 (format_rules) ──────────────────────────────
 format_rules:
 
   # ── 식별 ──
@@ -402,6 +762,9 @@ format_rules:
 # ⚠️ 여기 등록된 이름만 구역으로 인정한다. 10PV018 정비보고서에는
 #    `Authorized by` 같은 세로 병합 셀이 5개 있는데, 사전에 없으니 무시된다.
 #    오탐을 막는 장치다.
+
+
+# ── 원격에서 받음 (sections) ──────────────────────────────
 sections:
 
   # 문서에 적힌 구역 표기 → 표준 구역. 실물 6건에서 수집했다
@@ -537,130 +900,4 @@ sections:
 #
 # 스키마에 아직 없는 field key 를 적어도 된다. 그 조각은 미매핑으로 남고,
 # 필드가 추가되는 순간 규칙 수정 없이 자동으로 붙는다.
-composite_labels:
 
-  - label: "Size/Pressure Class/Body Form"
-    separator: "/"
-    fields: [valve_body_size, valve_body_rating, null]
-    note: |
-      Fisher·Samwoo 계열 텍스트 PDF.
-      세 번째 조각은 대응 필드 없음 — Body Form 은 주조·단조 구분(Cast/Forged)이지
-      밸브 형식이 아니다. 19FV077 값이 "2.00 / CL 1500 / Cast" 인데 골든셋 정답은
-      Globe 이고, 그 값은 같은 문서의 "Valve Model / Body Type" 줄에 있다.
-      2026-08-25 골든셋 대조에서 정정.
-
-  # ── 포지셔너 — 모델과 제조사를 한 칸에 적는 양식 ──────────────────
-  # ⚠️ 복합 라벨 규칙은 구역을 보지 않는다. 같은 라벨이 솔레노이드·리밋스위치
-  #    블록에도 있지만 그쪽은 값이 비어 있어 규칙이 발동하지 않는다(실물 확인).
-  - label: "Model No. / Mfr."
-    separator: ","
-    fields: [positioner_model_no, positioner_manufacturer]
-    note: |
-      52PV014 값 예: "I/P5000, SMC" — 모델, 제조사 순.
-      값이 한 조각뿐이면(10FV079 "AVP-302") 규칙이 발동하지 않고,
-      같은 라벨이 POSITIONER MODEL NO. 의 구역 한정 유사표현으로 잡힌다.
-
-  # ── Flowserve·Valtek 계열 (19FV077 · 11FV502) ────────────────────
-  # 이 양식은 한 줄에 부품 재질과 표면처리를 함께 적는다.
-  # 값은 "/" 로 나뉘고 앞 조각만 우리 필드에 해당한다.
-  - label: "Act. Type/Matl"
-    separator: "/"
-    fields: [actuator_type, null]
-    note: "값 예: 'VL Cylinder / Aluminum' — 뒤는 액추에이터 재질(우리 필드 아님)"
-
-  - label: "Max Shutoff / Shutoff Class"
-    separator: "/"
-    fields: [null, valve_leakage_class]
-    note: "값 예: '27.000 kg/cm² / Class V' — 앞은 최대 차압(우리 필드 아님)"
-
-  - label: "Plug Matl / Facing"
-    separator: "/"
-    fields: [valve_plug_material, null]
-    note: "값 예: '410 SS HT /' — 뒤는 표면처리"
-
-  - label: "Stem Matl / Facing"
-    separator: "/"
-    fields: [valve_stem_material, null]
-
-  - label: "Seat Ring Matl / Facing"
-    separator: "/"
-    fields: [valve_seat_material, null]
-
-  - label: "Seat Ring Mtl/ Facing|Treatment"
-    separator: "/"
-    fields: [valve_seat_material, null]
-
-  - label: "Seat Retainer Mtl/ Facing|Treatment"
-    separator: "/"
-    fields: [valve_cage_material, null]
-    note: "Valtek 은 케이지를 Seat Retainer 라고 부른다 (킷 라벨링에서 확인)"
-
-  - label: "Valve Model / Body Type"
-    separator: "/"
-    fields: [model_no, valve_body_type, null]
-    note: |
-      19FV077 — 라벨은 두 조각인데 값은 "Mark One / Globe / Standard" 로 세 조각이다.
-      세 번째는 트림 구조라 대응 필드가 없다.
-
-  - label: "Model / Body Type / Trim Type"
-    separator: "/"
-    fields: [model_no, valve_body_type, null]
-    note: |
-      Trim Type("Standard")은 트림 구조 표기이지 유량 특성이 아니다.
-      CHARACTERISTIC 은 같은 문서의 "Trim # - Cv / Characteristic"("Linear")에서 온다.
-      2026-08-24 골든셋 대조에서 확인 — 대응 필드 없음으로 정정.
-
-  - label: "Max Shutoff / Shutoff Class"
-    separator: "/"
-    fields: [null, valve_leakage_class]
-    note: "앞 조각(최대 차압)은 마스터 스키마에 대응 필드 없음"
-
-  - label: "Fail/Air-To"
-    separator: "/"
-    fields: [actuator_fail_action, null]
-    note: |
-      Fail 표기와 Air-To 표기를 한 칸에 같이 준다. 예) "Close / Open"
-      앞 조각이 Fail 값이므로 그대로 쓴다. 뒤 조각은 역전 규칙 교차검증에 쓸 수 있다.
-      (Fail=Close 이면 Air-To=Open 이어야 정합)
-
-  - label: "Design Press./Temp."
-    separator: "/"
-    fields: [null, null]
-    note: "설계 조건. 마스터 스키마는 Max/Normal/Min 만 있어 대응 필드 없음 — 버림"
-
-  - label: "Process Fluid"
-    separator: "/"
-    fields: [fluid_name, fluid_state]
-    note: "Flowserve 계열. 값이 'LS AR / LIQUID' 형태로 유체명과 상태를 묶어 준다"
-
-  - label: "Size and Type"
-    pattern: '^\s*(?P<valve_body_size>[\d\-/½¼¾\.]+\s*")\s*,?\s*(?P<model_no>\S.*?)\s*$'
-    note: |
-      Fisher 1986 수기 양식. 값이 '1" 1250R-GL' / '2", 657-EZ' 형태로
-      바디 사이즈와 모델번호를 한 칸에 묶어 준다.
-      유사표현으로 넣으면 두 필드가 같은 표기를 다투므로 복합 규칙으로 둔다.
-
-  - label: "Body Matl / Bonnet Matl"
-    separator: "/"
-    fields: [valve_body_material, null]
-    note: "Flowserve·Valtek 계열. 뒤 조각(보닛 재질)은 마스터 스키마에 대응 필드 없음"
-
-  - label: "Trim # - Cv / Characteristic"
-    separator: "/"
-    fields: [null, characteristic]
-    note: |
-      앞 조각은 "2.62  Cv:116" 형태로 트림번호와 정격 Cv 가 묶여 있다.
-      Cv 필드 이름이 확정되면(RATED CV / RATED CV MAX) pattern 규칙으로 바꿔 앞 조각도 살릴 것.
-
-  - label: "Body Model(Type)"
-    pattern: '^(?P<model_no>[^(]+)\((?P<valve_body_type>[^)]+)\)$'
-    note: "한국어 리트로핏 점검서. 값이 '657-ED(GLOBE)' 형태로 모델과 바디 형상을 묶어 준다"
-
-# ── To-be (MVP 범위 외) ───────────────────────────────────────
-unit_conversion:
-  enabled: false
-  note: "MVP 는 원문 표기 보존. 향후 분류별 단위를 고정하고 변환까지 구현"
-
-enum_allowed_values:
-  enabled: false
-  note: "범주형 허용값 리스트. MVP 범위 외"

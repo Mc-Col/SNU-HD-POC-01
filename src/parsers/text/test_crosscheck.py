@@ -141,10 +141,15 @@ def test_같은_등급의_다른_표기를_접는다():
     """`600#` · `ANSI CLASS 600` · `ASME CL.600` 은 같은 등급이다.
 
     실측 — 골든셋 30건에서 틀린 61칸 중 27칸이 이런 표기 차이였다.
+
+    **표준값을 `600#` 으로 정했다 (2026-08-26).** 누설등급이 `CLASS 4` 인데
+    본체등급까지 `CLASS 600` 이면 마스터 열 두 개가 같은 접두를 갖는다.
+    `600#` 은 업계 약칭이라 혼동이 없다. 표기 목록은 이 표가 더 넓어서
+    그대로 받았다 — 표준값은 결정이고 표기 목록은 관찰이다.
     """
     from src.parsers.text.crosscheck import standardize
     for v in ["600#", "ANSI CLASS 600", "ASME CL.600", "CL 600", "600"]:
-        assert standardize("valve_body_rating", v) == "CLASS 600", v
+        assert standardize("valve_body_rating", v) == "600#", v
 
 
 def test_등급이_아닌_값은_건드리지_않는다():
@@ -161,11 +166,26 @@ def test_같은_회사의_다른_이름을_접는다():
     assert standardize("positioner_manufacturer", "Fisher Controls") == "FISHER"
 
 
-def test_누설등급은_규격대로_로마자로_통일한다():
-    """ANSI/FCI 70-2 가 로마자를 쓴다."""
+def test_누설등급은_아라비아로_통일한다():
+    """규격(ANSI/FCI 70-2)은 로마자지만 **이번 PoC 는 아라비아로 간다.**
+
+    지적이 맞다 — 규격 표기는 `CLASS IV` 다. 그럼에도 아라비아로 두는 이유는
+    두 가지다.
+
+    1. **골든셋이 이미 아라비아다.** 30건 + 블라인드 홀드아웃 5건의 정답이
+       `CLASS 4` 로 매겨져 있고, 홀드아웃은 이미 개봉했다. 지금 정답지를
+       고치면 *"결과를 보고 정답을 바꿨다"* 가 되어 그 측정을 못 쓰게 된다.
+    2. 마스터DB 조회자가 숫자를 먼저 떠올린다는 판단(2026-08-25 결정).
+
+    **규격 표기가 옳다는 점은 유지된다.** 표기 목록에 `CLASS IV`·`FCI CLASS IV`·
+    `ANSI/FCI 70-2 CLASS IV` 를 전부 넣어 두었으므로 문서가 로마자로 써도
+    읽힌다. 다음 사이클에 골든셋을 다시 매길 기회가 있으면 그때 규격 표기로
+    되돌리는 것이 맞다.
+    """
     from src.parsers.text.crosscheck import standardize
-    for v in ["CLASS 4", "ANSI Class IV", "Class IV"]:
-        assert standardize("valve_leakage_class", v) == "CLASS IV", v
+    for v in ["CLASS 4", "ANSI Class IV", "Class IV", "CLASS IV",
+              "FCI CLASS IV"]:
+        assert standardize("valve_leakage_class", v) == "CLASS 4", v
 
 
 def test_사이즈는_표기만_접고_단위는_바꾸지_않는다():

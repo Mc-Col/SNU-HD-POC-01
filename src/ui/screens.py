@@ -48,8 +48,24 @@ def main_screen() -> None:
         if up is not None:
             path = _stash(up)
             session.pending(path)
-            session.origin("pipeline")
+            session.origin("vlm")
             session.go(session.UPLOAD)
+
+        from src import env
+        has_key = env.load()
+        if not has_key:
+            st.warning("API 키가 없어 VLM 판독을 쓸 수 없습니다. "
+                       "`.env` 에 OPENAI_API_KEY 를 넣고 스트림릿을 재시작하세요.")
+        use_vlm = st.toggle(
+            "VLM 으로 판독 (API 사용)", value=has_key, disabled=not has_key,
+            key="tg_vlm",
+            help="끄면 규칙 경로만 씁니다. 스캔 문서는 값이 나오지 않습니다 — "
+                 "대상의 71.9% 가 스캔이기 때문입니다.")
+        session.set_use_vlm(bool(use_vlm))
+        page = st.number_input(
+            "읽을 페이지", min_value=1, max_value=99, value=1, step=1, key="in_page",
+            help="사양표가 있는 페이지입니다. 자동 선택은 Triage 구현 후에 붙습니다.")
+        session.set_page(int(page))
 
         st.markdown("---")
         st.caption("모듈이 붙기 전에도 화면을 검증할 수 있게 합성 픽스처를 둡니다. "
@@ -100,7 +116,15 @@ def confirm_screen() -> None:
     st.markdown(f"<span class='d2s-code'>{name} "
                 f"({os.path.getsize(path) // 1000} kB)</span>",
                 unsafe_allow_html=True)
-    st.caption("이 파일을 처리합니다. 30필드 중 MVP 대상 필드만 먼저 뽑습니다.")
+    if session.origin() == "vlm" and session.use_vlm():
+        from src import models, preprocess
+        warn = preprocess.caution_reason(path)
+        st.caption(f"**{models.for_attempt(0).name}** 로 {session.page()}페이지를 "
+                   f"판독합니다. MVP 대상 필드만 먼저 뽑습니다.")
+        if warn:
+            st.warning(f"이 문서는 {warn}")
+    else:
+        st.caption("규칙 경로로 처리합니다. 스캔 문서는 값이 나오지 않습니다.")
 
     c1, c2, _ = st.columns([1, 1, 3])
     if c1.button("변환 시작 ≫", type="primary", use_container_width=True,
@@ -127,8 +151,11 @@ def extract_screen() -> None:
         bar.progress((i + 1) / len(STEPS))
 
     try:
-        if session.origin() == "fixture":
+        origin = session.origin()
+        if origin == "fixture":
             d = source.from_fixture()
+        elif origin == "vlm" and session.use_vlm():
+            d = source.from_vlm(path, page=session.page())
         else:
             d = source.from_pipeline(path)
     except Exception as e:                      # 실패를 삼키지 않는다
