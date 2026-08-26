@@ -664,3 +664,48 @@ unit_conversion:
 enum_allowed_values:
   enabled: false
   note: "범주형 허용값 리스트. MVP 범위 외"
+
+# ── 파생 필드 (다른 필드에서 도출) ─────────────────────────────
+#
+# 문서에 **글자로 적혀 있지 않은** 필드가 있다. 골든셋 라벨러도 원문라벨 칸에
+# "NA (Tag에서 FV를 보고 유추)" 처럼 적어 두었다. 파서는 문서에 없는 값을
+# 만들지 않으므로(철학 4) `no_evidence` 로 비우고, 그 자리를 ④ Normalize 가
+# 규칙으로 채운다. `model_to_manufacturer` 와 같은 성격이다.
+#
+# ⚠️ 도출값은 **문서 근거가 없다.** 반드시 transform_trace 에 근거를 남기고
+#    확신도를 올리지 않는다(자동확정 금지). 사람이 확인해야 한다.
+#
+# ⚠️ 아래 매핑은 골든셋 31건 관찰에서 뽑았다. 코퍼스 전체를 대변하지 않는다.
+#    실측 예외가 이미 둘 있다 — 아래 exceptions 참조.
+derived_fields:
+  enabled: true
+
+  type_name:
+    from: engineering_tag_no
+    how: tag_kind                  # 태그의 설비종류 두세 글자로 판정
+    map:
+      FV: "Flow Control Valve"
+      LV: "Level Control Valve"
+      PV: "Pressure Control Valve"
+      TV: "Temperature Control Valve"
+      HV: "Hand Valve"
+      XV: "On-Off Valve"
+      PCV: "Pressure Control Valve"
+      PDV: "Pressure Differential Valve"
+      FCV: "Flow Control Valve"
+      LCV: "Level Control Valve"
+      TCV: "Temperature Control Valve"
+    exceptions:
+      - "11-LV-001 은 LV 태그인데 골든셋 정답이 Flow Control Valve 다"
+      - "22-PCV-013 은 PCV 인데 정답이 Direct Operated Regulator 다 (레귤레이터 계열)"
+      - "→ 태그만으로는 확정되지 않는다. 그래서 REVIEW 로 보낸다"
+
+  fluid_state:
+    from: fluid_name
+    how: keyword                   # 유체명에 기체 낱말이 있으면 GAS, 없으면 LIQUID
+    gas_words: ["GAS", "STEAM", "VAPOR", "VAPOUR", "AIR", "NITROGEN", "N2"]
+    default: "LIQUID"
+    note: >
+      골든셋 실측 30건 — GAS 7건은 전부 STEAM 또는 GAS 낱말을 포함했고
+      LIQUID 18건은 하나도 포함하지 않았다. 낱말 경계로 매칭한다
+      (GASOLINE 이 GAS 로 잡히면 안 된다).
