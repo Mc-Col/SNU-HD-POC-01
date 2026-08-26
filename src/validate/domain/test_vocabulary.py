@@ -164,6 +164,9 @@ def test_요약():
 
 def test_표준값_합의_확인():
     """2026-08-25 결정 — 누설등급은 아라비아, 특성은 철자."""
-    assert schema.allowed_values("valve_leakage_class")[2] == "CLASS 4"
+    # 위치가 아니라 값으로 단언한다 — CLASS 1 을 나중에 추가하자 인덱스가
+    # 밀려서 이 시험이 깨졌다. 목록이 자라도 뜻은 변하지 않아야 한다.
+    leak = schema.allowed_values("valve_leakage_class")
+    assert "CLASS 4" in leak and "CLASS IV" not in leak
     assert "EQUAL PERCENTAGE" in schema.allowed_values("characteristic")
     assert "EQUAL PERCENT" not in schema.allowed_values("characteristic")

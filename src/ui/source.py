@@ -164,11 +164,17 @@ def from_fixture(path: str | None = None, page_path: str | None = None,
 # ── 실제 파이프라인 ───────────────────────────────────────────
 
 def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True) -> UiDoc:
-    """모듈이 붙으면 이 경로로 온다. 지금은 파서가 비어 있어 전부 N/A 로 나온다 —
-    그게 정직한 현재 상태이고, 화면은 그것도 그대로 보여준다."""
-    from src.pipeline import Pipeline
+    """완성된 모듈을 꽂은 파이프라인으로 처리한다.
 
-    p = Pipeline(only_mvp=only_mvp, use_vlm=use_vlm)
+    배선은 `src.pipeline.build()` 한 곳에만 있다 — 화면과 CLI 가 다른 결과를
+    내지 않게 하려는 것이다(2026-08-25 조립).
+
+    꽂히지 않은 모듈이 있으면 `build()` 가 사유를 돌려준다. 그것을 화면의
+    판정 근거에 함께 실어, 값이 왜 안 나오는지 사람이 알 수 있게 한다."""
+    from src.pipeline import build
+
+    notes: list[str] = []
+    p = build(only_mvp=only_mvp, use_vlm=use_vlm, notes=notes)
     result = p.run_document(path)
     ext = os.path.splitext(path)[1].lower()
     return UiDoc(
@@ -177,7 +183,8 @@ def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True) -> 
         # tif 는 PDF 뷰어로 못 띄운다 — PNG 로 떠서 넘긴다(대상의 71.9%)
         page_path=(path if ext == ".pdf" else render_page_png(path)),
         size_bytes=os.path.getsize(path) if os.path.exists(path) else 0,
-        route_reason=result.triage.reason,
+        route_reason=" | ".join([result.triage.reason,
+                                 *(f"[조립] {n}" for n in notes)]),
         origin="pipeline",
     )
 

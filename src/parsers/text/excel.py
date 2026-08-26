@@ -3,6 +3,12 @@
 
 셀 좌표로 매핑하지 않는다. 벤더 양식은 디테일이 바뀌므로 헤더 텍스트가 기준이다.
 값은 라벨의 오른쪽 → 아래 순서로 찾는다.
+
+구역(section) 인식 — 2026-08-25
+    같은 항목명이 부품마다 되풀이되므로(`Model`=밸브 본체 / `Model No.`=액추에이터)
+    라벨이 **어느 묶음에 있는지**를 함께 본다. 엑셀에서 묶음의 이름표는 세로로
+    병합된 셀이다. 자세한 것은 `sections.py` 의 머리말에 적어 두었다.
+    구역 구조가 없는 문서는 이 장치가 조용히 꺼진다 (지금까지와 같게 동작).
 """
 from __future__ import annotations
 
@@ -16,11 +22,15 @@ from src.contracts import ParserType, RawExtraction
 from .columns import anchor_from
 from .composite import CompositeIndex, try_split
 from .field_index import FieldIndex
+from .sections import SectionIndex, SectionMap
 from .units import UnitIndex
 from .xls_compat import load_xls
 
 SCAN_RIGHT = 4          # 라벨 오른쪽으로 몇 칸까지 값을 찾는가
 SCAN_DOWN = 2           # 오른쪽에 없으면 아래로 몇 칸까지
+RIGHT_PROBE = 15        # "이 셀이 라벨인가" 를 볼 때만 쓰는 넓은 탐침.
+                        # 값 탐색(SCAN_RIGHT)을 넓히면 노이즈가 늘지만, 라벨 판별은
+                        # 넓게 봐야 한다 — 44LV001 은 라벨 B열·값 S열로 11칸 떨어져 있다
 MAX_LABEL_LEN = 60      # 이보다 긴 문자열은 라벨이 아니라 본문으로 본다
 
 
@@ -62,13 +72,17 @@ def parse_excel(
     composite: CompositeIndex | None = None,
     sheets: list[str | int] | None = None,
     units: UnitIndex | None = None,
+    sections: SectionIndex | None = None,
 ) -> TextParseResult:
     """엑셀 파일 하나 → RawExtraction[] + 미매핑 라벨.
 
     sheets 는 시트 이름 또는 1-based 순번. None 이면 전체.
     Triage 가 사양표 시트를 지정하면 그것만 본다 (사진·이력 시트 노이즈 배제).
     """
-    ix = index or FieldIndex.load()
+    six = sections if sections is not None else SectionIndex.load()
+    # 구역 사전을 먼저 읽어 넘긴다 — 구역 접두어가 붙은 유사표현
+    # (`MATERIAL Body/Bonnet`)을 떼어 등록하려면 구역 이름을 알아야 한다.
+    ix = index or FieldIndex.load(section_names=six.name_map())
     cix = composite if composite is not None else CompositeIndex.load()
     uix = units if units is not None else UnitIndex.load()
     wb = (load_xls(path) if path.lower().endswith(".xls")
@@ -80,6 +94,7 @@ def parse_excel(
         if sheets is not None and page not in sheets and ws.title not in sheets:
             continue
         merged = _merged_index(ws)
+        secmap = SectionMap.from_excel(ws, six)  # 세로 병합 셀 = 구역 이름표
         consumed: set[tuple[int, int]] = set()   # 값으로 이미 쓰인 셀은 라벨이 아니다
 
         def cell_value(r: int, c: int) -> object:
@@ -108,10 +123,16 @@ def parse_excel(
 
         # 1패스: 표준 컬럼에 붙는 라벨. 2패스: 나머지 라벨 후보(미매핑 수집).
         # 매핑되는 라벨이 값을 먼저 claim 해야 엉뚱한 텍스트가 값을 채가지 않는다.
+        def section_at(r: int, c: int) -> str | None:
+            """이 칸이 속한 표준 구역. 구역 구조가 없는 문서면 None."""
+            return secmap.at(r, c) if secmap else None
+
         candidates = [c for row in ws.iter_rows() for c in row]
         known = [c for c in candidates
                  if isinstance(c.value, str)
-                 and (ix.lookup(_text(c.value)) is not None
+                 and (ix.lookup(_text(c.value),
+                                six.allowed(section_at(c.row, c.column)),
+                                section_at(c.row, c.column)) is not None
                       or cix.lookup(_text(c.value)) is not None)]
         rest = [c for c in candidates if c not in known]
 
@@ -125,6 +146,8 @@ def parse_excel(
                     continue
                 if not isinstance(cell.value, str):      # 숫자·날짜는 라벨이 아니다
                     continue
+                if secmap and secmap.is_marker(r, c):    # 구역 이름표는 라벨이 아니다
+                    continue
 
                 label = _text(cell.value)
                 if not label or len(label) > MAX_LABEL_LEN:
@@ -132,7 +155,8 @@ def parse_excel(
                 if not any(ch.isalpha() for ch in label):
                     continue
 
-                hit = ix.lookup(label)
+                sec = section_at(r, c)
+                hit = ix.lookup(label, six.allowed(sec), sec)
                 value, vpos = _find_value(cell_value, ix, merged, r, c, span, consumed,
                                           uix, nor_by_row.get(r))
                 if value:
@@ -203,7 +227,7 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
     right_from = rng.max_col if rng else c
     down_from = rng.max_row if rng else r
 
-    if nor_col is not None and nor_col > right_from:
+    if nor_col is not None and nor_col > right_from and _nor_applies(merged, r, nor_col):
         pos = (r, nor_col)
         v = _text(cell_value(*pos))
         if v and pos not in taken and not (uix and uix.is_unit(v)) \
@@ -241,11 +265,25 @@ def _find_value(cell_value, ix: FieldIndex, merged, r: int, c: int, span,
     return "", (r, c)
 
 
+def _nor_applies(merged, r: int, nor_col: int) -> bool:
+    """이 행이 Max/Nor/Min 블록 안에 있는가.
+
+    머리글은 한 번 나오면 그 아래 모든 행에 붙어 버린다. 2단 양식(왼쪽 라벨·값,
+    오른쪽 라벨·값)에서는 Nor 열이 아래로 내려가다 오른쪽 블록의 라벨 칸을
+    관통하고, 그 라벨 텍스트가 값으로 잡힌다 — 실물 `10FV079` 에서 4건.
+
+    판별자는 칸 경계다. 블록 안의 행은 Nor 열에서 칸이 시작하지만,
+    블록 밖의 행은 다른 열에서 시작한 병합칸이 그 자리를 지나갈 뿐이다.
+    """
+    span = merged.get((r, nor_col))
+    return span is None or span[0][1] == nor_col
+
+
 def _has_own_value(cell_value, pos: tuple[int, int], uix,
                    nor_col: int | None = None) -> bool:
     """이 셀이 오른쪽에 자기 값을 달고 있는가 (= 다음 행의 라벨이다)."""
     r, c = pos
-    cols = list(range(c + 1, c + 1 + SCAN_RIGHT))
+    cols = list(range(c + 1, c + 1 + RIGHT_PROBE))
     if nor_col is not None and nor_col > c:
         cols.append(nor_col)
     for cc in cols:

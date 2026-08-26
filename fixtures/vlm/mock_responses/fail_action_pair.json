@@ -1,0 +1,8 @@
+{
+  "extractions": [
+    {"field_key": "actuator_fail_action", "raw_value": "Close", "raw_label": "Air Fails Valve to",
+     "row_text": "Air Fails Valve to   Lock [ ]   Open [ ]   Close [X]",
+     "bbox": [0.05, 0.16, 0.78, 0.21], "confidence": 0.88, "absence_reason": "present",
+     "note": "체크박스 3칸 중 Close 에만 표시. 같은 페이지에 'Increase Signal Valve' 행도 있어 함께 관찰함"}
+  ]
+}

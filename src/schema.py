@@ -262,7 +262,8 @@ def allowed_values(field_key: str) -> tuple[str, ...]:
         return ()
     if field_key in (e.get("correct") or ()):
         return tuple(dict.fromkeys(
-            m["to"] for m in value_aliases(field_key) if m.get("to")))
+            m["to"] for m in value_aliases(field_key)
+            if m.get("to") and not m.get("compare_only")))
     vals = (e.get("flag_only") or {}).get(field_key)
     return tuple(vals) if vals else ()
 

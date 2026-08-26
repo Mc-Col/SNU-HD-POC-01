@@ -36,7 +36,8 @@ def test_킷_구조를_읽는다():
 
 def test_판정_결과(sc):
     n = sc.counts()
-    assert n == {"정확": 4, "표기차이": 0, "정규화대기": 2, "오답": 0, "미추출": 2}
+    # 유사표현 반영(2026-08-25)으로 미추출 1건이 정확으로 바뀌었다
+    assert n == {"정확": 5, "표기차이": 0, "정규화대기": 2, "오답": 0, "미추출": 1}
 
 
 def test_표준값_변환은_파서_책임이_아니다(sc):
@@ -69,3 +70,28 @@ def test_같은_입력이면_같은_출력이다():
     a, b = score(KIT, FIX), score(KIT, FIX)
     assert [(c.doc_id, c.field_key, c.verdict) for c in a.cells] == \
            [(c.doc_id, c.field_key, c.verdict) for c in b.cells]
+
+
+# ── 라벨러별 집계 (2026-08-26) ──────────────────────────────────
+
+
+def test_라벨러를_킷에서_읽는다(sc):
+    """골든셋에 사람 라벨과 AI 초안이 섞여 있다. 누가 만든 정답인지 알아야 나눠 셀 수 있다."""
+    assert set(sc.labelers()) == {"사람", "AI초안(Claude)"}
+    assert all(c.labeler for c in sc.cells)
+
+
+def test_라벨러별로_따로_센다(sc):
+    """합쳐서 세면 'AI 가 만든 정답으로 AI 를 채점' 한 부분이 숫자에 섞인다."""
+    total = sc.counts()
+    parts = [sc.counts(w) for w in sc.labelers()]
+    for key in total:
+        assert total[key] == sum(p[key] for p in parts)
+
+
+def test_리포트에_라벨러_표와_주의가_남는다(sc):
+    from src.parsers.text.score_against_kit import render
+    md = render(sc)
+    assert "## 라벨러별" in md
+    assert "사람이 검증한 정답만" in md
+    assert "AI 초안은 사람 검증 전이다" in md

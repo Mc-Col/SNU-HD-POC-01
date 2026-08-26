@@ -1,0 +1,6 @@
+{
+  "field_key": "actuator_fail_action", "raw_value": "Close", "raw_label": "Air Fails Valve to",
+  "row_text": "Air Fails Valve to   Lock [ ]   Open [ ]   Close [X]",
+  "bbox": [0.10, 0.30, 0.95, 0.70], "confidence": 0.9, "absence_reason": "present",
+  "note": "확대 후에도 Close 칸에만 표시가 보임"
+}

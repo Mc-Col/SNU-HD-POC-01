@@ -1,0 +1,32 @@
+{
+  "extractions": [
+    {"field_key": "engineering_tag_no", "raw_value": "10FV001", "raw_label": "TAG NO.",
+     "row_text": null, "bbox": [0.35, 0.075, 0.52, 0.093], "confidence": 0.97,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "manufacturer", "raw_value": "FISHER", "raw_label": "(좌측 상단 로고)",
+     "row_text": null, "bbox": [0.06, 0.026, 0.24, 0.052], "confidence": 0.93,
+     "absence_reason": "present", "note": "항목 라벨 없이 로고와 꼬리말에만 있음"},
+    {"field_key": "model_no", "raw_value": "ED-667", "raw_label": "MODEL NO.",
+     "row_text": null, "bbox": [0.35, 0.208, 0.47, 0.226], "confidence": 0.95,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "valve_body_rating", "raw_value": "300#", "raw_label": "BODY RATING",
+     "row_text": null, "bbox": [0.35, 0.164, 0.44, 0.182], "confidence": 0.94,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "valve_body_size", "raw_value": "4\"", "raw_label": "BODY SIZE",
+     "row_text": null, "bbox": [0.35, 0.142, 0.42, 0.160], "confidence": 0.92,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "valve_body_material", "raw_value": "A216 WCB", "raw_label": "BODY MATERIAL",
+     "row_text": null, "bbox": [0.35, 0.186, 0.50, 0.204], "confidence": 0.94,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "actuator_fail_action", "raw_value": "CLOSE", "raw_label": "ACT'N FAIL POSITION",
+     "row_text": "ACT'N FAIL POSITION    CLOSE", "bbox": [0.35, 0.428, 0.46, 0.446],
+     "confidence": 0.91, "absence_reason": "present",
+     "note": "직접 표기(고장 시 위치)로 보이는 라벨. 판단은 하류에 맡김"},
+    {"field_key": "rated_cv_normal", "raw_value": "236", "raw_label": "VALVE COEFFICIENT",
+     "row_text": null, "bbox": [0.35, 0.296, 0.43, 0.314], "confidence": 0.96,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "required_cv", "raw_value": "126", "raw_label": "REQ'D FLOW COEFF., CV",
+     "row_text": null, "bbox": [0.35, 0.318, 0.43, 0.336], "confidence": 0.96,
+     "absence_reason": "present", "note": ""}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "extractions": [
+    {"field_key": "engineering_tag_no", "raw_value": "10FV001", "raw_label": "TAG NO.",
+     "row_text": null, "bbox": [0.35, 0.075, 0.52, 0.093], "confidence": 0.97,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "manufacturer", "raw_value": null, "raw_label": null,
+     "row_text": null, "bbox": null, "confidence": 0.0,
+     "absence_reason": "no_evidence", "note": "로고·머리글·꼬리말에 회사명이 없음"},
+    {"field_key": "model_no", "raw_value": null, "raw_label": "MODEL NO.",
+     "row_text": null, "bbox": [0.35, 0.208, 0.47, 0.226], "confidence": 0.2,
+     "absence_reason": "unreadable", "note": "값 칸이 번져 글자를 특정할 수 없음"},
+    {"field_key": "valve_body_rating", "raw_value": "300#", "raw_label": "BODY RATING",
+     "row_text": null, "bbox": [0.35, 0.164, 0.44, 0.182], "confidence": 0.94,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "valve_body_size", "raw_value": "4\"", "raw_label": "BODY SIZE",
+     "row_text": null, "bbox": [0.35, 0.142, 0.42, 0.160], "confidence": 0.92,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "valve_body_material", "raw_value": "A216 WCB", "raw_label": "BODY MATERIAL",
+     "row_text": null, "bbox": [0.35, 0.186, 0.50, 0.204], "confidence": 0.94,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "actuator_fail_action", "raw_value": null, "raw_label": "Air Fails Valve to",
+     "row_text": "Air Fails Valve to   Lock [ ]   Open [ ]   Close [ ]", "bbox": [0.06, 0.70, 0.80, 0.73],
+     "confidence": 0.1, "absence_reason": "checkbox_ambiguous",
+     "note": "세 칸 모두 표시가 없음"},
+    {"field_key": "rated_cv_normal", "raw_value": "236", "raw_label": "VALVE COEFFICIENT",
+     "row_text": null, "bbox": [0.35, 0.296, 0.43, 0.314], "confidence": 0.96,
+     "absence_reason": "present", "note": ""},
+    {"field_key": "required_cv", "raw_value": null, "raw_label": null,
+     "row_text": null, "bbox": null, "confidence": 0.0,
+     "absence_reason": "no_evidence", "note": "요구 Cv 항목이 이 양식에 없음"}
+  ]
+}

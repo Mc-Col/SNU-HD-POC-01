@@ -1,5 +1,5 @@
 {
-  "_설명": "⑤-a 형식 검증 fixture. format_rules 절이 schema/rules.yaml 에 생기기 전까지 규칙을 여기서 주입한다.  |  2026-08-24 이종수: 스키마 변경(C027) 반영 — rated_cv_max→rated_cv 병합, positioner_type 삭제. 서경빈 선임 확인 요청.",
+  "_설명": "⑤-a 형식 검증 fixture. format_rules 절이 schema/rules.yaml 에 생기기 전까지 규칙을 여기서 주입한다.  |  2026-08-24 이종수: 스키마 변경(C027) 반영 — rated_cv_max→rated_cv 병합, positioner_type 삭제. 서경빈 선임 확인 요청.  |  2026-08-25 서경빈: format_rules 를 schema/rules.yaml 에 신설해 규칙이 실제로 돌기 시작했다. numeric 판정선을 '단위 표기는 위반이 아니다'로 바꿨다 — '142.6 m3/Hr' 같은 값이 정상인데 옛 판정(전체가 숫자여야 함)은 이것을 잡았다. '약 53.8' 은 한글이 섞였다는 이유로 계속 잡힌다(단위는 전부 ASCII·기호다).",
   "rules": {
     "rated_cv": {
       "numeric": true

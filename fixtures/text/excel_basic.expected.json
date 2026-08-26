@@ -58,10 +58,10 @@
     {
       "field_key": "valve_body_size",
       "raw_value": "4 IN",
-      "raw_label": "VALVE BODY SIZE",
-      "source_locator": "SPEC!A12",
+      "raw_label": "Body Size",
+      "source_locator": "SPEC!B9",
       "page": 1,
-      "confidence": 1.0,
+      "confidence": 0.95,
       "note": ""
     },
     {
@@ -97,11 +97,6 @@
       "text": "Spring Range",
       "source_locator": "SPEC!A8",
       "neighbor_value": "0.4 - 2.0 bar"
-    },
-    {
-      "text": "Body Size",
-      "source_locator": "SPEC!A9",
-      "neighbor_value": "4 IN"
     }
   ]
 }
