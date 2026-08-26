@@ -149,6 +149,14 @@ def run(doc_ids: list[str] | None = None, use_vlm: bool = True,
         tot["합의"] += ok; tot["불일치"] += no
         who = row.get("labeler", "미기재")
         tot[f"맞음:{who}"] += hit; tot[f"틀림:{who}"] += miss
+        # 대조가 **가능했는지**를 따로 센다. 합의율만 내면 "어디서 잰 것인지" 가
+        # 사라진다 — 스캔 문서는 텍스트 층이 없어 애초에 대조 대상이 아니다.
+        if ok + no:
+            tot["대조된 문서"] += 1
+        elif via_vlm:
+            tot["VLM 단독"] += 1          # 스캔 — 텍스트가 아무것도 못 냄
+        else:
+            tot["텍스트 단독"] += 1        # 엑셀 — Router 가 VLM 을 부르지 않음
         out.append({"doc": did, "file": row["file"], "state": "채점", "labeler": who,
                     "path": "VLM+텍스트" if via_vlm else "텍스트 단독",
                     "hit": hit, "miss": miss, "agree": ok, "conflict": no, "bad": bad})
@@ -164,6 +172,15 @@ def render(results: list[dict], tot: Counter, use_vlm: bool) -> str:
     if b:
         L.append(f"- 두 경로 합의 **{tot['합의']}/{b}** ({tot['합의'] / b:.0%}) "
                  f"· 불일치 {tot['불일치']}건 — 사람이 확인해야 하는 칸")
+        # ⚠️ 합의율은 **대조가 가능했던 칸에서만** 잰 값이다. 커버리지를 함께
+        #    적지 않으면 전체 정확도로 읽힌다 (2026-08-26).
+        if n:
+            L.append(f"- 대조 범위 — 전체 {n}칸 중 **{b}칸({b / n:.0%})** 에서만 "
+                     f"두 경로가 서로를 검증한다")
+        L += ["", "| 경로 | 문서 | 대조 |", "|---|---:|---|",
+              f"| VLM + 텍스트 (텍스트 있는 PDF) | {tot['대조된 문서']} | ✅ 두 경로가 검증 |",
+              f"| VLM 단독 (스캔 tif — 텍스트 층 없음) | {tot['VLM 단독']} | ❌ 대조 불가 |",
+              f"| 텍스트 단독 (엑셀 — Router 가 VLM 을 부르지 않음) | {tot['텍스트 단독']} | ❌ 대조 없음 |"]
     else:
         L.append("- 두 경로 대조 없음 (VLM 경로를 타지 않았다)")
     if tot["실패"]:
