@@ -51,6 +51,7 @@ import json
 import os
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 
@@ -104,6 +105,9 @@ DEFAULT_RAW = os.path.join(ROOT, "raw_file")
 DEFAULT_OUT = os.path.join(ROOT, "runs", "vlm_score")
 # 채점기 전용 캐시 — 파이프라인 캐시와 절대 섞지 않는다(위 `cache` 설정 주석 참고)
 SCORE_CACHE_DIR = os.path.join(ROOT, "runs", "vlm_score_cache")
+# 문서 판독 동시 실행 수 — API 대기가 병목이라 올린 만큼 빨라진다.
+# 속도 제한에 걸리지 않도록 보수적으로 잡는다.
+PARALLEL_DOCS = 4
 
 # 해상도 변형 — 장변 목표(px). None 은 렌더 원본 그대로.
 #   우리 스캔은 150dpi 장변 1753px 이고 `plan_scale` 의 확대 트리거(목표의 절반,
@@ -136,6 +140,7 @@ class Cell:
     labeler: str
     model: str
     size: str
+    rep: int                                           # 회차 — 같은 조건 재실행 구분
     field_key: str
     field_name: str
     truth: str
@@ -150,6 +155,7 @@ class Run:
     """한 조합(모델 x 해상도)의 실행 결과."""
     model: str
     size: str
+    rep: int = 1                                       # 회차 — 잡음 측정용
     cells: list[Cell] = dc_field(default_factory=list)
     docs: list[tuple[str, str, str]] = dc_field(default_factory=list)
     tokens_in: int = 0
@@ -192,7 +198,7 @@ def judge(truth: str, got: object, key: str) -> str:
 
 
 def _ask_sized(parser, cache, model: str, text: str, png: str,
-               page: int, fields) -> dict:
+               page: int, fields, rep: int = 1) -> dict:
     """해상도까지 구분하는 캐시를 얹어 VLM 을 한 번 호출한다.
 
     역할  : `VlmParser._ask_cached` 와 같은 일을 하되, 캐시 키를 **렌더된 이미지**
@@ -213,7 +219,8 @@ def _ask_sized(parser, cache, model: str, text: str, png: str,
     with Image.open(png) as img:                       # 픽셀·모드·크기가 지문에 들어간다
         content = hash_source(image=img.convert(img.mode))
     # 모델과 필드 구성이 바뀌면 응답도 바뀌므로 버전 문자열에 함께 넣는다
-    version = f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}"
+    # 회차를 키에 넣어야 재실행이 캐시에 막히지 않는다 - 잡음 측정의 전제다
+    version = f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}:r{rep}"
     key = cache_key(content, page, version)            # 해상도는 content 에 이미 반영됨
 
     hit = cache.get(key)                               # 적중하면 네트워크를 타지 않는다
@@ -250,7 +257,7 @@ def render_page(path: str, page: int, out_dir: str, long_edge: int | None) -> st
 
 
 def run_one(model: str, size: str, rows: list[dict], raw_root: str,
-            out_dir: str, only_mvp: bool, cache) -> Run:
+            out_dir: str, only_mvp: bool, cache, rep: int = 1) -> Run:
     """한 조합으로 골든셋 전체를 돌리고 채점한다.
 
     역할  : 문서마다 지정 페이지를 렌더 → 전문 판독 1회 → 정답 대조.
@@ -260,13 +267,16 @@ def run_one(model: str, size: str, rows: list[dict], raw_root: str,
     출력  : Run
     부수효과: 렌더 파일 생성, 캐시 미적중 시 API 호출
     """
-    run = Run(model=model, size=size)
+    run = Run(model=model, size=size, rep=rep)
     parser = VlmParser(render_dir=out_dir, only_mvp=only_mvp, cache=cache)
     fields = list(schema.mvp_fields() if only_mvp else schema.all_fields())
     asked = {f.key for f in fields}                     # 채점 범위 = 물어본 필드
     text = f"이 페이지에서 아래 필드를 판독하라.\n\n■ 필드\n{_field_spec(fields)}\n"
     long_edge = SIZES[size]
 
+    # 1단계: 렌더 (순차) — PIL 과 파일 쓰기를 한 스레드에 묶는다.
+    # 렌더는 빠르므로 병렬로 얻을 이득이 없고, 스레드 안전만 잃는다.
+    jobs = []                                          # (row, page, png) 목록
     for row in rows:
         path = find_file(raw_root, row["file"])
         if row["cls"] == "out_of_scope":               # 라벨러가 범위 밖으로 판단한 문서
@@ -275,18 +285,48 @@ def run_one(model: str, size: str, rows: list[dict], raw_root: str,
         if path is None:
             run.docs.append((row["doc_id"], row["file"], "파일 없음"))
             continue
-
+        if os.path.splitext(path)[1].lower() in preprocess.EXCEL_EXT:
+            # 운영에서 엑셀은 라우터가 텍스트 파서로 보낸다(src/router/__init__.py:127).
+            # VLM 으로 채점하면 실제로 타지 않는 경로를 재는 셈이라 대상에서 뺀다.
+            # (덧붙여 _render_excel 은 win32com + Excel 이 있어야 동작한다)
+            run.docs.append((row["doc_id"], row["file"], "제외(엑셀 - 텍스트 파서 담당)"))
+            continue
         # 라벨러가 적어 둔 사양표 페이지를 그대로 쓴다 — Triage 판정과 섞지 않는다
         page = int(row["spec_page"]) if row["spec_page"] else 1
         try:
-            png = render_page(path, page, out_dir, long_edge)
-            # `_ask_cached` 는 키를 원본 파일 바이트로 만들어 해상도를 구분하지 못한다.
-            # 채점기는 해상도가 독립 변수이므로 렌더 결과 자체를 키 재료로 쓴다.
-            data = _ask_sized(parser, cache, model, text, png, page, fields)
+            jobs.append((row, page, render_page(path, page, out_dir, long_edge)))
         except Exception as exc:                       # 실패를 삼키지 않는다(철학 5)
             run.errors.append(
-                f"{row['doc_id']} {row['file']}: {type(exc).__name__}: {exc}"[:200])
-            run.docs.append((row["doc_id"], row["file"], f"실패: {type(exc).__name__}"))
+                f"{row['doc_id']} {row['file']}: 렌더 {type(exc).__name__}: {exc}"[:200])
+            run.docs.append((row["doc_id"], row["file"], f"렌더실패: {type(exc).__name__}"))
+
+    # 2단계: 판독 (병렬) — 전체 시간의 대부분이 API 대기다.
+    # 응답 순서는 뒤섞여도 되므로 순번에 담아 두고, 채점은 3단계에서 원래 순서대로 한다.
+    def ask(job):
+        """한 문서를 판독한다. 예외는 부른 쪽에서 처리하도록 그대로 올린다."""
+        _, page, png = job
+        # `_ask_cached` 는 키를 원본 파일 바이트로 만들어 해상도를 구분하지 못한다.
+        # 채점기는 해상도가 독립 변수이므로 렌더 결과 자체를 키 재료로 쓴다.
+        return _ask_sized(parser, cache, model, text, png, page, fields, rep)
+
+    answers = {}                                       # 작업 순번 → 응답 또는 예외
+    if jobs:
+        with ThreadPoolExecutor(max_workers=PARALLEL_DOCS) as pool:
+            futures = {pool.submit(ask, j): i for i, j in enumerate(jobs)}
+            for fut in as_completed(futures):
+                i = futures[fut]
+                try:
+                    answers[i] = fut.result()
+                except Exception as exc:               # 한 문서 실패가 전체를 죽이지 않는다
+                    answers[i] = exc
+
+    # 3단계: 채점 (순차) — 자료구조를 한 스레드에서만 건드린다.
+    for i, (row, page, _png) in enumerate(jobs):
+        data = answers.get(i)
+        if data is None or isinstance(data, Exception):
+            run.errors.append(
+                f"{row['doc_id']} {row['file']}: {type(data).__name__}: {data}"[:200])
+            run.docs.append((row["doc_id"], row["file"], f"실패: {type(data).__name__}"))
             continue
 
         got_fields = data.get("fields") or {}
@@ -308,7 +348,7 @@ def run_one(model: str, size: str, rows: list[dict], raw_root: str,
             raw = None if raw in ("", None, "null") else str(raw).strip()
             run.cells.append(Cell(
                 doc_id=row["doc_id"], file=row["file"], labeler=row["labeler"],
-                model=model, size=size, field_key=key, field_name=name,
+                model=model, size=size, rep=rep, field_key=key, field_name=name,
                 truth=t, uncertain=uncertain, got=raw,
                 verdict=judge(t, raw, key),
                 confidence=float(d.get("confidence") or 0.0)))
@@ -318,6 +358,134 @@ def run_one(model: str, size: str, rows: list[dict], raw_root: str,
         run.tokens_in += c.get("in", 0)
         run.tokens_out += c.get("out", 0)
     return run
+
+
+
+def _ok(verdict: str) -> bool:
+    """성공 판정 — 텍스트 판과 같은 기준(정확·표기차이·정규화대기)."""
+    return verdict in ("정확", "표기차이", "정규화대기")
+
+
+
+def _stability(a, table, sizes, reps) -> None:
+    """같은 조건 반복에서 판정이 얼마나 흔들리는지 표로 적는다.
+
+    역할  : 흔들림률이 해상도 간 차이보다 크면 1회 비교는 신뢰할 수 없다.
+    입력  : a — 출력 줄을 모으는 함수, table — 해상도별 {(회차,문서,필드): 성공},
+            sizes — 해상도 목록, reps — 회차 목록
+    출력  : 없음 (a 로 줄을 쌓는다)
+    부수효과: 없음
+    """
+    a(f"  {'해상도':<10}{'칸':>8}{'항상성공':>10}{'항상실패':>10}"
+      f"{'흔들림':>10}{'흔들림률':>10}")
+    a("  " + "-" * 60)
+    for z in sizes:
+        per: dict[tuple, list[bool]] = {}               # (문서,필드) → 회차별 성공 여부
+        for (_rep, doc, fk), ok in table[z].items():
+            per.setdefault((doc, fk), []).append(ok)
+        full = [v for v in per.values() if len(v) == len(reps)]   # 전 회차가 있는 칸만
+        always = sum(1 for v in full if all(v))
+        never = sum(1 for v in full if not any(v))
+        flip = len(full) - always - never               # 회차마다 뒤집힌 칸
+        pct = 100.0 * flip / len(full) if full else 0.0
+        a(f"  {z:<10}{len(full):>8}{always:>10}{never:>10}{flip:>10}{pct:>9.1f}%")
+    a("")
+    a("  흔들림 = 회차마다 성공/실패가 바뀐 칸. 이 비율이 해상도 간 차이보다")
+    a("  크면, 1회 실행 비교는 신뢰할 수 없다.")
+    a("")
+
+def compare_sizes(runs: list[Run]) -> str:
+    """해상도를 칸 단위로 짝지어 비교하고 잡음을 함께 보고한다.
+
+    역할  : 총점 비교는 문서 난이도 편차와 모델 비결정성에 묻힌다. 같은 문서·같은
+            필드·같은 회차를 맞대응시켜 **승패만** 세면 두 교란이 모두 상쇄된다.
+    입력  : runs — 모델 x 해상도 x 회차의 모든 실행
+    출력  : 사람이 읽는 표 문자열
+    부수효과: 없음
+    """
+    out: list[str] = []
+    a = out.append
+    models = sorted({r.model for r in runs})
+
+    for model in models:
+        mine = [r for r in runs if r.model == model]
+        sizes = [z for z in SIZES if any(r.size == z for r in mine)]
+        reps = sorted({r.rep for r in mine})
+        if len(sizes) < 2 and len(reps) < 2:
+            continue                                   # 비교할 축이 아무것도 없다
+
+        # ── 회차별 성공률 — 잡음의 크기를 눈으로 본다 ──────────────────
+        a("=" * 98)
+        a(f"  회차별 성공률 — {model}   (같은 조건 재실행이 얼마나 흔들리는가)")
+        a("=" * 98)
+        a("  " + f"{'해상도':<8}" + "".join(f"{'회차' + str(r):>9}" for r in reps)
+          + f"{'평균':>9}{'폭':>8}")
+        a("  " + "-" * 60)
+        for z in sizes:
+            rates = [r.rate() for r in mine if r.size == z]
+            if not rates:
+                continue
+            span = max(rates) - min(rates)
+            a("  " + f"{z:<8}" + "".join(f"{v:>8.1f}%" for v in rates)
+              + f"{sum(rates) / len(rates):>8.1f}%{span:>7.1f}%")
+        a("")
+        a("  폭 = 같은 조건 최고-최저. 해상도 간 차이가 이 폭보다 작으면 잡음이다.")
+        a("")
+
+        # ── 칸 단위 짝지은 비교 ────────────────────────────────────────
+        # (회차, 문서, 필드) 를 열쇠로 삼아 해상도끼리만 맞댄다
+        table: dict[str, dict[tuple, bool]] = {}
+        for r in mine:
+            slot = table.setdefault(r.size, {})
+            for c in r.cells:
+                slot[(r.rep, c.doc_id, c.field_key)] = _ok(c.verdict)
+
+        if len(sizes) < 2:                             # 맞댈 상대가 없으면 건너뛴다
+            a("=" * 98)
+            a(f"  칸 안정성 — {model}   (같은 조건 {len(reps)}회에서 판정이 일치하는가)")
+            a("=" * 98)
+            _stability(a, table, sizes, reps)
+            continue
+
+        a("=" * 98)
+        a(f"  해상도 짝지은 비교 — {model}   (같은 칸에서 어느 쪽이 이겼나)")
+        a("=" * 98)
+        a(f"  {'대결':<20}{'맞댄칸':>8}{'A만성공':>9}{'B만성공':>9}"
+          f"{'차이':>8}{'판정':>26}")
+        a("  " + "-" * 92)
+        for i, x in enumerate(sizes):
+            for y in sizes[i + 1:]:
+                keys = set(table[x]) & set(table[y])
+                a_only = sum(1 for k in keys if table[x][k] and not table[y][k])
+                b_only = sum(1 for k in keys if table[y][k] and not table[x][k])
+                diff = a_only - b_only
+                n = a_only + b_only                    # 의견이 갈린 칸만이 정보다
+                # 부호검정 정규근사 — n 이 작으면 판정을 보류한다
+                if n < 10:
+                    verdict = "표본 부족 - 판단 보류"
+                else:
+                    z_stat = abs(diff) / (n ** 0.5)    # p=0.5 귀무가설의 표준편차 = sqrt(n)/2 x2
+                    if z_stat >= 2.58:
+                        verdict = f"{x if diff > 0 else y} 우세 (강함)"
+                    elif z_stat >= 1.96:
+                        verdict = f"{x if diff > 0 else y} 우세"
+                    else:
+                        verdict = "차이 없음 - 잡음 범위"
+                a(f"  {x + ' vs ' + y:<20}{len(keys):>8}{a_only:>9}{b_only:>9}"
+                  f"{diff:>+8}{verdict:>26}")
+        a("")
+        a("  맞댄칸 중 양쪽 다 성공하거나 양쪽 다 실패한 칸은 정보가 없어 제외된다.")
+        a("  판정은 갈린 칸(A만성공+B만성공)에 대한 부호검정이다.")
+        a("")
+
+        # ── 칸 흔들림 — 같은 조건에서 판정이 회차마다 바뀌는 비율 ──────
+        if len(reps) > 1:
+            a("=" * 98)
+            a(f"  칸 안정성 — {model}   (같은 조건 {len(reps)}회에서 판정이 일치하는가)")
+            a("=" * 98)
+            _stability(a, table, sizes, reps)
+
+    return "\n".join(out)
 
 
 def render(runs: list[Run]) -> str:
@@ -380,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--kit", default=DEFAULT_KIT, help="라벨링 킷 경로")
     ap.add_argument("--root", default=DEFAULT_RAW, help="원본 문서 뿌리")
     ap.add_argument("--out", default=DEFAULT_OUT, help="렌더·결과 저장 위치")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="같은 조건 반복 횟수. 2 이상이면 모델 비결정성(잡음)을 잰다")
     ap.add_argument("--models", nargs="*", default=["luna"],
                     help=f"모델 별칭 또는 ID. 별칭: {list(MODEL_ALIAS)}")
     ap.add_argument("--sizes", nargs="*", default=["원본"],
@@ -434,18 +604,25 @@ def main(argv: list[str] | None = None) -> int:
         # 전용 디렉터리로 분리해 그 경로를 원천 차단한다.
         cache = ResponseCache(Path(SCORE_CACHE_DIR))
 
-    print(f"  조합 {len(model_ids)} x {len(size_keys)} = "
-          f"{len(model_ids) * len(size_keys)}개 · 문서 {len(keep)}건\n")
+    reps = max(1, a.repeat)                            # 최소 1회
+    print(f"  조합 {len(model_ids)} x {len(size_keys)} x {reps}회 = "
+          f"{len(model_ids) * len(size_keys) * reps}개 실행 · 문서 {len(keep)}건\n")
 
     runs = []
     for m in model_ids:
         for s in size_keys:
-            print(f"  실행 {m} / {s} …", flush=True)
-            runs.append(run_one(m, s, keep, a.root, a.out,
-                                only_mvp=not a.all_fields, cache=cache))
+            for r in range(1, reps + 1):
+                # 회차 표시는 반복이 있을 때만 — 1회짜리 출력을 어지럽히지 않는다
+                tag = f" (회차 {r}/{reps})" if reps > 1 else ""
+                print(f"  실행 {m} / {s}{tag} …", flush=True)
+                runs.append(run_one(m, s, keep, a.root, a.out,
+                                    only_mvp=not a.all_fields, cache=cache, rep=r))
 
     print()
     print(render(runs))
+    comparison = compare_sizes(runs)   # 해상도가 2종 이상일 때만 내용이 있다
+    if comparison.strip():
+        print(comparison)
 
     payload = [{
         "model": r.model, "size": r.size, "성공률": round(r.rate(), 1),
