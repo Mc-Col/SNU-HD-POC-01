@@ -26,7 +26,7 @@ from src.contracts import ParserType, RawExtraction
 from src.preprocess import probe_pages
 
 from .columns import anchor_from
-from .composite import CompositeIndex, try_split
+from .composite import CompositeIndex, split_note, try_split
 from .excel import MAX_LABEL_LEN, TextParseResult, UnmappedLabel
 from .field_index import FieldIndex
 from .sections import SectionIndex, SectionMap
@@ -185,7 +185,7 @@ def parse_pdf_text(
                             confidence=pc.confidence,
                             parser=ParserType.PDF_TEXT,
                             source_locator=loc,
-                            note=f"복합 라벨 '{label}' 분해",
+                            note=split_note(label, pending),
                         ))
                     for pc in pending:
                         result.unmapped.append(UnmappedLabel(pc.label, loc, pc.value))

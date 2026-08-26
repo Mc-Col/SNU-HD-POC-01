@@ -20,7 +20,7 @@ from openpyxl.utils import get_column_letter
 from src.contracts import ParserType, RawExtraction
 
 from .columns import anchor_from
-from .composite import CompositeIndex, try_split
+from .composite import CompositeIndex, split_note, try_split
 from .field_index import FieldIndex
 from .sections import SectionIndex, SectionMap
 from .units import UnitIndex
@@ -178,7 +178,7 @@ def parse_excel(
                             confidence=pc.confidence,
                             parser=ParserType.EXCEL,
                             source_locator=locator(*vpos),
-                            note=f"복합 라벨 '{label}' 분해",
+                            note=split_note(label, pending),
                         ))
                     for pc in pending:
                         result.unmapped.append(UnmappedLabel(
