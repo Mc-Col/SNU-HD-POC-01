@@ -54,8 +54,17 @@ import os
 from dataclasses import dataclass
 
 # 기본 모델. `.env` 의 D2S_MODEL_TIER1 · D2S_MODEL_TIER2 로 덮어쓸 수 있다.
-TIER1 = "gpt-5.6-luna"      # 1차 — 전량
-TIER2 = "gpt-5.6-terra"     # 재시도 — 못 읽은 필드만
+#
+# 2026-08-27 — TIER1 을 luna → terra 로 승격했다. **팀 확정 구성이다.**
+# 발표할 숫자 전부가 terra 에서 잰 값인데 기본값이 luna 였다. 그냥 돌리면
+# 우리가 측정한 최악의 구성으로 돌고, 문서의 숫자를 재현하지 못한다.
+#     luna → terra   정확도 차이는 3%p 인데 **지어낸 값이 2배**였다 (luna 기각 근거)
+#     terra → Sol    홀드아웃에서 -2%p(한국어) · -2.9%p(영어), 비용 2.4배 → 기각
+# 비용은 1,021건 한 차례 $8.7 → $86.8 이다. **비싼 쪽을 기본값으로 두고 필요할 때
+# env 로 낮춘다** — 싼 쪽이 기본값이면 아무도 모르는 사이에 나쁜 구성으로 돈다.
+#     전량 실행 전에 예산을 낮추려면  D2S_MODEL_TIER1=gpt-5.6-luna
+TIER1 = "gpt-5.6-terra"     # 1차 — 전량. 확정 구성
+TIER2 = "gpt-5.6-terra"     # 재시도 — 못 읽은 필드만. TIER1 과 같다(아래 참고)
 
 
 @dataclass(frozen=True)
@@ -74,8 +83,19 @@ def tier1() -> ModelTier:
 
 
 def tier2() -> ModelTier:
+    """재시도 모델. 기본값이 TIER1 과 **같다.**
+
+    2026-08-27 이전에는 luna → terra 로 모델을 올리는 것이 2차의 이득이었다.
+    이제 1차가 terra 이므로 **모델은 올라가지 않는다.** 그 위(Sol)는 홀드아웃에서
+    두 번 재고 두 번 기각했으므로 올릴 곳이 없다.
+
+    그래서 2차의 이득은 모델이 아니라 **이미지**에서 온다 — bbox 주변만 잘라
+    확대해 다시 읽는다. 쪽 전체를 다시 보내지 않으므로 토큰도 적다.
+    (확정 구성에서 재판독은 **꺼져 있다** — bbox 품질이 전제인데 그것이 아직
+     안 돼 있고, 틀린 칸은 확신도가 0.9 를 넘어 애초에 승격 조건에 안 걸린다.)
+    """
     return ModelTier(os.getenv("D2S_MODEL_TIER2", TIER2), 2,
-                     "1차에서 못 읽어 상위 모델로 승격")
+                     "1차에서 못 읽어 크롭 재판독")
 
 
 def for_attempt(attempt: int) -> ModelTier:

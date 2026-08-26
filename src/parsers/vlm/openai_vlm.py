@@ -128,7 +128,10 @@ def upscale_factor() -> float:
     오독이 최대 실패군이므로 표적이 맞는다.
     """
     try:
-        v = float(os.getenv("D2S_UPSCALE", "1"))
+        # 기본값 2 — 팀 확정 구성. 2026-08-27 에 1(끄기) 에서 승격했다.
+        # 측정된 최대 개선(엄격 +5~6%p)이고 발표할 숫자 전부가 이 값에서 나왔다.
+        # 끄려면  D2S_UPSCALE=1
+        v = float(os.getenv("D2S_UPSCALE", "2"))
     except ValueError:
         return 1.0
     return v if 1.0 < v <= 4.0 else 1.0
