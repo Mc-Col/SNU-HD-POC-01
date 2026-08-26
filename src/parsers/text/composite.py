@@ -102,6 +102,21 @@ def resolve(pieces: list[Piece], index: FieldIndex) -> tuple[list[Piece], list[P
     return ok, pending
 
 
+def split_note(label: str, pending: list[Piece]) -> str:
+    """쪼갠 뒤 남은 조각을 기록 문구로 만든다.
+
+    **왜 필요한가** 우리 필드가 아닌 조각을 값에서 떼면 그 정보가 사라진다.
+    미매핑 목록에는 남지만 그 목록은 문서 단위이고, 사람이 값을 검토할 때는
+    **그 칸의 비고**를 본다. 예) `195 (Cg=4040 → 7580)` 에서 Cg 를 떼면
+    "왜 4040 이 아니라 195 인가" 를 검토자가 알 수 없다.
+
+    버린 데이터는 못 되살린다 — 값에서는 떼고 기록에는 남긴다.
+    """
+    base = f"복합 라벨 '{label}' 분해"
+    drops = [f"{p.field_key}={p.value}" for p in pending if p.value]
+    return f"{base} · 미사용 조각 {' · '.join(drops)}" if drops else base
+
+
 def try_split(
     composite: "CompositeIndex",
     fields: FieldIndex,
