@@ -53,25 +53,12 @@ def test_모르는_설비종류는_도출하지_않는다(n, fields):
     assert v is None, "매핑에 없는 종류를 억지로 채우면 안 된다"
 
 
-# ── 유체명 → 상태 ──────────────────────────────────────────────
-@pytest.mark.parametrize("fluid,expect", [
-    ("SOUR WATER", "LIQUID"),
-    ("VACUUM RESIDUE", "LIQUID"),
-    ("KEROSENE", "LIQUID"),
-    ("M.P. STEAM", "GAS"),
-    ("S.H. STEAM", "GAS"),
-    ("Fuel Gas", "GAS"),
-    ("ATOMIZING STEAM", "GAS"),
-])
-def test_fluid_state_도출(n, fields, fluid, expect):
-    v, _ = n.run(_empty("fluid_state"), fields["fluid_state"], {"fluid_name": fluid})
-    assert v == expect
-
-
-def test_낱말_경계를_지킨다(n, fields):
-    """GASOLINE 이 GAS 로 잡히면 안 된다 — 부분 문자열 매칭 금지."""
-    v, _ = n.run(_empty("fluid_state"), fields["fluid_state"], {"fluid_name": "GASOLINE"})
-    assert v == "LIQUID"
+# ── fluid_state 는 도출하지 않는다 (2026-08-26 협의) ───────────
+def test_fluid_state_는_도출하지_않는다(n, fields):
+    """유체명만으로 상태를 확정할 수 없다. 못 읽으면 NA 로 둔다."""
+    v, _ = n.run(_empty("fluid_state"), fields["fluid_state"],
+                 {"fluid_name": "M.P. STEAM"})
+    assert v is None, "fluid_state 에 도출 규칙이 살아 있으면 안 된다"
 
 
 # ── 안전장치 ───────────────────────────────────────────────────

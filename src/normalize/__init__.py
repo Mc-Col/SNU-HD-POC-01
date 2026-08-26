@@ -4,14 +4,21 @@
 ■ 무엇이 달라졌나
 ────────────────────────────────────────────────────────────────────
 기존 `pipeline.DefaultNormalize` 는 `run(ex, f)` 만 받아 **다른 필드를 볼 수
-없었다.** 그래서 문서에 글자로 적혀 있지 않은 필드(`type_name`·`fluid_state`)를
-채울 방법이 없었고, 전부 `no_evidence` → `NA` 로 확정됐다.
+없었다.** 그래서 문서에 글자로 적혀 있지 않은 `type_name` 을 채울 방법이 없었고
+`no_evidence` → `NA` 로 확정됐다.
 
-    실측(골든셋 30건) — type_name 13건 · fluid_state 17건이 NA 로 확정.
+    실측(골든셋 30건) — type_name 13건이 NA 로 확정.
     그중 대부분은 골든셋 원문라벨이 "NA (Tag에서 FV를 보고 유추)" 였다.
-    즉 **사람도 문서에서 읽은 게 아니라 다른 필드에서 도출한 값**이다.
+    즉 **사람도 문서에서 읽은 게 아니라 태그를 보고 도출한 값**이다.
 
 이 모듈은 `context`(앞서 확정된 필드 값들)를 함께 받아 그 도출을 수행한다.
+
+■ fluid_state 는 도출하지 않는다 (2026-08-26 협의)
+────────────────────────────────────────────────────────────────────
+유체명만으로 상태를 확정할 수 없는 경우가 있다 — 같은 유체가 공정 조건에 따라
+액체이기도 기체이기도 하고 이상(two-phase) 흐름도 있다. 골든셋 30건에서는 낱말
+규칙(STEAM/GAS → GAS)이 전부 맞았지만 표본이 좁아서다. ③-b 가 문서에서 못
+읽으면 채우지 않고 `NA` 로 둔다.
 
 ■ 왜 파서(③)가 아니라 여기서 하나
 ────────────────────────────────────────────────────────────────────
@@ -32,7 +39,7 @@ CLAUDE.md 철학 4 — "근거 없는 값을 만들지 않는다. 모르면 stat
 """
 from __future__ import annotations
 
-import re                                              # 낱말 경계 매칭에 쓴다
+import re                                              # 태그에서 설비종류를 뽑는 데 쓴다
 from typing import Any                                 # context 타입 표기
 
 from src import schema                                 # 규칙은 yaml 에서 읽는다 (철학 2)
@@ -86,8 +93,6 @@ class Normalizer:
         how = rule.get("how")                            # 도출 방식
         if how == "tag_kind":
             out = self._from_tag_kind(src_val, rule)
-        elif how == "keyword":
-            out = self._from_keyword(src_val, rule)
         else:
             trace.append(f"도출 방식 '{how}' 미구현")
             return None, trace
@@ -108,16 +113,6 @@ class Normalizer:
         if not m:
             return None
         return (rule.get("map") or {}).get(m.group(1))       # 매핑에 없으면 None
-
-    @staticmethod
-    def _from_keyword(text: str, rule: dict) -> str | None:
-        """낱말이 있으면 그 값, 없으면 기본값. 예: 'M.P. STEAM' → GAS."""
-        up = text.upper()
-        for w in (rule.get("gas_words") or []):
-            # 낱말 경계로 본다 — GASOLINE 이 GAS 로 잡히면 안 된다
-            if re.search(r"(?<![A-Z])" + re.escape(w.upper()) + r"(?![A-Z])", up):
-                return "GAS"
-        return rule.get("default")                           # 기본값(LIQUID)
 
 
 __all__ = ["Normalizer"]

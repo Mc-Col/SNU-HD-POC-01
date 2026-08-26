@@ -1,4 +1,4 @@
-# 제안 — 파생 필드 도출 (`type_name` · `fluid_state`)
+# 제안 — 파생 필드 도출 (`type_name`)
 
 작성 2026-08-26 · 브랜치 `proposal/derived-fields` · 제안자 강민호 책임 (③-b VLM Parser)
 
@@ -9,18 +9,19 @@
 
 ## 요약
 
-- **문제** — 골든셋 빈 필드 121건 중 **18건이 문서에 글자로 없는 유추필드**(`type_name`·
-  `fluid_state`)였다. 골든셋 라벨러도 원문라벨에 `NA (Tag에서 FV를 보고 유추)` 로 적었다.
-  파서가 `null` 을 낸 것은 철학 4 를 지킨 정확한 동작인데, **④ Normalize 계약이
-  `run(ex, f)` 뿐이라 다른 필드를 볼 수 없어** 그 자리를 채우지 못하고 전부 `NA` 로
-  확정됐다. `NO_EVIDENCE` 는 Loop A 재시도 대상도 아니라 되돌릴 기회가 없었다.
+- **문제** — 골든셋 빈 필드 121건 중 **18건이 문서에 글자로 없는 유추필드**였다. 골든셋
+  라벨러도 원문라벨에 `NA (Tag에서 FV를 보고 유추)` 로 적었다. 파서가 `null` 을 낸 것은
+  철학 4 를 지킨 정확한 동작인데, **④ Normalize 계약이 `run(ex, f)` 뿐이라 다른 필드를
+  볼 수 없어** 그 자리를 채우지 못하고 전부 `NA` 로 확정됐다. `NO_EVIDENCE` 는 Loop A
+  재시도 대상도 아니라 되돌릴 기회가 없었다.
 - **수정** — ④에 `context`(앞서 확정된 필드 값들)를 넘기고, 필드 순서에 의존하지 않도록
-  **파생 필드 2차 패스**를 두고, 도출 규칙은 코드가 아니라 `schema/rules.yaml` 에 두었다
-  (철학 2). 도출값은 **확신도 0 으로 고정**해 자동확정을 막았다 — 문서 근거가 없는 값이므로.
-- **검증** — 골든셋 30문서 **613칸 A/B**(VLM 호출 0회): 성공률 **83.2% → 86.1%**,
-  대상 두 필드 **49.0% → 84.3%**, **나머지 562칸은 전 칸 동일(회귀 0건)**. 판정이 바뀐
-  18칸은 전부 개선·전부 `review`·값 **18/18 정답 일치**. `pytest 338 passed · 2 skipped`,
-  `--smoke` 전 구간 정상.
+  **파생 필드 2차 패스**를 두었다. **`type_name` 만 도출한다** — 태그에서 설비종류
+  (`FV`·`LV`·`PV` …)를 규칙으로 뽑아 매핑에서 찾는다. 규칙은 코드가 아니라
+  `schema/rules.yaml` 에 둔다(철학 2). 도출값은 **확신도 0 으로 고정**해 자동확정을 막았다.
+- **검증** — 골든셋 30문서 **613칸 A/B**(VLM 호출 0회): 성공률 **83.2% → 84.5%**,
+  `type_name` 을 포함한 대상 필드 **49.0% → 64.7%**, **나머지 562칸은 전 칸 동일
+  (회귀 0건)**. 판정이 바뀐 8칸은 전부 개선·전부 `review`·값 **8/8 정답 일치**.
+  `pytest 352 passed · 2 skipped`, `--smoke` 전 구간 정상.
 - **변경점** — `schema/rules.yaml`(서경빈 선임) · `src/schema.py` · `src/normalize/` ·
   `src/pipeline.py`(이종수 책임) 5개 파일. **`src/parsers/vlm/` 와 `src/contracts.py` 는
   변경 없음** — 파서는 계속 "문서에 없으면 null" 을 지키고 채우는 일은 하류 규칙이 맡는다.
@@ -102,10 +103,10 @@ class NormalizeModule(Protocol):
 
 | # | 파일 | 변경 | 소유 |
 |---|---|---|---|
-| 1 | `schema/rules.yaml` | `derived_fields` 블록 신설 (+47줄) | **서경빈 선임** |
+| 1 | `schema/rules.yaml` | `derived_fields` 블록 신설 (+41줄) | **서경빈 선임** |
 | 2 | `src/schema.py` | `derived_fields()` · `derivation_for()` 로더 (+16줄) | **이종수 책임** |
 | 3 | `src/normalize/__init__.py` | `Normalizer` 구현 (신규, 미구현 자리) | **이종수 책임** |
-| 4 | `src/normalize/test_normalize.py` | 자기 검증 20건 (신규) | **이종수 책임** |
+| 4 | `src/normalize/test_normalize.py` | 자기 검증 12건 (신규) | **이종수 책임** |
 | 5 | `src/pipeline.py` | 계약 확장 · 호출부 · **2차 패스** · 확신도 안전장치 · `build()` 주입 | **이종수 책임** |
 | — | `src/parsers/vlm/` | **변경 없음** | 강민호 책임 |
 | — | `src/contracts.py` | **변경 없음** | 이종수 책임 |
@@ -120,14 +121,14 @@ derived_fields:
   enabled: true
   type_name:
     from: engineering_tag_no
-    how: tag_kind
+    how: tag_kind                  # 태그의 설비종류 두세 글자로 판정
     map: { FV: "Flow Control Valve", LV: "Level Control Valve",
-           PV: "Pressure Control Valve", HV: "Hand Valve", ... }
-  fluid_state:
-    from: fluid_name
-    how: keyword
-    gas_words: ["GAS", "STEAM", "VAPOR", "VAPOUR", "AIR", "NITROGEN", "N2"]
-    default: "LIQUID"
+           PV: "Pressure Control Valve", TV: "Temperature Control Valve",
+           HV: "Hand Valve", XV: "On-Off Valve",
+           PCV: "Pressure Control Valve", PDV: "Pressure Differential Valve",
+           FCV: "Flow Control Valve", LCV: "Level Control Valve",
+           TCV: "Temperature Control Valve" }
+  # fluid_state 는 도출하지 않는다 (2026-08-26 협의) — §2.5 참조
 ```
 
 규칙을 코드가 아니라 yaml 에 둔 것은 철학 2 다. `model_to_manufacturer` 가
@@ -181,6 +182,20 @@ if value and not ex.found:
 
 조치 후 **자동확정 0건 · 전량 `REVIEW`** 로 바뀌었다.
 
+### 2.5 `fluid_state` 는 도출 대상에서 뺐다 (2026-08-26 협의)
+
+초안에는 `fluid_state` 도 들어 있었다. 유체명에 기체 낱말(`STEAM`·`GAS`)이 있으면
+`GAS`, 없으면 `LIQUID` 로 두는 규칙이었고 골든셋 30건에서 전부 맞았다
+(GAS 7건이 모두 낱말을 포함했고 LIQUID 18건은 하나도 포함하지 않았다).
+
+**그런데 유체명만으로 상태를 확정할 수 없는 경우가 있다.** 같은 유체가 공정
+조건에 따라 액체이기도 기체이기도 하고, 이상(two-phase) 흐름도 있다. 골든셋에서
+전부 맞은 것은 표본이 좁아서지 규칙이 옳아서가 아니다.
+
+**③-b 가 문서에서 못 읽으면 채우지 않고 `NA` 로 둔다.** 사람이 판단한다.
+그래서 개선폭이 18칸 → **8칸**으로 줄었지만, 근거 없는 값을 만들지 않는 쪽을
+택했다(철학 4).
+
 ---
 
 ## 3. 테스트 결과
@@ -194,14 +209,14 @@ if value and not ex.found:
 | | 칸 | 정확 | 표기차이 | 정규화대기 | 오답 | 미추출 | 성공률 |
 |---|---|---|---|---|---|---|---|
 | **OFF** (현행) | 613 | 357 | 99 | 54 | 51 | 52 | **83.2%** |
-| **ON** (제안) | 613 | **375** | 99 | 54 | **51** | **34** | **86.1%** |
+| **ON** (제안) | 613 | **365** | 99 | 54 | **51** | **44** | **84.5%** |
 
 ### 3.2 대상 두 필드
 
 | | 칸 | 정확 | 오답 | 미추출 | 성공률 |
 |---|---|---|---|---|---|
 | OFF | 51 | 25 | 3 | 23 | **49.0%** |
-| ON | 51 | **43** | 3 | **5** | **84.3%** |
+| ON | 51 | **33** | 3 | **15** | **64.7%** |
 
 ### 3.3 회귀 확인 — 그 밖의 562칸
 
@@ -212,35 +227,31 @@ if value and not ex.found:
 
 **모든 칸이 동일하다. 다른 판정이 fail 로 바뀐 케이스는 0건이다.**
 
-### 3.4 판정이 바뀐 18칸 — 전부 개선
+### 3.4 판정이 바뀐 8칸 — 전부 개선
 
 ```
-방향 분포   {'개선': 18}
-ON 상태     {'review': 18}      ← 자동확정 0
-값-정답     18 / 18 일치
+방향 분포   {'개선': 8}
+ON 상태     {'review': 8}      ← 자동확정 0
+값-정답     8 / 8 일치
 ```
 
-| 문서 | 필드 | OFF → ON | 도출 근거 |
+| 문서 | 필드 | OFF → ON | 도출 근거 (태그) |
 |---|---|---|---|
-| d002 | fluid_state | 미추출 → 정확 | `fluid_name='VACUUM RESIDUE'` |
-| d004 | fluid_state | 미추출 → 정확 | `fluid_name='HS CRUDE'` |
-| d005 | type_name | 미추출 → 정확 | `engineering_tag_no='10-FV-079'` |
-| d006 | type_name | 미추출 → 정확 | `engineering_tag_no='10-PV-018'` |
-| d007 | fluid_state · type_name | 미추출 → 정확 | `LIQUID` · `15-LV-015` |
-| d010 | type_name | 미추출 → 정확 | `52-PV-014` |
-| d011 · d020 | fluid_state | 미추출 → 정확 | `CLGO` · `YLL GO` |
-| d023 · d025 · d030 | fluid_state | 미추출 → 정확 | `SH STEAM` · `N.D. STEAM` · `MP STEAM` → GAS |
-| d026 | fluid_state · type_name | 미추출 → 정확 | `KEROSENE` · `70-LV-012` |
-| d028 | type_name | 미추출 → 정확 | `10-PDV-067` |
-| d029 · d031 | type_name | 미추출 → 정확 | `10-PV-018` · `10-PV-081` |
-| d031 | fluid_state | 미추출 → 정확 | `HS CRUDE` |
+| d005 | type_name | 미추출 → 정확 | `10-FV-079` → FV |
+| d006 | type_name | 미추출 → 정확 | `10-PV-018` → PV |
+| d007 | type_name | 미추출 → 정확 | `15-LV-015` → LV |
+| d010 | type_name | 미추출 → 정확 | `52-PV-014` → PV |
+| d026 | type_name | 미추출 → 정확 | `70-LV-012` → LV |
+| d028 | type_name | 미추출 → 정확 | `10-PDV-067` → PDV |
+| d029 | type_name | 미추출 → 정확 | `10-PV-018` → PV |
+| d031 | type_name | 미추출 → 정확 | `10-PV-081` → PV |
 
 ### 3.5 기존 테스트
 
 ```
-pytest                    338 passed · 2 skipped   (46초)
+pytest                    352 passed · 2 skipped   (48초)
 python -m src.pipeline --smoke   전 구간 정상
-src/normalize/ 신규 테스트        20 passed
+src/normalize/ 신규 테스트        12 passed
 ```
 
 ### 3.6 실측이 드러낸 한계 — 규칙은 확정적이지 않다
@@ -252,10 +263,9 @@ src/normalize/ 신규 테스트        20 passed
 22-PCV-013   PCV 인데 정답이 Direct Operated Regulator (레귤레이터 계열)
 ```
 
-그리고 `fluid_state` 의 낱말 규칙(`STEAM`/`GAS` → GAS, 그 외 LIQUID)은
-**골든셋 30건 관찰에서 뽑았다.** 그 30건에서는 GAS 7건이 전부 낱말을 포함했고
-LIQUID 18건은 하나도 포함하지 않았지만, **코퍼스 전체를 대변한다는 근거는 없다.**
-측정된 이득(+2.9%p)에는 이 과적합이 섞여 있다.
+`fluid_state` 의 낱말 규칙도 같은 이유로 뺐다(§2.5). 태그 매핑 역시
+**골든셋 31건 관찰에서 뽑은 것**이라 코퍼스 전체를 대변하지 않는다 —
+측정된 이득(+1.3%p)에는 이 과적합이 섞여 있다.
 
 **그래서 도출값을 `REVIEW` 로 보내는 것이 설계의 핵심이다.** 규칙이 틀려도
 사람이 걸러낸다. 자동확정으로 보내면 이 두 예외가 조용히 오답이 된다.
@@ -354,8 +364,9 @@ def run(self, ex, f, context: dict[str, str | None] | None = None) -> ...
 
 1. **파서는 계속 만들지 않는다.** ③은 `null` 을 내고, 도출은 하류 규칙이 한다
 2. **자동확정되지 않는다.** 전량 `REVIEW` 로 사람에게 간다 (실측 18/18)
-3. **근거가 남는다.** `transform_trace` 에 `fluid_name='MP STEAM' → fluid_state='GAS'
-   (문서 근거 없음 · 규칙 도출)` 로 기록되어 되짚을 수 있다
+3. **근거가 남는다.** `transform_trace` 에 `engineering_tag_no='10-PDV-067' →
+   type_name='Pressure Differential Valve' (문서 근거 없음 · 규칙 도출)` 로 기록되어
+   되짚을 수 있다
 
 그리고 **선례가 이미 있다.** `src/schema.py` 의 `model_to_manufacturer` 주석:
 
@@ -400,7 +411,7 @@ def run(self, ex, f, context: dict[str, str | None] | None = None) -> ...
 ```bash
 git checkout proposal/derived-fields
 python -m pytest src/normalize/ -q          # 도출 규칙 자기 검증 20건
-python -m pytest -q                          # 전체 338 passed · 2 skipped
+python -m pytest -q                          # 전체 352 passed · 2 skipped
 python -m src.pipeline --smoke               # 전 구간 정상
 ```
 
