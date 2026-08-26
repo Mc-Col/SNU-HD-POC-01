@@ -48,7 +48,7 @@ if ROOT not in sys.path:
 
 from eval.compare import same as _same                                 # noqa: E402
 from src.parsers.text.crosscheck import (AGREE, CONFLICT, NOTATION,    # noqa: E402
-                                         numeric_flag)
+                                         numeric_flag, standardize)
 from src.parsers.text.field_index import FieldIndex                    # noqa: E402
 from src.parsers.text.score_against_kit import find_file, read_kit     # noqa: E402
 from src.parsers.text.sections import SectionIndex                     # noqa: E402
@@ -90,7 +90,11 @@ def compare(truth: dict[str, str], records) -> tuple[int, int, list[tuple[str, s
         want = truth.get(r.field_key)
         if not want or r.value is None:
             continue
-        if _same(want, r.value, numeric_flag(r.field_key)):
+        # 표기 매핑 사전을 **양쪽에** 적용한 뒤 비교한다. 정답지도 표기가 갈린다
+        # (`600#` · `ANSI CLASS 300` · `300` 이 정답 안에 섞여 있다).
+        if (_same(want, r.value, numeric_flag(r.field_key))
+                or _same(standardize(r.field_key, want), standardize(r.field_key, r.value),
+                         numeric_flag(r.field_key))):
             hit += 1
         else:
             miss += 1
@@ -143,7 +147,9 @@ def run(doc_ids: list[str] | None = None, use_vlm: bool = True,
         ok, no = agreement(getattr(dual, "last_agreements", []) if via_vlm else [])
         tot["맞음"] += hit; tot["틀림"] += miss
         tot["합의"] += ok; tot["불일치"] += no
-        out.append({"doc": did, "file": row["file"], "state": "채점",
+        who = row.get("labeler", "미기재")
+        tot[f"맞음:{who}"] += hit; tot[f"틀림:{who}"] += miss
+        out.append({"doc": did, "file": row["file"], "state": "채점", "labeler": who,
                     "path": "VLM+텍스트" if via_vlm else "텍스트 단독",
                     "hit": hit, "miss": miss, "agree": ok, "conflict": no, "bad": bad})
     return out, tot
@@ -162,18 +168,54 @@ def render(results: list[dict], tot: Counter, use_vlm: bool) -> str:
         L.append("- 두 경로 대조 없음 (VLM 경로를 타지 않았다)")
     if tot["실패"]:
         L.append(f"- ⚠️ 처리 실패 **{tot['실패']}건** — 아래 표에서 사유를 본다")
+    # ── 라벨러별 (2026-08-26) ────────────────────────────────────
+    #   골든셋에 AI 초안이 섞여 있다. 합쳐서 내면 "AI 가 만든 정답으로 AI 를 채점"
+    #   한 부분이 숫자에 섞이므로 나눠 낸다. 발표에는 사람 검증분을 쓴다.
+    whos = []
+    for r in results:
+        if r.get("labeler") and r["labeler"] not in whos:
+            whos.append(r["labeler"])
+    if len(whos) > 1:
+        L += ["", "## 라벨러별", "", "| 라벨러 | 정답 대조 | |", "|---|---|---|"]
+        for who in whos:
+            h, m = tot[f"맞음:{who}"], tot[f"틀림:{who}"]
+            L.append(f"| {who} | {h}/{h + m} | {h / (h + m) * 100:.0f}% |" if h + m
+                     else f"| {who} | 0 | — |")
+        human = [w for w in whos if "AI" not in w]
+        if human and len(human) < len(whos):
+            h = sum(tot[f"맞음:{w}"] for w in human)
+            m = sum(tot[f"틀림:{w}"] for w in human)
+            if h + m:
+                L += ["", f"**사람이 검증한 정답만**: {h}/{h + m} ({h / (h + m) * 100:.0f}%)",
+                      "", "> AI 초안은 사람 검증 전이다. 참고로만 본다."]
+
     L += ["", "## 문서별", "",
-          "| 문서 | 파일 | 경로 | 정답 대조 | 합의 | 불일치 |",
-          "|---|---|---|---|---|---|"]
+          "| 문서 | 파일 | 라벨러 | 경로 | 정답 대조 | 합의 | 불일치 |",
+          "|---|---|---|---|---|---|---|"]
     for r in results:
         if r["state"] != "채점":
-            L.append(f"| {r['doc']} | {r['file']} | — | **{r['state']}** | | "
+            L.append(f"| {r['doc']} | {r['file']} | | — | **{r['state']}** | | "
                      f"{r.get('why', '')} |")
             continue
-        L.append(f"| {r['doc']} | {r['file']} | {r['path']} | "
+        L.append(f"| {r['doc']} | {r['file']} | {r.get('labeler','')} | {r['path']} | "
                  f"{r['hit']}/{r['hit'] + r['miss']} | {r['agree']} | {r['conflict']} |")
     wrong = [(r["doc"], *b) for r in results if r["state"] == "채점" for b in r["bad"]]
     if wrong:
+        # ── 틀린 칸을 필드별로 분해한다 (2026-08-26) ──────────────
+        #   "73%" 만 보면 무엇을 고쳐야 할지 알 수 없다. 실제로 61칸을 갈라 보니
+        #   절반 가까이가 **값은 같고 표기만 다른 것**이었다
+        #   (`600#` vs `ANSI CLASS 600` · `FISHER` vs `Fisher Controls`).
+        #   표준형을 정하면 사라지는 것과 판독을 고쳐야 하는 것은 다른 일이다.
+        per = Counter(f for _d, f, _w, _g in wrong)
+        first = {}
+        for _d, f, w, g in wrong:
+            first.setdefault(f, (w, g))
+        L += ["", "## 틀린 칸 — 필드별", "",
+              "| 필드 | 건수 | 예 (정답 → 파이프라인) |", "|---|---:|---|"]
+        for f, n in per.most_common():
+            w, g = first[f]
+            L.append(f"| `{f}` | {n} | `{w}` → `{g}` |")
+
         L += ["", "## 정답과 다른 칸", "", "| 문서 | 필드 | 정답 | 파이프라인 |", "|---|---|---|---|"]
         for d, k, want, got in wrong:
             L.append(f"| {d} | {k} | `{want}` | `{got}` |")

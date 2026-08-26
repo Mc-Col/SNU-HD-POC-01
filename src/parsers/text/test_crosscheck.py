@@ -81,13 +81,13 @@ def test_표기_매핑_사전을_적용한다():
 
 
 def test_숫자는_같고_표기만_다르면_사람을_부르지_않는다():
-    """등급이 대표적이다 — `300#` 과 `ANSI CLASS 300` 은 같은 등급이다.
+    """사전에 없는 표기라도 숫자가 같으면 사람을 부르지 않는다(NOTATION).
 
-    표준형이 아직 정해지지 않았다는 사실은 판정으로 드러내되(NOTATION),
-    사람을 부르지는 않는다. `rules.yaml` 에 표기 매핑이 들어오면 사라진다.
+    `300#` vs `ANSI CLASS 300` 은 2026-08-26 에 표기 매핑이 들어와 **일치**가 됐다.
+    이 판정은 아직 사전에 없는 표기를 위해 남아 있다 — 사전이 자라면 줄어든다.
     """
-    got = crosscheck({"valve_body_rating": "300#"},
-                     {"valve_body_rating": "ANSI CLASS 300"})
+    got = crosscheck({"valve_body_rating": "750#"},
+                     {"valve_body_rating": "CL 750"})       # 사전에 없는 등급
     assert got[0].state == NOTATION
     assert not got[0].needs_human
     assert "표준형 미정" in got[0].as_note()
@@ -132,3 +132,52 @@ def test_숫자_필드_표시는_rules_yaml_에서_읽는다():
     """채점기·평가 하네스와 같은 자리를 본다 (구현이 갈라지지 않게)."""
     assert numeric_flag("normal_flow_rate") is True
     assert numeric_flag("valve_body_material") is None
+
+
+# ── 표기 통일 사전 (2026-08-26) ─────────────────────────────────
+
+
+def test_같은_등급의_다른_표기를_접는다():
+    """`600#` · `ANSI CLASS 600` · `ASME CL.600` 은 같은 등급이다.
+
+    실측 — 골든셋 30건에서 틀린 61칸 중 27칸이 이런 표기 차이였다.
+    """
+    from src.parsers.text.crosscheck import standardize
+    for v in ["600#", "ANSI CLASS 600", "ASME CL.600", "CL 600", "600"]:
+        assert standardize("valve_body_rating", v) == "CLASS 600", v
+
+
+def test_등급이_아닌_값은_건드리지_않는다():
+    """`MOP 150 PSIG` 는 댐퍼 최대 운전압력이지 ANSI 등급이 아니다."""
+    from src.parsers.text.crosscheck import standardize
+    assert standardize("valve_body_rating", "MOP 150 PSIG") == "MOP 150 PSIG"
+
+
+def test_같은_회사의_다른_이름을_접는다():
+    from src.parsers.text.crosscheck import standardize
+    for v in ["FISHER", "Fisher Controls", "Nippon Fisher Co.,Ltd."]:
+        assert standardize("manufacturer", v) == "FISHER", v
+    # 포지셔너 제조사도 같은 사전을 쓴다 (같은 회사가 둘 다 만든다)
+    assert standardize("positioner_manufacturer", "Fisher Controls") == "FISHER"
+
+
+def test_누설등급은_규격대로_로마자로_통일한다():
+    """ANSI/FCI 70-2 가 로마자를 쓴다."""
+    from src.parsers.text.crosscheck import standardize
+    for v in ["CLASS 4", "ANSI Class IV", "Class IV"]:
+        assert standardize("valve_leakage_class", v) == "CLASS IV", v
+
+
+def test_사이즈는_표기만_접고_단위는_바꾸지_않는다():
+    """`unit_conversion: enabled: false` — 인치↔mm 변환은 MVP 범위 밖이다."""
+    from src.parsers.text.crosscheck import standardize
+    assert standardize("valve_body_size", "NPS 2") == '2"'
+    assert standardize("valve_body_size", '1" (25A)') == '1"'
+    assert standardize("valve_body_size", "IN DIA. 200 mm") == "IN DIA. 200 mm"
+
+
+def test_사전을_거쳐야_같아지는_값은_일치로_본다():
+    """두 경로가 `600#` 과 `ANSI CLASS 600` 을 냈다면 사람을 부를 일이 아니다."""
+    got = crosscheck({"valve_body_rating": "600#"},
+                     {"valve_body_rating": "ANSI CLASS 600"})
+    assert got[0].state == AGREE
