@@ -102,6 +102,8 @@ from src.parsers.vlm.openai_vlm import SYSTEM, VlmParser, _field_spec  # noqa: E
 DEFAULT_KIT = os.path.join(ROOT, "readme", "labeling_kit.xlsx")
 DEFAULT_RAW = os.path.join(ROOT, "raw_file")
 DEFAULT_OUT = os.path.join(ROOT, "runs", "vlm_score")
+# 채점기 전용 캐시 — 파이프라인 캐시와 절대 섞지 않는다(위 `cache` 설정 주석 참고)
+SCORE_CACHE_DIR = os.path.join(ROOT, "runs", "vlm_score_cache")
 
 # 해상도 변형 — 장변 목표(px). None 은 렌더 원본 그대로.
 #   우리 스캔은 150dpi 장변 1753px 이고 `plan_scale` 의 확대 트리거(목표의 절반,
@@ -188,6 +190,41 @@ def judge(truth: str, got: object, key: str) -> str:
     return "오답"
 
 
+
+def _ask_sized(parser, cache, model: str, text: str, png: str,
+               page: int, fields) -> dict:
+    """해상도까지 구분하는 캐시를 얹어 VLM 을 한 번 호출한다.
+
+    역할  : `VlmParser._ask_cached` 와 같은 일을 하되, 캐시 키를 **렌더된 이미지**
+            로 만든다. 파이프라인 키는 원본 파일 바이트 기반이라 원본·확대·축소가
+            같은 키로 뭉개진다 — 해상도가 독립 변수인 채점기에서는 치명적이다.
+    입력  : parser — VlmParser, cache — ResponseCache 또는 None,
+            model — 모델 ID, text — 사용자 프롬프트, png — 렌더 결과 경로,
+            page — 페이지 번호, fields — 요청 필드 목록
+    출력  : 응답 dict
+    부수효과: 캐시 읽기/쓰기, 미적중 시 네트워크 호출
+    """
+    if cache is None:                                  # 캐시를 끄면 곧장 호출한다
+        return parser._ask(model, SYSTEM, text, png)
+
+    from src.parsers.vlm.cache import cache_key, hash_source
+    from src.parsers.vlm.constants import PROMPT_VERSION
+
+    with Image.open(png) as img:                       # 픽셀·모드·크기가 지문에 들어간다
+        content = hash_source(image=img.convert(img.mode))
+    # 모델과 필드 구성이 바뀌면 응답도 바뀌므로 버전 문자열에 함께 넣는다
+    version = f"{PROMPT_VERSION}:{model}:{','.join(f.key for f in fields)}"
+    key = cache_key(content, page, version)            # 해상도는 content 에 이미 반영됨
+
+    hit = cache.get(key)                               # 적중하면 네트워크를 타지 않는다
+    if hit is not None:
+        return json.loads(hit)
+
+    data = parser._ask(model, SYSTEM, text, png)       # 미적중 — 실제 호출
+    cache.put(key, json.dumps(data, ensure_ascii=False))
+    return data
+
+
 def render_page(path: str, page: int, out_dir: str, long_edge: int | None) -> str:
     """지면을 PNG 로 렌더하고 필요하면 장변을 맞춘다.
 
@@ -243,7 +280,9 @@ def run_one(model: str, size: str, rows: list[dict], raw_root: str,
         page = int(row["spec_page"]) if row["spec_page"] else 1
         try:
             png = render_page(path, page, out_dir, long_edge)
-            data = parser._ask_cached(model, SYSTEM, text, png, path, page, fields)
+            # `_ask_cached` 는 키를 원본 파일 바이트로 만들어 해상도를 구분하지 못한다.
+            # 채점기는 해상도가 독립 변수이므로 렌더 결과 자체를 키 재료로 쓴다.
+            data = _ask_sized(parser, cache, model, text, png, page, fields)
         except Exception as exc:                       # 실패를 삼키지 않는다(철학 5)
             run.errors.append(
                 f"{row['doc_id']} {row['file']}: {type(exc).__name__}: {exc}"[:200])
@@ -388,9 +427,12 @@ def main(argv: list[str] | None = None) -> int:
     cache = None
     if not a.no_cache:
         from src.parsers.vlm.cache import ResponseCache
-        from src.parsers.vlm.constants import DEFAULT_CACHE_DIR
-        # str 을 그대로 주면 `cache_dir / key` 가 TypeError 를 낸다 (알려진 결함)
-        cache = ResponseCache(Path(DEFAULT_CACHE_DIR))
+        # 파이프라인 공유 캐시(runs/vlm_cache)를 쓰지 않는다.
+        # 공유 캐시의 키는 `원본파일|페이지|프롬프트버전:모델:필드` 라서 **렌더 해상도가
+        # 빠져 있다**. 확대본으로 얻은 답을 그 키로 저장하면, 원본 해상도로 도는
+        # 파이프라인이 그 답을 자기 것으로 읽어간다 — 남의 결과를 오염시킨다.
+        # 전용 디렉터리로 분리해 그 경로를 원천 차단한다.
+        cache = ResponseCache(Path(SCORE_CACHE_DIR))
 
     print(f"  조합 {len(model_ids)} x {len(size_keys)} = "
           f"{len(model_ids) * len(size_keys)}개 · 문서 {len(keep)}건\n")
