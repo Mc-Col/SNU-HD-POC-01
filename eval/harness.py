@@ -700,6 +700,9 @@ def main(argv=None) -> int:
     ap.add_argument("--no-vlm", action="store_true", help="VLM 경로를 쓰지 않는다")
     ap.add_argument("--only-mvp", action="store_true", help="MVP 9필드만")
     ap.add_argument("--by", default="fmt", choices=["", "fmt", "vintage", "cls"])
+    ap.add_argument("--only", default="",
+                    help="이 문서ID 만 돌린다(쉼표 구분). 나머지는 아예 "
+                         "손대지 않는다 — 홀드아웃과는 다른 개념이다")
     ap.add_argument("--holdout", default="", help="쉼표로 구분한 문서ID")
     ap.add_argument("--out", default="runs/eval_report.md")
     ap.add_argument("--escalate", action="store_true",
@@ -716,6 +719,12 @@ def main(argv=None) -> int:
 
     rows = read_kit(a.kit)
     missing = locate(rows, a.root)
+    only = {x.strip() for x in (a.only or "").split(",") if x.strip()}
+    if only:
+        rows = [r for r in rows if r.doc_id in only]
+        print(f"대상 {len(rows)}건으로 한정: {', '.join(sorted(only))}",
+              file=sys.stderr)
+
     if read_kit.unmatched:
         print(f"⚠ 스키마에 없는 킷 컬럼: {', '.join(read_kit.unmatched)}", file=sys.stderr)
     if missing:
