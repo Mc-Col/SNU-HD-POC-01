@@ -48,6 +48,63 @@ def _standardize(field_key: str, value: object) -> str:
             return str(m["to"])
     return raw
 
+
+# ── ④ Normalize 를 별도 축으로 함께 잰다 ─────────────────────────────
+#
+# 왜 기본 판정에 쓰지 않는가
+#   규칙이 값을 고쳐 주면 **파서 결함이 규칙에 가려진다.** `OPEN` 을 집었든
+#   `Body Color` 를 집었든 규칙을 통과한 뒤에는 구별이 안 될 수 있다. 그래서
+#   파서 판정(정확/표기차이/정규화대기/오답)은 손대지 않고, 규칙이 메워 주는지를
+#   **규칙해소 / 규칙공백** 이라는 다른 축으로 센다.
+#
+# 왜 필요한가
+#   그 축이 없으면 정규화대기 칸이 전부 "할 일" 처럼 보인다. 2026-08-26 실측에서
+#   정규화대기 52칸은 **전부 이미 규칙이 처리하는 것**이었다 — 할 일이 아니라
+#   이미 끝난 일이다. 남는 것만 골라내야 다음 작업을 정할 수 있다.
+
+_UNSET = object()
+_NORM: object = _UNSET
+
+
+def _normalizer():
+    """④ Normalize 를 지연 로딩한다.
+
+    `src/pipeline.py` 는 내 소유가 아니므로 **읽어서 쓰기만** 한다 —
+    `eval/harness.py` · `tools/check_kit.py` 와 같은 방식이다. 지연 로딩인
+    이유는 파이프라인이 파서·검증기를 다 끌고 오기 때문이다. 채점만 할 때
+    그 비용을 물지 않는다.
+
+    못 가져오면 None 을 돌리고 **사유를 남긴다**(철학 5). 채점 자체는 계속된다.
+    """
+    global _NORM
+    if _NORM is _UNSET:
+        try:
+            from src.pipeline import DefaultNormalize
+            _NORM = DefaultNormalize()
+        except Exception as e:                                  # pragma: no cover
+            _NORM = None
+            print(f"[주의] ④ Normalize 를 불러오지 못했다 — "
+                  f"규칙해소 집계를 생략한다: {type(e).__name__}: {e}", file=sys.stderr)
+    return _NORM
+
+
+def _normalized(field_key: str, ex: object) -> str:
+    """파서가 낸 것을 ④ Normalize 에 통과시킨 값.
+
+    ⚠ `RawExtraction` 을 통째로 넘긴다. 값만 넘기면 안 되는 규칙이 있다 —
+    FAIL 어간 판정은 **라벨**을 본다(`Air Fails Valve to : Close` → `FAIL CLOSE`).
+    값 `CLOSE` 만 주면 방향을 못 읽어 그대로 나온다.
+    """
+    n, f = _normalizer(), _schema.get(field_key)
+    if n is None or f is None or ex is None:
+        return ""
+    try:
+        value, _trace = n.run(ex, f)
+    except Exception:
+        return ""                       # 규칙이 죽어도 채점은 계속한다
+    return str(value or "").strip()
+
+
 SHEET = "라벨링"
 SKIP_VALUES = {"N/A", "NA", "판독불가", ""}      # 정답이 없는 칸 — 채점 제외
 EXCEL_EXT = {".xlsx", ".xlsm"}
@@ -63,6 +120,8 @@ class Cell:
     got: str | None = None
     verdict: str = "미추출"       # 정확 / 표기차이 / 정규화대기 / 오답 / 미추출
     labeler: str = ""            # 이 정답을 만든 사람 — 집계를 나누기 위해
+    normalized: str = ""         # ④ Normalize 통과값 (판정에 쓰지 않는다)
+    rule_state: str = ""         # 규칙해소 / 규칙공백 — 파서 판정과 별도 축
 
 
 @dataclass
@@ -79,6 +138,20 @@ class Score:
                 continue
             out[c.verdict] += 1
         return out
+
+    def rule_counts(self, labeler: str | None = None) -> dict[str, int]:
+        """규칙 축 개수. 정규화대기·오답 칸만 대상이다(그 밖은 빈 문자열)."""
+        out = {"규칙해소": 0, "규칙공백": 0}
+        for c in self.cells:
+            if labeler is not None and c.labeler != labeler:
+                continue
+            if c.rule_state in out:
+                out[c.rule_state] += 1
+        return out
+
+    def gaps(self) -> list["Cell"]:
+        """규칙공백 칸 — 다음에 실제로 손봐야 할 것만 남는다."""
+        return [c for c in self.cells if c.rule_state == "규칙공백"]
 
     def labelers(self) -> list[str]:
         """등장 순서대로의 라벨러 목록 (같은 입력 → 같은 출력)."""
@@ -191,6 +264,8 @@ def score(kit_path: str, root: str) -> Score:
             continue
 
         got = {r.field_key: r.raw_value for r in res.records if r.found}
+        # 규칙해소 축은 RawExtraction 통째로 필요하다 (라벨을 보는 규칙이 있다)
+        raws = {r.field_key: r for r in res.records if r.found}
         sc.docs.append((row["doc_id"], row["file"], "채점"))
 
         for key, (truth, name) in row["truth"].items():
@@ -222,6 +297,19 @@ def score(kit_path: str, root: str) -> Score:
                 cell.verdict = "정규화대기"
             else:
                 cell.verdict = "오답"
+
+            # ── 별도 축 — 이 칸을 규칙이 메워 주는가 ──────────────────
+            # 파서가 맞는 칸을 집었어도 표준값이 아니면 마스터에 그대로 못 넣는다.
+            # 그것이 규칙으로 해결되는지, 규칙이 없는지를 여기서 가른다.
+            # 이미 맞은 칸(정확·표기차이)과 아예 못 집은 칸(미추출)은 대상이 아니다.
+            if cell.verdict in ("정규화대기", "오답"):
+                nv = _normalized(key, raws.get(key))
+                cell.normalized = nv
+                hit = bool(nv) and (_norm(nv) == _norm(t)
+                                    or _loose(nv) == _loose(t)
+                                    or _same(t, nv, _numeric(key)))
+                cell.rule_state = "규칙해소" if hit else "규칙공백"
+
             sc.cells.append(cell)
     return sc
 
@@ -237,12 +325,35 @@ def render(sc: Score) -> str:
         L += [f"- **파서 관점 성공률 {grabbed / total * 100:.0f}%** — 맞는 칸을 집었는가. "
               f"파서의 책임 범위는 여기까지다",
               f"- 완전 일치율 {(n['정확'] + n['표기차이']) / total * 100:.0f}% — "
-              f"표준값 변환까지 끝난 상태. 변환은 ④ Normalize 몫"]
+              f"파서 원문 그대로. 표준값 변환 전이다"]
+        r = sc.rule_counts()
+        after = n["정확"] + n["표기차이"] + r["규칙해소"]
+        L += [f"- **정규화 후 일치율 {after / total * 100:.0f}%** — ④ Normalize 를 "
+              f"통과시킨 값 기준. 규칙해소 {r['규칙해소']}칸 · **규칙공백 "
+              f"{r['규칙공백']}칸**",
+              "",
+              "> 숫자를 셋으로 나눈 이유 — 하나로 합치면 어느 쪽을 고쳐야 하는지 알 수 없다.",
+              "> 파서 성공률은 *맞는 칸을 집었는가*, 완전 일치율은 *원문이 이미 표준값인가*,",
+              "> 정규화 후 일치율은 *규칙까지 태우면 마스터에 넣을 수 있는가* 다.",
+              "> **규칙공백 칸이 다음 작업 목록**이고 나머지는 이미 끝난 일이다."]
     L += [""]
 
     if sc.unscorable_fields:
         L += ["> 채점 제외 — 킷 이름이 스키마에 없어 대조 불가: "
               + ", ".join(f"`{x}`" for x in sc.unscorable_fields), ""]
+
+    gaps = sc.gaps()
+    if gaps:
+        # 이 절이 다음 작업 목록이다. 규칙이 이미 메우는 칸은 여기 안 나온다.
+        L += ["## 🔴 규칙공백 — 다음에 손볼 칸", "",
+              "④ Normalize 를 태워도 정답이 안 되는 칸이다. 표기 사전에 없거나 "
+              "파서가 다른 값을 집었거나 정답지가 틀렸다.", "",
+              "| 문서 | 필드 | 정답 | 파서 원문 | 정규화 후 |", "|---|---|---|---|---|"]
+        for c in sorted(gaps, key=lambda x: (x.field_key, x.doc_id)):
+            L.append(f"| {c.doc_id} | {c.field_name} | {c.truth} | "
+                     f"{c.got if c.got is not None else '—'} | "
+                     f"{c.normalized or '—'} |")
+        L += [""]
 
     L += ["## 문서별", "", "| 문서 | 파일 | 상태 |", "|---|---|---|"]
     for d, f, st in sc.docs:
@@ -251,8 +362,10 @@ def render(sc: Score) -> str:
     L += ["", "## 칸별", "", "| 문서 | 필드 | 정답 | 파서 출력 | 판정 |", "|---|---|---|---|---|"]
     for c in sorted(sc.cells, key=lambda x: (x.doc_id, x.field_key)):
         mark = " ⚠" if c.uncertain else ""
+        # 규칙 축이 있으면 판정 뒤에 붙인다 — 표를 하나로 유지한다
+        verdict = f"{c.verdict} → {c.rule_state}" if c.rule_state else c.verdict
         L.append(f"| {c.doc_id} | {c.field_name} | {c.truth}{mark} | "
-                 f"{c.got if c.got is not None else '—'} | {c.verdict} |")
+                 f"{c.got if c.got is not None else '—'} | {verdict} |")
 
     # ── 라벨러별 (2026-08-26) ────────────────────────────────────
     #   골든셋에 AI 초안이 섞여 있다. AI 가 만든 정답으로 AI 를 채점하면 순환이라,
