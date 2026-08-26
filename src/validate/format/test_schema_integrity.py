@@ -93,6 +93,30 @@ def test_MVP_필드는_모두_판단_지침을_갖는다(keys):
     assert not [k for k in mvp if k not in have]
 
 
+def test_28필드_전부_판단_지침을_갖는다(keys):
+    """MVP 9필드만이 아니라 **전부** 있어야 한다.
+
+    판독 범위 기본이 전체 28필드로 정해졌다(2026-08-25). 지침이 없는 필드는
+    화면에서 판단 기준 칸이 빈 채로 뜨고, 검토자가 매번 처음부터 판단하게 된다.
+    같은 값을 사람마다 다르게 확정하면 마스터가 흔들린다.
+    """
+    have = set((_load("guidance.yaml").get("fields") or {}))
+    missing = sorted(keys - have)
+    assert not missing, f"판단 지침이 없는 필드: {missing}"
+
+
+def test_지침에_여러_줄이면_블록으로_적혀_있다():
+    """이스케이프된 한 줄이 되면 사람이 못 읽는다 — 읽히는 것이 이 파일의 기능이다.
+
+    yaml 을 거치면 형식이 사라지므로 **원문**을 본다.
+    """
+    raw = open(os.path.join(SCHEMA, "guidance.yaml"), encoding="utf-8").read()
+    bad = [ln.rstrip() for ln in raw.split("\n")
+           if ln.lstrip().startswith(("text:", "note:"))
+           and not ln.rstrip().endswith(("|-", "|", ">-"))]
+    assert not bad, f"블록으로 적히지 않은 지침: {bad}"
+
+
 def test_유사표현이_다른_필드의_표준명과_겹치지_않는다():
     """표준명을 빌려 쓰는 것은 허용하되(구역이 가른다), 이름 주인이 이겨야 한다.
 
