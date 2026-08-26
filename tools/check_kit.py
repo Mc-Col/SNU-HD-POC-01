@@ -82,6 +82,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kit", default="readme/labeling_kit.xlsx")
     ap.add_argument("--root", default="raw_file")
+    ap.add_argument("--holdout", default="d036,d037,d038,d039,d040",
+                    help="블라인드 홀드아웃 문서ID. 일반 점검에서 빼고 따로 낸다. "
+                         "빈 문자열이면 분리하지 않는다")
     ap.add_argument("--all", action="store_true", help="통과 항목도 보인다")
     a = ap.parse_args(argv)
 
@@ -97,6 +100,13 @@ def main(argv=None) -> int:
         print(f"⚠ 파일을 찾지 못함: {', '.join(missing)}")
 
     n_std = n_vocab = n_tag = 0
+    hold_ids = {x.strip() for x in (a.holdout or "").split(",") if x.strip()}
+    holdout = [r for r in filled if r.doc_id in hold_ids]
+    filled = [r for r in filled if r.doc_id not in hold_ids]
+    if holdout:
+        print(f"🔒 홀드아웃 {len(holdout)}건을 일반 점검에서 뺐다 — "
+              f"{', '.join(r.doc_id for r in holdout)}")
+
     print("\n── ① 정답이 표준값과 다른 칸 " + "─" * 40)
     for r in filled:
         for f in schema.all_fields():
@@ -175,6 +185,24 @@ def main(argv=None) -> int:
         ratios.sort()
         print(f"   (정상 {len(ratios)}건 — 중앙 {ratios[len(ratios) // 2]:.0f}×d²"
               f" · 최대 {ratios[-1]:.0f}×d²)")
+
+    if holdout:
+        print("\n── 🔒 홀드아웃 (참고만) " + "─" * 42)
+        print("   ⚠ **이 결과로 어휘를 넓히거나 규칙을 고치면 홀드아웃이 탄다.**")
+        print("     표기 통일(대소문자)은 라벨러가 해도 새지 않는다.")
+        print("     어휘를 늘리는 것은 샌다 — 개봉 후에 한다.")
+        n_h = 0
+        for r in holdout:
+            for f in schema.all_fields():
+                v = str(r.truth.get(f.key) or "").strip()
+                if not v or v.upper() in ("NA", "N/A"):
+                    continue
+                std = _standard(f.key, v, (r.raw_label or {}).get(f.key, ""))
+                if std is not None and str(std) != v:
+                    print(f"   {r.doc_id}  {f.key:24s} {v!r} → {std!r}  (표기)")
+                    n_h += 1
+        if not n_h:
+            print("   표기 불일치 없음")
 
     print("\n" + "─" * 66)
     print(f"표준값 불일치 {n_std}칸 · 어휘 밖 {n_vocab}칸 "
