@@ -68,13 +68,17 @@ class Normalizer:
         # ── 값이 있으면 기존 정규화 경로 ────────────────────────
         raw = (ex.raw_value or "").strip()               # 파서가 읽은 원문
         if raw:
-            rule = schema.domain_rule(f.key)             # ATO → Fail Close 같은 도메인 규칙
-            if rule:
-                for item in schema.value_aliases(f.key) or []:
-                    for src in (item.get("from") or []):
-                        if src.upper() == raw.upper():   # 표기 매핑이 있으면 적용
-                            trace.append(f"원문 '{raw}' · 규칙 {src} → {item.get('to')}")
-                            return item.get("to"), trace
+            # 표기 매핑은 **domain_rules 와 무관하게** 적용한다.
+            # 예전에는 `if schema.domain_rule(f.key):` 안에 갇혀 있었다 —
+            # `valve_body_rating` 은 domain_rules 항목이 없고 value_aliases 에만
+            # 있어서 `CL 300` 이 `300#` 로 바뀌지 않았다. `actuator_fail_action`
+            # 은 domain_rule 이 있어 동작했고, 그래서 일부 필드만 되는 것처럼
+            # 보였다 (2026-08-27 화면 시험에서 발견).
+            for item in schema.value_aliases(f.key) or []:
+                for src in (item.get("from") or []):
+                    if schema.norm_alias(src, f.key) == schema.norm_alias(raw, f.key):
+                        trace.append(f"원문 '{raw}' · 규칙 {src} → {item.get('to')}")
+                        return item.get("to"), trace
             if not schema.feature_enabled("unit_conversion"):
                 trace.append("단위 변환 비활성 (MVP) — 원문 보존")
             return raw, trace                            # MVP 는 원문 표기 보존

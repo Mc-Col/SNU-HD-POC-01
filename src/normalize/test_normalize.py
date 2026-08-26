@@ -79,3 +79,16 @@ def test_도출_규칙이_없는_필드는_그대로_빈다(n, fields):
     v, _ = n.run(_empty("manufacturer"), fields["manufacturer"],
                  {"engineering_tag_no": "10-FV-002"})
     assert v is None, "규칙이 없는 필드에 값을 만들면 철학 4 위반이다"
+
+@pytest.mark.parametrize("raw", ["CL 300", "CL.300", "ANSI CLASS 300", "300 LB"])
+def test_표기_매핑은_도메인규칙_없이도_적용된다(n, fields, raw):
+    """`valve_body_rating` 은 `domain_rules` 항목이 없고 `value_aliases` 에만 있다.
+
+    예전에는 별칭 적용이 `if schema.domain_rule(f.key):` 안에 갇혀 있어서
+    `CL 300` 이 `300#` 로 바뀌지 않았다. `actuator_fail_action` 은 domain_rule
+    이 있어 동작했고, 그래서 일부 필드만 되는 것처럼 보였다 (2026-08-27).
+    """
+    f = fields["valve_body_rating"]
+    value, trace = n.run(RawExtraction(field_key=f.key, raw_value=raw), f)
+    assert value == "300#", (raw, value)
+    assert trace, "변환 이력이 남아야 사람이 왜 바뀌었는지 안다"

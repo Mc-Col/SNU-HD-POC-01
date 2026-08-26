@@ -209,13 +209,19 @@ def from_pipeline(path: str, *, only_mvp: bool = True, use_vlm: bool = True,
     판정 근거에 함께 실어, 값이 왜 안 나오는지 사람이 알 수 있게 한다.
 
     `page` 를 주면 그 쪽을 처리한다 — 주지 않으면 Triage 의 판단을 쓴다."""
-    from src.pipeline import build
+    from src.pipeline import DefaultNormalize, build
 
     notes: list[str] = []
     pg = int(page or 1)
     p = build(only_mvp=only_mvp, use_vlm=use_vlm, notes=notes)
     if page:
         p.triage = _PickedPageTriage(pg)
+    # 화면의 두 경로가 **같은 정규화**를 쓰게 맞춘다 — 채점된 구성이 이것이다.
+    # `Normalizer` 는 안전 필드에서 라벨을 오판할 수 있다(2026-08-27 확인:
+    # 값 `Open` + 라벨 `Air to Actuator` 를 FAIL OPEN 으로 바꾼다. 정답은
+    # FAIL CLOSE — 그 라벨은 역전 표기다). 틀린 값을 만드는 쪽보다 원문을
+    # 남겨 사람에게 보내는 쪽이 안전하다.
+    p.normalizer = DefaultNormalize()
     result = p.run_document(path)
     ext = os.path.splitext(path)[1].lower()
     return UiDoc(
@@ -273,7 +279,7 @@ def from_vlm(path: str, *, only_mvp: bool = False,
     from src import schema
     from src.contracts import (DocumentClass, DocumentResult, FailureKind,
                                FieldRecord, PageClass, PageInfo, TriageResult)
-    from src.pipeline import _decide, build
+    from src.pipeline import DefaultNormalize, _decide, build
 
     from src import preprocess
 
@@ -300,7 +306,12 @@ def from_vlm(path: str, *, only_mvp: bool = False,
     # 대조 없이 VLM 단독과 같아진다. 그 사실이 route_reason 에 그대로 남는다.
     notes: list[str] = []
     built = build(only_mvp=only_mvp, use_vlm=True, notes=notes)
-    parser, norm = built.vlm_parser, built.normalizer
+    parser = built.vlm_parser
+    # 정규화는 **채점된 구성과 같은 것**을 쓴다 — 평가 하네스가 DefaultNormalize
+    # 다(eval/harness.py). `Normalizer` 는 값이 빈 필드를 태그에서 도출해 채우고,
+    # `type_name` 정답이 30건 중 29건 NA 인 코퍼스에서 그것은 지어냄이 된다
+    # (830칸 중 12 → 41건). 도출을 켜는 것은 정책 결정이고 T8 로 보류됐다.
+    norm = DefaultNormalize()
     raws = parser.extract(path, triage, fields)
     context = {e.field_key: e for e in raws}
     doc_id = os.path.basename(path)
