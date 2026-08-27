@@ -19,7 +19,17 @@ from src import schema
 from src.hooks import hooks
 from src.ui import export, session, source
 
-ACCEPT = ["xlsx", "xlsm", "xls", "pdf", "tif", "tiff", "jpg", "jpeg", "png"]
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+
+# 지원 포맷 — **업로더와 안내 문구를 같은 곳에서 만든다.**
+# 두 곳에 적어두면 어긋난다 (실제로 어긋나 있었다: 안내는 Excel·PDF·TIF 인데
+# 업로더는 jpg·png 까지 받았다). 코퍼스 1,062건 실측은
+# tif 749 · pdf 192 · xlsx 116 · xlsm 2 — 이미지 단품은 한 건도 없다.
+FORMATS = [("Excel", ["xlsx", "xlsm", "xls"]),
+           ("PDF", ["pdf"]),
+           ("TIF (스캔)", ["tif", "tiff"])]
+ACCEPT = [e for _name, exts in FORMATS for e in exts]
 
 # 진행 표시 — 파이프라인 단계 이름을 그대로 쓴다. spinner 만 돌리면 흐름이 안 보인다
 STEPS = [
@@ -37,8 +47,8 @@ STEP_DELAY = 0.45          # 고정값. 난수를 쓰지 않는다
 
 def main_screen() -> None:
     st.title("Datasheet 정보추출 Agent (PoC)")
-    st.caption("비정형 설비 문서에서 컨트롤밸브 기준정보를 추출·검증해 "
-               "마스터 스키마 엑셀로 내보냅니다. 최종 확정은 사람이 합니다.")
+    st.caption("설비 문서에서 기준정보를 추출·검증하여 엑셀 파일로 내려받거나 "
+               "OASIS(설비통합플랫폼) 데이터베이스로 보냅니다.")
 
     left, right = st.columns([1.25, 1], gap="large")
 
@@ -87,15 +97,17 @@ def main_screen() -> None:
             session.go(session.CONFIRM)
 
         st.markdown("---")
-        st.caption("실행이 끝난 뒤 어휘 밖 값을 **한 번에** 승인합니다 — "
+        st.caption("실행이 끝난 뒤 어휘 밖 값을 **한 번에** 검토합니다 — "
                    "문서마다 물으면 읽지 않고 승인하게 됩니다.")
-        if st.button("사전 승인 화면", key="btn_approve_open"):
+        if st.button("용어 사전 업데이트", key="btn_approve_open"):
             session.go(session.APPROVE)
 
     with right:
         meta = schema.summary()
         st.markdown("**현재 지원되는 포맷**")
-        st.markdown("- Excel\n- PDF (텍스트)\n- PDF (이미지)\n- TIF")
+        for name, exts in FORMATS:            # 업로더와 같은 상수에서 만든다
+            st.markdown(f"- {name} &nbsp;<span class='d2s-code'>"
+                        f"{' · '.join(exts)}</span>", unsafe_allow_html=True)
         st.markdown("**현재 지원되는 설비 종류**")
         st.markdown("- Control Valve")
         st.caption(
@@ -201,22 +213,53 @@ def done_screen() -> None:
                                 "spreadsheetml.sheet",
                            use_container_width=True)
     with c2:
-        st.button("설비통합플랫폼으로 보내기", disabled=True, use_container_width=True,
-                  help="1단계 PoC 범위 외")
-        st.caption("범위 외 — 1단계는 엑셀 산출까지입니다")
+        st.button("OASIS 전송 · 다음 단계", disabled=True, use_container_width=True,
+                  help="1단계 PoC 범위 외 — 지금은 엑셀 산출까지입니다")
+        st.caption("1단계는 엑셀 산출까지입니다")
     with c3:
         if st.button("새로운 작업 시작", use_container_width=True, key="btn_new"):
             session.reset()
-        if st.button("사전 승인 화면", use_container_width=True, key="btn_approve"):
+        if st.button("용어 사전 업데이트", use_container_width=True, key="btn_approve"):
             session.go(session.APPROVE)
 
     with st.expander("무엇이 기록되었나"):
-        st.caption(f"검증 이력은 runs/hitl-{res.doc_id}/ 에 남습니다 — "
-                   f"events.jsonl(사람의 판단) · records.jsonl(필드 확정값). "
-                   f"Loop C(규칙 개선)와 자동확정률·오적재율 집계가 이 로그를 씁니다.")
-        st.json({"doc_id": res.doc_id, "counts": counts,
-                 "approvable": res.approvable,
-                 "config_hashes": schema.config_hashes()}, expanded=False)
+        _run_log(d)
+
+
+def _run_log(d) -> None:
+    """말이 아니라 **실제 파일과 건수**를 보여준다.
+
+    "기록됩니다" 라는 문장은 기록되지 않아도 똑같이 쓸 수 있다. 경로와 줄 수를
+    보여주면 그 자리에서 확인된다.
+    """
+    import glob
+    import os as _os
+
+    from src.hooks import RUNS_DIR
+
+    key = _os.path.basename(session.pending() or "") or d.display_name
+    run_dir = _os.path.join(RUNS_DIR, f"hitl-{key}")
+    rows = {}
+    for name in ("events.jsonl", "records.jsonl"):
+        p = _os.path.join(run_dir, name)
+        try:
+            with open(p, encoding="utf-8") as f:
+                rows[name] = sum(1 for _ in f)
+        except OSError:
+            rows[name] = 0
+
+    st.markdown(f"<div class='d2s-code'>{_os.path.relpath(run_dir, ROOT)}</div>",
+                unsafe_allow_html=True)
+    c = st.columns(3)
+    c[0].metric("사람의 판단 · 이벤트", rows["events.jsonl"])
+    c[1].metric("필드 확정값", rows["records.jsonl"])
+    c[2].metric("설정 해시", len(schema.config_hashes()))
+    st.caption("추출·판정·사람 조치가 모두 이 파일에 남습니다. "
+               "**이 로그를 읽어 자동확정률·오적재율을 집계하는 쪽은 아직 없습니다** — "
+               "Loop C 의 입력이 쌓이고 있는 상태입니다.")
+    st.json({"doc_id": d.result.doc_id, "counts": d.result.counts(),
+             "approvable": d.result.approvable,
+             "config_hashes": schema.config_hashes()}, expanded=False)
 
 
 # ── 업로드 파일 보관 ──────────────────────────────────────────

@@ -57,8 +57,10 @@ def _sidebar() -> None:
 def _header(d: UiDoc) -> None:
     c1, c2 = st.columns([3, 2])
     with c1:
-        st.markdown(f"#### HITL 검증 &nbsp; {theme.chip_counts(d.result.counts())}",
+        st.markdown(f"#### 검증 &nbsp; {theme.chip_counts(d.result.counts())}",
                     unsafe_allow_html=True)
+        st.markdown("<div class='d2s-sub'>Human-in-the-Loop · 사람이 최종 "
+                    "확정합니다</div>", unsafe_allow_html=True)
     with c2:
         origin = "픽스처" if d.origin == "fixture" else "파이프라인"
         st.markdown(
@@ -339,28 +341,39 @@ def _footer(d: UiDoc) -> None:
     res = d.result
     left = d.unresolved_required
 
-    c1, c2, c3 = st.columns([1, 1.4, 3])
+    # 되돌아갈 길을 남긴다 — 쪽을 잘못 골랐는데 앞으로만 갈 수 있으면
+    # 사람이 틀린 쪽을 승인하게 된다.
+    paid = d.origin == "vlm"
+    cost = ", VLM 을 다시 호출합니다(비용 발생)" if paid else ""
+    c0, c1, c2, c3 = st.columns([1, 1.15, 1.4, 2.6])
+    with c0:
+        if st.button("≪ 처음으로", use_container_width=True, key="btn_home2",
+                     help="업로드 화면으로 돌아갑니다. 검토 내용은 사라집니다"):
+            session.reset()
     with c1:
+        if st.button("쪽 다시 고르기", use_container_width=True, key="btn_repick",
+                     help="쪽 선택 화면으로 돌아갑니다. 다시 판독하므로 "
+                          "검토 내용이 사라지고" + (cost or " 처음부터 처리합니다")):
+            session.go(session.CONFIRM)
+    with c2:
         # 재추출은 **문서 전체**다 (2026-08-25 결정). 필드 단위 재판독은
         # Loop A 의 몫이고 화면 버튼이 아니다.
-        paid = d.origin == "vlm"
         if st.button("↻ 재추출", use_container_width=True, key="btn_reextract",
-                     help="문서 전체를 다시 처리합니다. 사람의 수정은 사라지고"
-                          + (", VLM 을 다시 호출합니다(비용 발생)" if paid else "")):
+                     help="같은 쪽을 다시 처리합니다. 사람의 수정은 사라지고" + cost):
             session.go(session.EXTRACT)
-    with c2:
+    with c3:
         # 잠금 조건은 계약이 판단한다
         if st.button("검토 완료 ≫", type="primary", disabled=not res.approvable,
                      use_container_width=True, key="btn_approve"):
             session.go(session.DONE)
-    with c3:
-        if left:
-            names = ", ".join(r.field_name for r in left[:4])
-            more = f" 외 {len(left) - 4}개" if len(left) > 4 else ""
-            st.markdown(
-                f"<div class='d2s-note'>필수 필드 {len(left)}개 미해소 — "
-                f"{names}{more}. 해소되면 활성화됩니다</div>",
-                unsafe_allow_html=True)
-        else:
-            st.markdown("<div class='d2s-raw'>필수 필드 전부 해소 — 승인 가능</div>",
-                        unsafe_allow_html=True)
+
+    if left:
+        names = ", ".join(r.field_name for r in left[:4])
+        more = f" 외 {len(left) - 4}개" if len(left) > 4 else ""
+        st.markdown(
+            f"<div class='d2s-note'>필수 필드 {len(left)}개 미해소 — "
+            f"{names}{more}. 해소되면 「검토 완료」가 활성화됩니다</div>",
+            unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='d2s-raw'>필수 필드 전부 해소 — 승인 가능</div>",
+                    unsafe_allow_html=True)

@@ -67,9 +67,11 @@ def _session_rows() -> tuple[dict, list[dict]]:
 # ── 화면 ──────────────────────────────────────────────────────
 
 def render() -> None:
-    st.subheader("사전 승인 — 허용 어휘 밖에서 관측된 값")
+    st.subheader("용어 사전 업데이트")
+    st.markdown("<div class='d2s-sub'>허용 어휘 밖에서 관측된 값 · 승인한 것만 "
+                "규칙이 됩니다</div>", unsafe_allow_html=True)
     st.caption("**값을 바꾸지 않았습니다.** 오기일 수도, 어휘가 아직 좁은 것일 수도 "
-               "있습니다. 승인하면 어휘가 자라고 다음 실행부터 통과합니다.")
+               "있습니다. 사전에 넣으면 어휘가 자라고 다음 실행부터 통과합니다.")
 
     summary, rows, src_dir, label = _pick_source()
     if rows is None:

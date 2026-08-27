@@ -508,5 +508,40 @@ def test_pipeline_path_uses_the_page_the_human_picked():
     assert "사람이 p" not in plain.result.triage.reason
 
 
+# ── 화면이 사실과 다른 말을 하지 않는가 ───────────────────────
+
+def test_upload_accepts_exactly_what_the_notice_lists():
+    """안내 문구와 업로더가 어긋나 있었다 — 안내는 Excel·PDF·TIF, 업로더는 jpg·png 까지."""
+    from src.preprocess import SUPPORTED
+
+    listed = [e for _n, exts in screens.FORMATS for e in exts]
+    assert screens.ACCEPT == listed, "두 목록은 한 상수에서 나와야 한다"
+    assert not {"jpg", "jpeg", "png"} & set(screens.ACCEPT), "코퍼스에 없는 포맷"
+    for ext in screens.ACCEPT:
+        assert f".{ext}" in SUPPORTED, f"{ext} 는 전처리가 지원하지 않는다"
+
+
+def test_upload_cap_is_realistic():
+    """기본 200MB 는 '이만큼 올려도 된다' 는 잘못된 신호다 (실측 최대 21.8MB)."""
+    import tomllib
+
+    with open(os.path.join(ROOT, ".streamlit", "config.toml"), "rb") as f:
+        cfg = tomllib.load(f)
+    cap = cfg["server"]["maxUploadSize"]
+    assert 22 <= cap <= 50, cap
+
+
+def test_verification_screen_offers_a_way_back():
+    """쪽을 잘못 골랐는데 앞으로만 갈 수 있으면 틀린 쪽을 승인하게 된다."""
+    at = _to_hitl()
+    at.button(key="btn_home2")        # 처음으로
+    at.button(key="btn_repick")       # 쪽 다시 고르기
+    at.button(key="btn_reextract")
+    at.button(key="btn_approve")
+
+    at.button(key="btn_repick").click().run()
+    assert at.session_state["stage"] == "confirm"
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

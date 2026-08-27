@@ -263,15 +263,17 @@ def _grid(path: str, mtime: float, views: list[PageView]) -> list[int]:
         cols = st.columns(GRID_COLS)
         for col, v in zip(cols, shown[i:i + GRID_COLS]):
             with col:
+                # 고르는 수단과 판단 근거를 **이미지 위**에 둔다. 아래에 두면
+                # 지면을 다 보고 다시 내려가야 해서 시선이 두 번 움직인다.
+                if st.checkbox(f"p{v.page} · 사양표", key=f"pg_{v.page}"):
+                    picked.append(v.page)
+                _badges(v)
                 src = small[v.page - 1] if v.page <= len(small) else None
                 if src:
                     st.image(src, use_container_width=True)
                 else:
                     st.markdown("<div class='d2s-raw'>(이미지 없음)</div>",
                                 unsafe_allow_html=True)
-                if st.checkbox(f"p{v.page} · 사양표", key=f"pg_{v.page}"):
-                    picked.append(v.page)
-                _badges(v)
     return picked
 
 

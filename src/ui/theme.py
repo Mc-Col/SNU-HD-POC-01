@@ -75,31 +75,41 @@ def chip_counts(counts: dict[str, int]) -> str:
 
 
 def inject_css() -> None:
+    """가시성 우선. **버튼을 전역으로 줄이지 않는다.**
+
+    표를 조밀하게 하려고 `.stButton>button` 을 전역으로 줄였더니 쪽 고르기의
+    주 동작 버튼까지 작아졌다(2026-08-27 사용자 지적). 조밀함은 표 안에서만
+    필요하고, 화면 전체에 걸면 읽기가 나빠진다.
+    """
     st.markdown("""
 <style>
-  .d2s-chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:11px;
-    font-weight:600;padding:1px 8px;border-radius:3px;border:1px solid;white-space:nowrap}
-  .d2s-key{font-size:13px;font-weight:600;line-height:1.35}
-  .d2s-code{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;opacity:.55}
-  .d2s-val{font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.35;
+  .d2s-chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+    font-weight:600;padding:2px 9px;border-radius:3px;border:1px solid;white-space:nowrap}
+  .d2s-key{font-size:14.5px;font-weight:600;line-height:1.4}
+  .d2s-code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;opacity:.72}
+  .d2s-val{font-family:ui-monospace,Menlo,monospace;font-size:14.5px;line-height:1.4;
     word-break:break-all}
-  .d2s-raw{font-size:11px;opacity:.62;line-height:1.4}
-  .d2s-was{opacity:.55;text-decoration:line-through .5px}
-  .d2s-note{font-size:11.5px;color:#A9701C;line-height:1.45}
-  .d2s-note1{font-size:11px;color:#A9701C;line-height:1.4;white-space:nowrap;
+  .d2s-raw{font-size:12.5px;opacity:.78;line-height:1.5}
+  .d2s-was{opacity:.62;text-decoration:line-through .5px}
+  .d2s-note{font-size:12.5px;color:#8A5A12;line-height:1.5}
+  .d2s-note1{font-size:12.5px;color:#8A5A12;line-height:1.45;white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis}
-  .d2s-guide{font-size:12.5px;line-height:1.65;white-space:pre-wrap;
-    border-left:3px solid #1F4E6B;padding:2px 0 2px 10px;margin:2px 0 6px;opacity:.92}
-  .d2s-req{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;opacity:.6}
-  .d2s-head{font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.06em;
-    text-transform:uppercase;opacity:.55;padding-bottom:2px}
-  .d2s-row{border-bottom:1px solid rgba(128,128,128,.18);padding:2px 0 6px}
-  .d2s-sel{background:rgba(169,112,28,.10);border-left:3px solid #A9701C;
-    margin-left:-8px;padding-left:5px}
-  .d2s-legend{font-size:11.5px;opacity:.72;line-height:1.7}
-  .d2s-legend i{display:inline-block;width:14px;height:9px;border-radius:2px;margin-right:5px}
-  div[data-testid="stVerticalBlock"]>div:has(>div.d2s-row){gap:0rem}
-  .stButton>button{padding:0.15rem 0.5rem;font-size:11.5px;min-height:0;line-height:1.5}
+  .d2s-req{font-family:ui-monospace,Menlo,monospace;font-size:12px;opacity:.75}
+  .d2s-head{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;letter-spacing:.06em;
+    text-transform:uppercase;opacity:.7;padding-bottom:3px;font-weight:600}
+  .d2s-row{border-bottom:1px solid rgba(128,128,128,.3);padding:2px 0 8px}
+  .d2s-guide{font-size:13.5px;line-height:1.7;white-space:pre-wrap;
+    border-left:3px solid #1F4E6B;padding:2px 0 2px 10px;margin:2px 0 6px}
+  .d2s-legend{font-size:12.5px;opacity:.85;line-height:1.8}
+  .d2s-legend i{display:inline-block;width:15px;height:10px;border-radius:2px;margin-right:6px}
+  .d2s-sub{font-size:12.5px;opacity:.7;margin-top:-8px}
+
+  /* 쪽 고르기 격자 — 체크박스를 이미지보다 먼저, 크게 */
+  div[data-testid="stCheckbox"] label p{font-size:14px;font-weight:600}
+
+  /* 표 안 버튼만 조밀하게. 전역에 걸지 않는다 */
+  div[data-testid="column"] div[data-testid="stPopover"] button{
+    padding:0.2rem 0.6rem;font-size:12.5px;min-height:0}
 </style>""", unsafe_allow_html=True)
 
 

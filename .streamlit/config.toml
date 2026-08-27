@@ -1,0 +1,15 @@
+# 화면 전역 설정 — 담당 이종수 책임 (src/ui)
+#
+# 글자 크기를 CSS 로 필드마다 키우면 위젯·여백이 따라오지 않아 화면이 어그러진다.
+# baseFontSize 를 올리면 Streamlit 이 전체 배율을 다시 잡는다.
+
+[theme]
+baseFontSize = 17
+
+[server]
+# 실측 — 대상 1,062건의 최대가 21.8MB, 중앙값 0.11MB 다.
+# 기본값 200MB 는 "이만큼 올려도 된다" 는 잘못된 신호를 준다.
+maxUploadSize = 30
+
+[browser]
+gatherUsageStats = false
